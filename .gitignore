@@ -1,0 +1,32 @@
+# Unity generated/local state
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+MemoryCaptures/
+Recordings/
+
+# IDE and local OS files
+.vs/
+.idea/
+*.csproj
+*.sln
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+.DS_Store
+
+# Android signing and generated artifacts
+*.keystore
+*.jks
+*.aab
+*.apk
+
+# Local evidence/temp outputs
+artifacts/
+tmp/
