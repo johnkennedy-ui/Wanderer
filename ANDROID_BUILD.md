@@ -53,21 +53,25 @@ new-submission target after 2026-08-31 if policy remains unchanged.
 | PC movement | WASD produces expected source-neutral movement; usable UI | **NOT YET VERIFIED** |
 | Android ARM64 build | Build profile shows ARM64 and yields installable artifact | **NOT YET VERIFIED** |
 | Device movement | Virtual stick has same normalized movement semantics | **NOT YET VERIFIED** |
-| Lifecycle | Pause/resume/process loss preserve only last manual campfire commit | **NOT YET VERIFIED** |
+| Lifecycle | Pause/resume must not implicitly store or mutate persistence state. | **NOT YET VERIFIED** |
 
 Phase 0 is not passed until the same project has PC and physical-device evidence.
 Editor-only success cannot replace device evidence.
 
-## Phase 1 touchscreen and Phase 6 hardening
+## Phase 1 touchscreen and Phase 4/6 persistence/lifecycle hardening
 
 On physical hardware, test virtual-stick drift tolerance, immediate movement
 attack interruption, stop-to-attack reacquisition, touch UI, safe areas, and
 multiple aspect ratios. These results are **NOT YET VERIFIED**.
 
+After Campfire and SaveService exist, Phase 4/6 must validate restoration of
+the last committed manual campfire save after pause/resume, focus change, and
+process loss; rollback of later unsaved progress; and atomic primary/backup
+recovery. These results are **NOT YET VERIFIED**.
+
 Phase 6 must profile actual target devices against a 60 FPS aim and 30 FPS hard
 minimum; enforce explicit budgets for pools, draw calls, physics, particles, and
-chunks; test pause/resume, focus change, process loss, and unsaved rollback; and
-make ARM64/AAB packaging explicit. Immediately before release, recheck live
+chunks; and make ARM64/AAB packaging explicit. Immediately before release, recheck live
 Google Play target-SDK, signing authority, policy, and listing requirements. No
 performance, lifecycle, packaging, or Play-readiness conclusion is valid without
 corresponding evidence.

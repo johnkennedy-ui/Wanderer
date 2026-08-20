@@ -23,8 +23,15 @@ documentation-only foundation: all such results are **NOT YET VERIFIED**.
 | P0-PC-002 | PC runnable smoke | WASD maps through InputService to normalized movement without direct input APIs in gameplay. | **NOT YET VERIFIED** |
 | P0-AND-001 | Unity Android build | Same project makes ARM64 development artifact with toolchain/profile evidence. | **NOT YET VERIFIED** |
 | P0-AND-002 | Physical Android | Install/launch; virtual stick has PC-equivalent normalized movement semantics. | **NOT YET VERIFIED** |
-| P0-AND-003 | Physical Android | Pause/resume and forced loss restore only prior manual commit; lifecycle makes no autosave. | **NOT YET VERIFIED** |
+| P0-AND-003 | Physical Android | Pause/resume causes no unintended persistence mutation (no implicit save). | **NOT YET VERIFIED** |
 | P0-AND-004 | Device/toolchain audit | Device class/OS, Unity version, SDK/API, and live target-SDK requirement recorded safely. | **NOT YET VERIFIED** |
+
+## Phase 4/6 persistence and recovery gates
+
+After Campfire and SaveService exist, Phase 4/6 validates restoration of the
+last committed manual campfire save after pause/resume, focus change, and
+process loss; rollback of later unsaved progress; and atomic primary/backup
+recovery. These are not Phase 0 assertions and remain **NOT YET VERIFIED**.
 
 ## Phase 1 focused tests
 
@@ -43,7 +50,7 @@ documentation-only foundation: all such results are **NOT YET VERIFIED**.
 | Area | Required regression |
 | --- | --- |
 | Determinism | Same seed/version gives equivalent recipe; load order cannot perturb it; procedural IDs remain stable. |
-| Save safety | Save/load equality; interrupted temp write preserves primary; corrupt primary recovers backup; unsupported version fails safely; invalid save point writes nothing. |
+| Save safety (Phase 4/6) | Save/load equality; interrupted temp write preserves primary; corrupt primary recovers backup; unsupported version fails safely; invalid save point writes nothing. |
 | Buildings | Isolated normal building rejected; valid isolated Campfire accepted; nearby building accepted; invalid relocation retains old state; unload/reload restores structures. |
 | Progression | Unsaved boss kill disappears after prior-save load; saved kill persists; upgrade choices are valid/non-duplicate; selected upgrade reconstructs. |
 | Resources/death | Death applies configured carried-resource loss; committed resources restore exactly; transactions never make resources negative. |
