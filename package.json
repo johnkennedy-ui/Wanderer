@@ -14,12 +14,12 @@
     "android:sync": "npm run build && npx cap sync android"
   },
   "dependencies": {
-    "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "three": "^0.179.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.3",
+    "@capacitor/cli": "^8.5.0",
     "@playwright/test": "^1.55.0",
     "@types/node": "^22.15.0",
     "@types/three": "^0.179.0",
