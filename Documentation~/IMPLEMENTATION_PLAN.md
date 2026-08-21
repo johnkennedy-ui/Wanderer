@@ -22,6 +22,71 @@ and publishing require separately scoped authority.
 | 5 — Boss/progression | Boss delta, Boss Core, three-choice reward, permanent modifiers, rollback | Phase 4 commit contract | Kill/save/restart/load reconstructs progression. **NOT YET VERIFIED.** |
 | 6 — Android hardening | Touch UX, lifecycle/aspect, pools/profile, ARM64/AAB/release docs | Gameplay/save contracts + authorised device | Device/release evidence passes. **NOT YET VERIFIED.** |
 
+## Phase-local maintainability seams — planned and **NOT YET VERIFIED**
+
+These seams preserve the Phase 0-to-6 order above. They are future acceptance
+requirements, not evidence that a Unity module, runtime, or test already
+exists. Each seam is introduced only with its matching phase; Phase 0 must not
+create a generic framework for later systems.
+
+### Phase 0 — Foundation
+
+Plan one local, explicit gameplay-scene Composition root that performs manual
+wiring and deliberate serialized scene/prefab binding only. It explicitly
+creates and retains ordinary `GameSession`; `GameSession` is never a
+singleton/static/registry/discoverable service. PC and virtual-stick adapters
+both emit the same Player-owned normalized `MoveCommand` boundary. Add only a
+small architecture guard and adapter-interchange fixture when source exists;
+do not introduce a container, automatic registration, global event bus, or
+generic Services/Utilities layer.
+
+### Phase 1 — Combat
+
+Introduce only feature-specific `GameSession` command/query/committed-snapshot
+ports required by Player and Combat. Construct these dependencies explicitly in
+fixtures so motion/targeting can use fakes without a scene, singleton, or
+service lookup. Player remains independent of Input adapters and Combat remains
+independent of device APIs.
+
+### Phase 2 — World
+
+Introduce pure `WorldIdentity`, generator version, chunk key, procedural ID,
+and named domain-seed values with World. Each domain seed derives explicitly
+from world seed, generator version, chunk, and named domain, so decoration
+changes cannot perturb encounter, boss, or campfire recipes. Do not use global
+RNG state, Unity random authority, scene order, or chunk request order.
+
+### Phase 3 — Resources/buildings
+
+Keep stable building/settlement records and validate-then-apply outcomes in
+Buildings. Expose only a read-only per-chunk overlay query to World/streaming;
+chunk unload may discard projections but not the records. Buildings must not
+reach into generator internals, ChunkManager, presentation objects, or save
+files.
+
+### Phase 4 — Save
+
+Introduce Persistence through an explicit `ValidCampfireSaveRequest` and
+committed immutable snapshot boundary. Keep `SaveDocument` versioning,
+validation, atomic recovery, and pure document-to-document migrations within
+Persistence, which receives an injected storage adapter. Ordinary mutation,
+pause, focus loss, quit, UI lookup, and direct domain filesystem access are not
+save authority.
+
+### Phase 5 — Boss/progression
+
+Keep permanent modifier records separate from a combat modifier source/query
+port. If temporary/run modifiers are later needed, introduce a distinct source
+layer rather than replacing saved permanent progression or campfire commit
+semantics.
+
+### Phase 6 — Android hardening
+
+Keep PC/Android differences inside named Input, lifecycle, and presentation
+adapters. Core systems continue to receive explicit commands, state ports, and
+lifecycle intents only; Android conditionals must not move into Combat, World,
+or Persistence.
+
 ## Phase 0 execution sequence
 
 1. Prerequisite preflight: after authority, re-verify a supported Unity 6 Editor,

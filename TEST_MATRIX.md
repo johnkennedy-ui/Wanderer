@@ -15,6 +15,17 @@ documentation-only foundation: all such results are **NOT YET VERIFIED**.
 | P0-DOC-003 | Git | git diff --check base...HEAD has no whitespace errors. | Planned for this candidate audit |
 | P0-DOC-004 | Git | Committed worktree is clean; diff is restricted to leased documentation paths. | Planned for this candidate audit |
 
+## Phase 0 planned architecture checks
+
+These checks apply only after the matching Editor-created source exists. They
+are planned assertions, not current Unity/runtime/device evidence.
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P0-ARCH-001 | EditMode or deterministic architecture lint | Outside planned `Assets/Game/Composition/` and test/editor-only code, reject singleton/static-service accessors, mutable static state, service locators/containers, automatic registration, global event buses, scene-search service discovery, and mutable static dictionaries. Any static helper must be explicitly allowlisted as immutable and pure. | Planned; **NOT YET VERIFIED** |
+| P0-ARCH-002 | EditMode adapter-interchange fixture | PC and virtual-stick adapters submit identical normalized `MoveCommand` values to the same Player-owned input port; Player contains no direct device API reference. | Planned; **NOT YET VERIFIED** |
+| P0-ARCH-003 | EditMode construction fixture | One local Composition root explicitly constructs `GameSession` and hands only narrow ports to consumers; no test needs a singleton, registry, service lookup, or scene discovery. | Planned; **NOT YET VERIFIED** |
+
 ## Phase 0 runtime and device gates
 
 | ID | Medium | Scenario and acceptance | Current status |
@@ -44,6 +55,37 @@ recovery. These are not Phase 0 assertions and remain **NOT YET VERIFIED**.
 | P1-CMB-005 | PC runnable smoke | WASD interrupts attack; stopping resumes targeting without mouse aim. | **NOT YET VERIFIED** |
 | P1-CMB-006 | Physical Android | Drift tolerance, interruption, stop-to-attack, touch UI, aspect/safe-area usability. | **NOT YET VERIFIED** |
 | P1-CMB-007 | Regression | Automatic/passive skills respect cooldown/range/eligibility without manual aim. | Planned; **NOT YET VERIFIED** |
+
+## Phase 2 planned architecture tests
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P2-ARCH-001 | EditMode deterministic vectors | The same WorldIdentity and named domain produce the same base recipe and procedural IDs regardless of chunk load order; changing decoration does not change encounter, boss, or campfire recipes. | Planned; **NOT YET VERIFIED** |
+
+## Phase 3 planned architecture tests
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P3-ARCH-001 | EditMode/PlayMode record-versus-projection fixture | Chunk unload destroys or pools only projections. Stable building/settlement records remain queryable through the read-only per-chunk overlay, and invalid relocation leaves the original record unchanged. | Planned; **NOT YET VERIFIED** |
+
+## Phase 4 planned architecture tests
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P4-ARCH-001 | EditMode fake-storage boundary test | Only an explicit valid-campfire request carrying a committed snapshot calls Persistence storage. Ordinary mutation, pause, focus loss, and quit produce zero storage writes. | Planned; **NOT YET VERIFIED** |
+| P4-ARCH-002 | EditMode migration fixture | Current and prior planned `SaveDocument` migrations preserve declared fields, while unsupported forward versions fail safely before storage authority changes. | Planned; **NOT YET VERIFIED** |
+
+## Phase 5 planned architecture tests
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P5-ARCH-001 | EditMode saved-versus-unsaved fixture | Unsaved boss/modifier mutations remain runtime-only; loading the last valid committed snapshot restores exactly the permanent modifier records from that campfire save. | Planned; **NOT YET VERIFIED** |
+
+## Phase 6 planned architecture tests
+
+| ID | Medium | Scenario and acceptance | Current status |
+| --- | --- | --- | --- |
+| P6-ARCH-001 | Architecture lint plus device QA | Named input, lifecycle, and presentation adapters contain platform differences; Combat, World, and Persistence have no Android-specific authority or direct Unity platform API bypass. | Planned; **NOT YET VERIFIED** |
 
 ## Later high-risk regression contracts
 
