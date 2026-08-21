@@ -1,94 +1,95 @@
-# Procedural Camp MVP — Project Contract
+# Wanderer — Project Contract
 
 ## Scope and ownership
 
-This is a standalone Unity 6/C# project. It must not modify Tap Survivor or the
-parent OpenClaw workspace. Work only inside this repository.
+This is a standalone, browser-first TypeScript/WebGL game with a dedicated
+Capacitor Android wrapper. It must not modify or copy production source from Tap
+Survivor or the parent OpenClaw workspace. Work only inside this repository.
 
-The current milestone is Phase 0 foundation. Until a Unity Editor is installed,
-do not hand-author Unity-generated project metadata or claim that a Unity or
-Android build has run. Create the Unity project through the verified Editor
-toolchain, then commit its generated project files deliberately.
-
-## Required system boundaries
-
-- Procedural base world, persisted deltas, runtime state, and scene GameObjects
-  are separate concerns.
-- Static definitions use authored data; mutable save state never lives in
-  ScriptableObjects or Unity instance IDs.
-- Save commits happen only after an explicit interaction at a valid campfire.
-- Input sources map into gameplay commands; gameplay does not depend on PC or
-  touch APIs directly.
-- Android support is a first-class acceptance surface, but no device or release
-  claim is valid without physical-device evidence.
+The user explicitly authorised this pivot on 2026-08-21: browser play is the
+first delivery target; Capacitor is the native Android packaging route. This
+replaces the former Unity-only implementation constraint. It does **not** prove
+that an Android APK/AAB, physical-device test, Google Play submission, or Unity
+build exists.
 
 ## Repository layout
 
-- `Assets/Game/` — runtime C# and authored assets.
-- `Assets/Tests/` — Unity EditMode/PlayMode tests.
-- `Packages/`, `ProjectSettings/` — Unity-owned project configuration once the
-  Editor creates it.
-- `Documentation~/` — durable project documentation and test evidence indexes.
+- `src/domain/` — pure deterministic world, combat, building, progression, and
+  save-domain contracts. No DOM, Three.js, Capacitor, storage, or mutable global
+  state.
+- `src/app/` — the one explicit browser composition root plus lifecycle
+  orchestration and named feature adapters.
+- `src/platform/` — browser input, storage, rendering, and Capacitor-facing
+  adapters. They may depend on platform APIs, never the reverse.
+- `src/ui/` — disposable DOM presentation and explicit user intents only.
+- `src/data/` — immutable authored definitions and tuning.
+- `src/tests/` — deterministic unit and consumer/integration tests.
+- `public/` — static browser assets only.
+- `android/` — Capacitor-generated Android wrapper once created by the
+  Capacitor CLI; it is a platform adapter, not gameplay authority.
+- `Documentation~/` — durable implementation and validation records.
 - `Tools~/` — deterministic developer-only scripts; no credentials.
 
-Never commit `Library/`, `Temp/`, `Logs/`, generated build outputs, or local
-Android signing material. Do not manually edit generated Unity files unless the
-Editor has produced them and the change is explicitly part of a verified
-configuration update.
+Never commit `node_modules/`, `dist/`, Capacitor copied web assets, Android
+build outputs, signing material, keystores, service-account JSON, or local
+browser/Gradle caches.
+
+## Required architecture boundaries
+
+```text
+immutable definitions != runtime session != committed save document != presentation
+deterministic base world != persisted player/world deltas
+ordinary mutation != explicit campfire save commit
+input source != gameplay command
+```
+
+- `createGameApplication` is the only composition root. It constructs the
+  session and passes narrow command/query/snapshot ports to adapters; it must
+  not become a service locator, global registry, or gameplay-policy module.
+- `GameSession` is an ordinary explicitly retained object. It is never exported
+  as mutable singleton/static/default/current state, cached globally, or found
+  through a DOM/scene search.
+- No mutable module-level state, global event bus, automatic registration,
+  reachable DI container, cross-module concrete reach-through, or generic
+  `Services`/`Utils` bag is allowed.
+- Platform adapters translate keyboard, pointer/touch, DOM, localStorage,
+  Three.js, and Capacitor lifecycle APIs into feature-owned ports. Domain code
+  must not call those APIs directly.
+- Rendering, DOM, chunk visuals, UI, and pooled meshes are disposable
+  projections. They never own player, world, building, combat, or save state.
+- Definitions have stable IDs and are immutable. Runtime buildings use stable
+  GUIDs; persistent procedural objects use deterministic IDs. Never persist
+  render, DOM, or framework instance IDs.
+- Deterministic generation receives explicit domain-derived seeds. Do not use
+  `Math.random()` or one shared PRNG stream as world authority; named terrain,
+  POI, campfire, boss, encounter, and cosmetic streams are required.
+
+## Gameplay and persistence rules
+
+- Manual campfire save is the only committed persistence transition. Enemy
+  deaths, pickups, placement, upgrades, boss defeat, pause, unload, reload, and
+  quit must not silently save.
+- The persistence adapter receives only an explicit valid-save request and a
+  validated immutable snapshot. It must use a versioned document, temporary
+  write/validation, primary/backup recovery, and safe failure behaviour.
+- Same seed + generator version + chunk coordinate + named domain must produce
+  the same base structure independent of load order.
+- PC keyboard and mobile virtual-stick input must produce the same gameplay
+  movement command; basic attacks stop while meaningful movement is present.
+- Android/Capacitor remains a first-class design surface, but native device,
+  pause/resume, APK/AAB, ARM64, target-SDK, performance, signing, and Play
+  claims require their own evidence. Before Play packaging, re-check current
+  Google policy and target-SDK requirements.
 
 ## Engineering rules
 
 - Keep each cut narrow, data-driven, deterministic, and independently testable.
-- Preserve stable definition IDs, player-building GUIDs, and deterministic
-  procedural IDs. Never use Unity runtime instance IDs for persistence.
-- Treat explicit campfire save as the only committed state transition.
-- Do not publish, upload an Android artifact, install host packages, or change
-  global SDK/toolchain configuration without separate verified authority.
-- Update documentation only to describe implemented, evidenced behavior, or
-  clearly label future requirements as planned and **NOT YET VERIFIED**.
-
-## Planned maintainability constraints — **NOT YET VERIFIED**
-
-The rules below constrain a future Editor-created implementation only. They do
-not claim that any Unity runtime, module, test, or scene exists in this
-documentation-only foundation.
-
-- Use one explicitly named, local gameplay-scene composition root, planned at
-  `Assets/Game/Composition/`. It alone may construct cross-module concrete
-  services or bind deliberately serialized scene/prefab references. It performs
-  wiring and lifecycle handoff only; it must not become gameplay, generation,
-  placement, save, migration, or persistence policy.
-- `GameSession` is an ordinary object constructed and retained explicitly by
-  that composition root. It must never be a `MonoBehaviour` singleton, static
-  `Current`/`Instance`/`Default`, registry entry, or discoverable service.
-  Consumers receive only the narrow command, query, or committed-snapshot port
-  they require.
-- Each feature owns narrow, declared ports at its boundary. For example, Input
-  emits to a Player-owned movement boundary, World consumes a declared
-  read-only overlay query, and Persistence receives an explicit valid-save
-  request plus committed snapshot. Do not add a generic shared services or
-  utilities framework merely to make future dependencies convenient.
-- Presentation is never authority: UI, chunk GameObjects, cameras, pools, and
-  VFX may project state and submit explicit intents, but they must not own
-  mutable player/world/save state or hidden save calls.
-- Future production code must not introduce global-equivalent authority:
-  mutable static state, service/cache accessors, service locators or reachable
-  DI containers, automatic registration, global event buses, mutable static
-  dictionaries, or `DontDestroyOnLoad` managers used as session state.
-- Future feature code must not discover gameplay authority through
-  `GameObject.Find*`, `FindAnyObjectByType`, `FindFirstObjectByType`,
-  `Resources.FindObjectsOfTypeAll`, or cross-module `GetComponent` lookups.
-  A deliberately serialized reference owned locally by Composition is the only
-  planned scene-binding exception.
-- Immutable compile-time constants and pure immutable static value helpers are
-  allowed. They must not retain session, world, save, scene, or service state.
-  Authored definitions may be immutable; ScriptableObjects/assets must not hold
-  mutable runtime/save state or service/GameObject references.
-- Deterministic World logic must receive explicit domain-derived seeds. It must
-  not use `UnityEngine.Random`, one shared PRNG stream, scene order, or chunk
-  request order as world authority. Named adapters, wired explicitly by
-  Composition, own Unity input, storage-path/filesystem, and UI platform APIs;
-  domain systems must not bypass those boundaries.
-- Add only phase-local seams and their matching tests when their planned
-  feature is introduced. Do not reorder the phase plan or pre-build a generic
-  framework in Phase 0.
+- Build the canonical web runtime first; Capacitor syncs that exact built web
+  output. Do not fork gameplay between browser and Android.
+- Run the declared generation, typecheck, test, architecture guard, build, and
+  reproducibility checks before candidate freeze.
+- Treat all current project documentation as historical until it is rewritten
+  to describe the browser-first implementation truthfully.
+- Do not publish, push, upload a build, use credentials, contact Google Play,
+  install an Android artifact, or change global SDK/toolchain configuration
+  without separately verified authority and evidence.
