@@ -82,6 +82,86 @@ describe("GameSession", () => {
     expect(session.snapshot().combatStatus).toContain("Auto-attacking");
   });
 
+  it("pursues the player's current location at a data-defined speed without crossing attack standoff", () => {
+    const session = new GameSession();
+    const scoutBefore = session
+      .snapshot()
+      .enemies.find((enemy) => enemy.id === "enemy:starter-scout");
+    if (scoutBefore === undefined)
+      throw new Error("starter scout should be active near the initial player");
+
+    const standoff = gameplayTuning.enemyAttackStandoff;
+    const tickSeconds = 0.1;
+    const moveAwayFromScout = {
+      x: -scoutBefore.position.x,
+      y: -scoutBefore.position.y,
+    };
+    session.move({
+      intent: moveAwayFromScout,
+      source: "keyboard",
+      at: 1,
+    });
+    session.tick(tickSeconds);
+
+    const afterMovingPlayer = session.snapshot();
+    const scoutAfterFirstPursuit = afterMovingPlayer.enemies.find(
+      (enemy) => enemy.id === scoutBefore.id,
+    );
+    if (scoutAfterFirstPursuit === undefined)
+      throw new Error("active scout should remain in the snapshot");
+    const currentPlayerSeparation = {
+      x: afterMovingPlayer.player.position.x - scoutBefore.position.x,
+      y: afterMovingPlayer.player.position.y - scoutBefore.position.y,
+    };
+    const currentPlayerDistance = Math.hypot(
+      currentPlayerSeparation.x,
+      currentPlayerSeparation.y,
+    );
+    const expectedTravel = Math.min(
+      enemyDefinitions.scout.moveSpeed * tickSeconds,
+      currentPlayerDistance - standoff,
+    );
+    expect(expectedTravel).toBeGreaterThan(0);
+    expect(scoutAfterFirstPursuit.position.x).toBeCloseTo(
+      scoutBefore.position.x +
+        (currentPlayerSeparation.x / currentPlayerDistance) * expectedTravel,
+      6,
+    );
+    expect(scoutAfterFirstPursuit.position.y).toBeCloseTo(
+      scoutBefore.position.y +
+        (currentPlayerSeparation.y / currentPlayerDistance) * expectedTravel,
+      6,
+    );
+
+    session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
+    const distanceAfterFirstPursuit = Math.hypot(
+      afterMovingPlayer.player.position.x - scoutAfterFirstPursuit.position.x,
+      afterMovingPlayer.player.position.y - scoutAfterFirstPursuit.position.y,
+    );
+    const remainingTicks = Math.ceil(
+      Math.max(
+        0,
+        (distanceAfterFirstPursuit - standoff) /
+          (enemyDefinitions.scout.moveSpeed * tickSeconds),
+      ),
+    );
+    for (let tick = 0; tick < remainingTicks; tick += 1)
+      session.tick(tickSeconds);
+
+    const settledSnapshot = session.snapshot();
+    const settledScout = settledSnapshot.enemies.find(
+      (enemy) => enemy.id === scoutBefore.id,
+    );
+    if (settledScout === undefined)
+      throw new Error("scout should not be defeated before reaching standoff");
+    const settledDistance = Math.hypot(
+      settledSnapshot.player.position.x - settledScout.position.x,
+      settledSnapshot.player.position.y - settledScout.position.y,
+    );
+    expect(settledDistance).toBeGreaterThanOrEqual(standoff - 0.000_001);
+    expect(settledDistance).toBeCloseTo(standoff, 6);
+  });
+
   it("uses exactly five named data-backed resources with data-driven normal, elite, and boss drops", () => {
     expect(resourceKinds).toEqual([
       "wood",

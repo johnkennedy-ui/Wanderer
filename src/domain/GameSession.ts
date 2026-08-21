@@ -55,6 +55,7 @@ interface RuntimeEnemy {
   damage: number;
   dangerTier: number;
   dropMultiplier: number;
+  moveSpeed: number;
   attackEverySeconds: number;
   respawnAt: number | null;
   defeated: boolean;
@@ -238,6 +239,7 @@ export class GameSession {
       this.updateAutoCombat(delta);
     }
 
+    this.updateEnemyPursuit(delta);
     this.updateEnemyRespawns();
     this.updateEnemyAttacks(delta);
     this.ensureNeighborhoodEnemies();
@@ -502,6 +504,7 @@ export class GameSession {
           ),
           dangerTier: spawn.danger.tier,
           dropMultiplier: spawn.danger.dropMultiplier,
+          moveSpeed: definition.moveSpeed,
           attackEverySeconds: definition.attackEverySeconds,
           respawnAt: null,
           defeated: false,
@@ -586,11 +589,46 @@ export class GameSession {
     }
   }
 
+  private updateEnemyPursuit(delta: number): void {
+    for (const enemy of this.enemies.values()) {
+      if (enemy.defeated) continue;
+      const separation = {
+        x: this.player.position.x - enemy.position.x,
+        y: this.player.position.y - enemy.position.y,
+      };
+      const playerDistance = magnitude(separation);
+      const remainingDistance =
+        playerDistance - gameplayTuning.enemyAttackStandoff;
+      if (remainingDistance <= 0) continue;
+
+      const travel = Math.min(enemy.moveSpeed * delta, remainingDistance);
+      const nextPosition = add(
+        enemy.position,
+        scale(normalize(separation), travel),
+      );
+      enemy.position =
+        distance(nextPosition, this.player.position) <
+        gameplayTuning.enemyAttackStandoff
+          ? add(
+              this.player.position,
+              scale(
+                normalize({
+                  x: enemy.position.x - this.player.position.x,
+                  y: enemy.position.y - this.player.position.y,
+                }),
+                gameplayTuning.enemyAttackStandoff,
+              ),
+            )
+          : nextPosition;
+    }
+  }
+
   private updateEnemyAttacks(delta: number): void {
     for (const enemy of this.enemies.values()) {
       if (
         enemy.defeated ||
-        distance(this.player.position, enemy.position) > 1.8
+        distance(this.player.position, enemy.position) >
+          gameplayTuning.enemyAttackStandoff
       )
         continue;
       enemy.attackElapsed += delta;

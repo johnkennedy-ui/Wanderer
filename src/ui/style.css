@@ -61,6 +61,21 @@ input {
   border-radius: 9px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
 }
+.panel[hidden] {
+  display: none;
+}
+.panel-toggle-controls {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  max-width: calc(100vw - 1.5rem);
+  pointer-events: auto;
+  z-index: 1;
+}
 .top-panel {
   position: absolute;
   top: max(0.75rem, env(safe-area-inset-top));
@@ -165,6 +180,7 @@ input {
   place-items: center;
   background: rgb(0 0 0 / 54%);
   pointer-events: auto;
+  z-index: 2;
 }
 .upgrade-modal[hidden] {
   display: none;

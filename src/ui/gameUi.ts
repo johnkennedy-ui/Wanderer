@@ -43,7 +43,11 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const ui = document.createElement("main");
   ui.className = "game-ui";
   ui.innerHTML = `
-    <section class="top-panel panel" aria-label="Wanderer status">
+    <div class="panel-toggle-controls" aria-label="Game panel visibility">
+      <button type="button" data-testid="toggle-status-panel" aria-controls="status-panel" aria-expanded="true">Hide status</button>
+      <button type="button" data-testid="toggle-world-controls-panel" aria-controls="world-controls-panel" aria-expanded="true">Hide controls</button>
+    </div>
+    <section id="status-panel" data-testid="status-panel" class="top-panel panel" aria-label="Wanderer status">
       <div><strong>Wanderer</strong> <span class="subtle">browser MVP · manual campfire saves</span></div>
       <div class="status-grid">
         <span data-testid="seed"></span>
@@ -56,7 +60,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <p class="subtle" data-testid="boss-route-cue">Ember Wyrm route: the boss is 6m east of the home Campfire. Move east, then stop within basic-attack range.</p>
       <p class="subtle" data-testid="native-truth-boundary">Browser MVP evidence only: native Android wrapper/device, APK/AAB, and Google Play evidence are unverified.</p>
     </section>
-    <section class="side-panel panel" aria-label="World controls">
+    <section id="world-controls-panel" data-testid="world-controls-panel" class="side-panel panel" aria-label="World controls">
       <label>Known seed <input data-testid="seed-input" value="wanderer-known-seed" maxlength="48" /></label>
       <button data-testid="new-world">New / reset world</button>
       <button data-testid="save-button">Save at campfire</button>
@@ -107,6 +111,43 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const upgradeModal = byTestId<HTMLElement>("upgrade-modal");
   const upgradeChoices = byTestId<HTMLDivElement>("upgrade-choices");
   const virtualStick = byTestId<HTMLDivElement>("virtual-stick");
+  const statusPanel = byTestId<HTMLElement>("status-panel");
+  const worldControlsPanel = byTestId<HTMLElement>("world-controls-panel");
+  const statusPanelToggle = byTestId<HTMLButtonElement>("toggle-status-panel");
+  const worldControlsPanelToggle = byTestId<HTMLButtonElement>(
+    "toggle-world-controls-panel",
+  );
+
+  const setPanelVisibility = (
+    panel: HTMLElement,
+    toggle: HTMLButtonElement,
+    label: string,
+    visible: boolean,
+  ): void => {
+    panel.hidden = !visible;
+    toggle.setAttribute("aria-expanded", String(visible));
+    toggle.textContent = `${visible ? "Hide" : "Show"} ${label}`;
+  };
+  let statusPanelVisible = true;
+  let worldControlsPanelVisible = true;
+  statusPanelToggle.addEventListener("click", () => {
+    statusPanelVisible = !statusPanelVisible;
+    setPanelVisibility(
+      statusPanel,
+      statusPanelToggle,
+      "status",
+      statusPanelVisible,
+    );
+  });
+  worldControlsPanelToggle.addEventListener("click", () => {
+    worldControlsPanelVisible = !worldControlsPanelVisible;
+    setPanelVisibility(
+      worldControlsPanel,
+      worldControlsPanelToggle,
+      "controls",
+      worldControlsPanelVisible,
+    );
+  });
 
   const readPosition = (): Vector2 => ({
     x: Number(xInput.value),

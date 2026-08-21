@@ -15,6 +15,7 @@ export interface ResourceDefinition {
 export interface EnemyDefinition {
   readonly maxHp: number;
   readonly damage: number;
+  readonly moveSpeed: number;
   readonly attackEverySeconds: number;
   readonly respawnSeconds: number | null;
   readonly drops: ResourceBag;
@@ -95,6 +96,7 @@ export const gameplayTuning = Object.freeze({
   baseAttackIntervalSeconds: 0.5,
   baseAttackRange: 3.2,
   baseMoveSpeed: 3,
+  enemyAttackStandoff: 1.8,
 });
 
 export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
@@ -102,6 +104,7 @@ export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
     scout: {
       maxHp: 24,
       damage: 3,
+      moveSpeed: 3.2,
       attackEverySeconds: 1.2,
       respawnSeconds: 12,
       drops: { wood: 5, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
@@ -109,6 +112,7 @@ export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
     brute: {
       maxHp: 38,
       damage: 5,
+      moveSpeed: 1.35,
       attackEverySeconds: 1.5,
       respawnSeconds: 14,
       drops: { wood: 1, stone: 5, scrap: 2, essence: 0, bossCore: 0 },
@@ -116,6 +120,7 @@ export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
     spitter: {
       maxHp: 28,
       damage: 4,
+      moveSpeed: 1.75,
       attackEverySeconds: 1.1,
       respawnSeconds: 13,
       drops: { wood: 2, stone: 1, scrap: 4, essence: 0, bossCore: 0 },
@@ -123,6 +128,7 @@ export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
     elite: {
       maxHp: 56,
       damage: 7,
+      moveSpeed: 1.5,
       attackEverySeconds: 1.4,
       respawnSeconds: 20,
       drops: { wood: 7, stone: 7, scrap: 6, essence: 2, bossCore: 0 },
@@ -130,6 +136,7 @@ export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
     boss: {
       maxHp: 72,
       damage: 9,
+      moveSpeed: 1.25,
       attackEverySeconds: 1.3,
       respawnSeconds: null,
       drops: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 1 },

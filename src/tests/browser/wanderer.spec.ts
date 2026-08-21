@@ -22,6 +22,37 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   );
 });
 
+test("status and world-control panels independently hide and reopen while play stays visible", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const statusPanel = page.getByTestId("status-panel");
+  const worldControlsPanel = page.getByTestId("world-controls-panel");
+  const statusToggle = page.getByTestId("toggle-status-panel");
+  const worldControlsToggle = page.getByTestId("toggle-world-controls-panel");
+
+  await expect(statusToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(worldControlsToggle).toHaveAttribute("aria-expanded", "true");
+  await statusToggle.click();
+  await expect(statusPanel).toBeHidden();
+  await expect(statusToggle).toHaveText("Show status");
+  await expect(statusToggle).toHaveAttribute("aria-expanded", "false");
+
+  await worldControlsToggle.click();
+  await expect(worldControlsPanel).toBeHidden();
+  await expect(worldControlsToggle).toHaveText("Show controls");
+  await expect(worldControlsToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("world-canvas")).toBeVisible();
+  await expect(page.getByTestId("virtual-stick")).toBeVisible();
+
+  await statusToggle.click();
+  await worldControlsToggle.click();
+  await expect(statusPanel).toBeVisible();
+  await expect(worldControlsPanel).toBeVisible();
+  await expect(statusToggle).toHaveText("Hide status");
+  await expect(worldControlsToggle).toHaveText("Hide controls");
+});
+
 test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
   page,
 }) => {
@@ -139,6 +170,8 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
     buttons.map((button) => button.dataset.testid),
   );
   expect(new Set(choiceIds).size).toBe(3);
+  await page.mouse.click(8, 8);
+  await expect(modal).toBeVisible();
 
   await choices.first().click();
   await expect(modal).toBeHidden();

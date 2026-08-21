@@ -17,6 +17,11 @@ const buildingColor: Readonly<Record<BuildingKind, number>> = {
   Healer: 0x9c6ade,
 };
 
+export const defaultThreeCameraTuning = Object.freeze({
+  fieldOfViewDegrees: 58,
+  playerOffset: { x: 11, y: 17, z: 14 },
+});
+
 const enemyColor = (kind: string): number => {
   if (kind === "boss") return 0xd84315;
   if (kind === "elite") return 0xfbc02d;
@@ -57,7 +62,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x101820);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(
+    defaultThreeCameraTuning.fieldOfViewDegrees,
+    1,
+    0.1,
+    100,
+  );
   const ambient = new THREE.HemisphereLight(0xd9ecff, 0x203019, 2.2);
   const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(5, 12, 6);
@@ -122,9 +132,9 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       player.position.y = 0.525;
       addMarker(player, snapshot.player.position);
       camera.position.set(
-        snapshot.player.position.x + 8,
-        13,
-        -snapshot.player.position.y + 10,
+        snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
+        defaultThreeCameraTuning.playerOffset.y,
+        -snapshot.player.position.y + defaultThreeCameraTuning.playerOffset.z,
       );
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
       renderer.render(scene, camera);
