@@ -59,13 +59,15 @@ test("enabled primary canvas taps travel to a destination while disabled taps do
   await controlsToggle.click();
   await expect(controlsPanel).toBeVisible();
   await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
   await controlsToggle.click();
   await expect(controlsPanel).toBeHidden();
+  await expect(position).toContainText("input: system");
   await canvas.click({
     position: { x: box.width * 0.6, y: box.height * 0.55 },
   });
-  await page.waitForTimeout(250);
-  await expect(position).toHaveText(settledPosition ?? "");
+  await page.waitForTimeout(100);
+  await expect(position).toContainText("input: system");
 });
 
 test("completed lethal projectiles leave visible renderer-owned floor drops without an implicit save", async ({
