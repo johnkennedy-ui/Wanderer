@@ -19,6 +19,7 @@ export interface UiIntents {
 export interface GameUi {
   readonly worldHost: HTMLElement;
   readonly virtualStick: HTMLElement;
+  isTapToMoveEnabled(): boolean;
   render(snapshot: GameSnapshot): void;
   showTransient(message: string): void;
   dispose(): void;
@@ -65,6 +66,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <label>Known seed <input data-testid="seed-input" value="wanderer-known-seed" maxlength="48" /></label>
       <button data-testid="new-world">New / reset world</button>
       <button data-testid="save-button">Save at campfire</button>
+      <label class="tap-to-move-toggle"><input data-testid="tap-to-move-toggle" type="checkbox" /> Tap-to-move</label>
+      <p class="subtle">When enabled, tap an open part of the world to travel there. Keyboard and stick movement take over immediately.</p>
       <p data-testid="save-message" class="subtle">No automatic save. Reload restores only the last explicit campfire commit.</p>
       <hr />
       <h2>Freeform building</h2>
@@ -107,6 +110,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const buildButtons = byTestId<HTMLDivElement>("build-buttons");
   const buildingList = byTestId<HTMLDivElement>("building-list");
   const saveButton = byTestId<HTMLButtonElement>("save-button");
+  const tapToMoveToggle = byTestId<HTMLInputElement>("tap-to-move-toggle");
   const saveMessage = byTestId<HTMLParagraphElement>("save-message");
   const placementMessage = byTestId<HTMLParagraphElement>("placement-message");
   const upgradeModal = byTestId<HTMLElement>("upgrade-modal");
@@ -170,6 +174,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   return {
     worldHost,
     virtualStick,
+    isTapToMoveEnabled(): boolean {
+      return tapToMoveToggle.checked;
+    },
     showTransient(message: string): void {
       text(saveMessage, message);
     },

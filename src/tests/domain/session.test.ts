@@ -276,6 +276,96 @@ describe("GameSession", () => {
     });
   });
 
+  it("leaves lethal projectile drops on the floor until contact, preserves capacity, and excludes them from saves", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        resources: {
+          wood: 118,
+          stone: 119,
+          scrap: 0,
+          essence: 0,
+          bossCore: 0,
+        },
+      },
+    });
+    advance(
+      session,
+      gameplayTuning.baseAttackIntervalSeconds * 2 +
+        gameplayTuning.basicProjectileTravelSeconds +
+        0.2,
+    );
+    const afterDefeat = session.snapshot();
+    const drops = afterDefeat.floorDrops;
+    expect(drops).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ resource: "wood", amount: 5 }),
+        expect.objectContaining({ resource: "stone", amount: 1 }),
+      ]),
+    );
+    expect(afterDefeat.resources.wood).toBe(118);
+    expect(afterDefeat.resources.stone).toBe(119);
+
+    for (const drop of drops) {
+      session.setDestination({
+        destination: drop.position,
+        source: "tap-to-move",
+        at: 1,
+      });
+      advance(session, 1);
+    }
+    const afterContact = session.snapshot();
+    expect(afterContact.resources.wood).toBe(120);
+    expect(afterContact.resources.stone).toBe(120);
+    expect(afterContact.floorDrops).toEqual([
+      expect.objectContaining({ resource: "wood", amount: 3 }),
+    ]);
+
+    session.setDestination({
+      destination: { x: 0, y: 0 },
+      source: "tap-to-move",
+      at: 2,
+    });
+    advance(session, 1);
+    const request = session.createValidCampfireSaveRequest(77);
+    expect(request).not.toBeNull();
+    expect(request?.document).not.toHaveProperty("floorDrops");
+  });
+
+  it("moves to explicit tap destinations, stops on arrival, and lets manual movement cancel them", () => {
+    const session = new GameSession();
+    session.setDestination({
+      destination: { x: 1, y: 0 },
+      source: "tap-to-move",
+      at: 1,
+    });
+    expect(session.snapshot().destination).toEqual({ x: 1, y: 0 });
+    advance(session, 1);
+    expect(session.snapshot().player.position).toEqual({ x: 1, y: 0 });
+    expect(session.snapshot().destination).toBeNull();
+    expect(session.snapshot().moving).toBe(false);
+
+    session.setDestination({
+      destination: { x: 5, y: 0 },
+      source: "tap-to-move",
+      at: 2,
+    });
+    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 3 });
+    expect(session.snapshot().destination).toBeNull();
+    session.setDestination({
+      destination: { x: 5, y: 0 },
+      source: "tap-to-move",
+      at: 4,
+    });
+    session.move({
+      intent: { x: 1, y: 0 },
+      source: "virtual-stick",
+      at: 5,
+    });
+    expect(session.snapshot().destination).toBeNull();
+  });
+
   it("applies all three Campfire radii in actual placement validation", () => {
     const session = new GameSession();
     const campfire = session.placeBuilding("Campfire", { x: 8, y: 2 });
@@ -458,6 +548,17 @@ describe("GameSession", () => {
     session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
     advance(session, 4.2 + gameplayTuning.basicProjectileTravelSeconds);
     const choices = session.snapshot().pendingUpgradeChoices;
+    const bossDrop = session
+      .snapshot()
+      .floorDrops.find((drop) => drop.resource === "bossCore");
+    if (bossDrop === undefined) throw new Error("boss should drop a Boss Core");
+    expect(session.snapshot().resources.bossCore).toBe(0);
+    session.setDestination({
+      destination: bossDrop.position,
+      source: "tap-to-move",
+      at: 2.5,
+    });
+    advance(session, 1);
     expect(session.snapshot().resources.bossCore).toBe(1);
     expect(choices).toHaveLength(3);
     expect(session.chooseUpgrade(choices[0])).toBe(true);

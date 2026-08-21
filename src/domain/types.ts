@@ -22,11 +22,19 @@ export interface Vector2 {
   readonly y: number;
 }
 
-export type InputSource = "keyboard" | "virtual-stick" | "system";
+export type InputSource =
+  "keyboard" | "virtual-stick" | "tap-to-move" | "system";
 
 export interface MoveCommand {
   readonly intent: Vector2;
   readonly source: InputSource;
+  readonly at: number;
+}
+
+/** An explicit runtime-only destination issued by an enabled tap-to-move adapter. */
+export interface DestinationCommand {
+  readonly destination: Vector2;
+  readonly source: "tap-to-move";
   readonly at: number;
 }
 
@@ -51,6 +59,14 @@ export interface ProjectileState {
   readonly targetId: string;
   readonly targetPosition: Vector2;
   readonly progress: number;
+}
+
+/** A runtime-only resource bundle left by a completed lethal projectile impact. */
+export interface FloorDropState {
+  readonly id: string;
+  readonly resource: ResourceKind;
+  readonly amount: number;
+  readonly position: Vector2;
 }
 
 export type BuildingKind =
@@ -149,11 +165,13 @@ export interface GameSnapshot {
   readonly combatStats: CombatStats;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
+  readonly floorDrops: readonly FloorDropState[];
   readonly buildings: readonly BuildingState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];
   readonly moving: boolean;
   readonly inputSource: InputSource;
+  readonly destination: Vector2 | null;
   readonly combatStatus: string;
   readonly effects: readonly string[];
   readonly defeatedBossIds: readonly string[];

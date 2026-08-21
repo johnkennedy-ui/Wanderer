@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { resourceDefinitions } from "../../data/definitions";
 import type {
   BuildingKind,
   GameSnapshot,
@@ -7,7 +8,12 @@ import type {
 } from "../../domain/types";
 
 export interface ThreeRenderer {
+  readonly canvas: HTMLCanvasElement;
   render(snapshot: GameSnapshot): void;
+  worldPositionFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ): Vector2 | null;
   dispose(): void;
 }
 
@@ -94,6 +100,15 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   scene.add(floor);
   const projection = new THREE.Group();
   scene.add(projection);
+  const playerHealthLabel = document.createElement("div");
+  playerHealthLabel.dataset.testid = "world-player-hp";
+  playerHealthLabel.className = "world-player-hp";
+  playerHealthLabel.setAttribute("aria-label", "Player health");
+  host.append(playerHealthLabel);
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const worldIntersection = new THREE.Vector3();
 
   const resize = (): void => {
     const width = Math.max(1, host.clientWidth);
@@ -111,7 +126,35 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     projection.add(mesh);
   };
 
+  const worldPositionFromClientPoint = (
+    clientX: number,
+    clientY: number,
+  ): Vector2 | null => {
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    pointer.set(
+      ((clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, worldIntersection) === null)
+      return null;
+    return { x: worldIntersection.x, y: -worldIntersection.z };
+  };
+
+  const positionPlayerHealthLabel = (snapshot: GameSnapshot): void => {
+    const projected = toWorld(snapshot.player.position);
+    projected.y = 1.75;
+    projected.project(camera);
+    playerHealthLabel.style.left = `${((projected.x + 1) / 2) * 100}%`;
+    playerHealthLabel.style.top = `${((1 - projected.y) / 2) * 100}%`;
+    playerHealthLabel.textContent = `${Math.ceil(snapshot.player.hp)} / ${snapshot.player.maxHp} HP`;
+  };
+
   return {
+    canvas,
+    worldPositionFromClientPoint,
     render(snapshot: GameSnapshot): void {
       disposeGroup(projection);
       for (const chunk of snapshot.visibleChunks) {
@@ -155,6 +198,20 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         mesh.position.y = 0.72;
         projection.add(mesh);
       }
+      for (const drop of snapshot.floorDrops) {
+        const mesh = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.22, 0),
+          new THREE.MeshStandardMaterial({
+            color: resourceDefinitions[drop.resource].groundDropColor,
+            emissive: resourceDefinitions[drop.resource].groundDropColor,
+            emissiveIntensity: 0.22,
+            roughness: 0.35,
+          }),
+        );
+        mesh.position.copy(toWorld(drop.position));
+        mesh.position.y = 0.24;
+        projection.add(mesh);
+      }
       const player = cylinder(0.45, 1.05, 0x58a6ff);
       player.position.y = 0.525;
       addMarker(player, snapshot.player.position);
@@ -164,6 +221,8 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         -snapshot.player.position.y + defaultThreeCameraTuning.playerOffset.z,
       );
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
+      positionPlayerHealthLabel(snapshot);
+      canvas.dataset.floorDropCount = String(snapshot.floorDrops.length);
       renderer.render(scene, camera);
     },
     dispose(): void {
@@ -172,6 +231,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       floor.geometry.dispose();
       (floor.material as THREE.Material).dispose();
       renderer.dispose();
+      playerHealthLabel.remove();
       canvas.remove();
     },
   };

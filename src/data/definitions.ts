@@ -10,6 +10,7 @@ export interface ResourceDefinition {
   readonly label: string;
   readonly storageLimited: boolean;
   readonly description: string;
+  readonly groundDropColor: number;
 }
 
 export interface EnemyDefinition {
@@ -53,27 +54,32 @@ export const resourceDefinitions: Readonly<
     label: "Wood",
     storageLimited: true,
     description: "Common construction timber.",
+    groundDropColor: 0xb87333,
   },
   stone: {
     label: "Stone",
     storageLimited: true,
     description: "Common settlement masonry.",
+    groundDropColor: 0xa9b3b8,
   },
   scrap: {
     label: "Metal / Scrap",
     storageLimited: true,
     description: "Recovered metal for durable work.",
+    groundDropColor: 0x8ab4c8,
   },
   essence: {
     label: "Essence",
     storageLimited: true,
     description: "Elite energy used for advanced upgrades.",
+    groundDropColor: 0xb388ff,
   },
   bossCore: {
     label: "Boss Core",
     storageLimited: false,
     description:
       "Boss progression currency; saved but exempt from Storage capacity.",
+    groundDropColor: 0xffd54f,
   },
 });
 
@@ -95,8 +101,11 @@ export const gameplayTuning = Object.freeze({
   baseAttackDamage: 12,
   baseAttackIntervalSeconds: 0.5,
   basicProjectileTravelSeconds: 0.3,
+  floorDropOffsetDistance: 0.42,
+  floorDropCollectDistance: 0.8,
   baseAttackRange: 3.2,
   baseMoveSpeed: 3,
+  tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
 });
 

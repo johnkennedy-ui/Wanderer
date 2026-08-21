@@ -5,8 +5,10 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
 }) => {
   await page.goto("/");
   await expect(page.getByTestId("world-canvas")).toBeVisible();
+  await expect(page.getByTestId("world-player-hp")).toHaveText("100 / 100 HP");
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("virtual-stick")).toBeVisible();
+  await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
   await expect(page.getByTestId("projectile-status")).toContainText(
     "in flight",
   );
@@ -22,6 +24,48 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   );
   await expect(page.getByTestId("native-truth-boundary")).toHaveText(
     "Browser MVP evidence only: native Android wrapper/device, APK/AAB, and Google Play evidence are unverified.",
+  );
+});
+
+test("enabled primary canvas taps travel to a destination while disabled taps do nothing", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const canvas = page.getByTestId("world-canvas");
+  const position = page.getByTestId("position");
+  const toggle = page.getByTestId("tap-to-move-toggle");
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error("World canvas was not laid out");
+
+  await toggle.check();
+  await canvas.click({
+    position: { x: box.width * 0.4, y: box.height * 0.55 },
+  });
+  await expect(page.getByTestId("combat-status")).toContainText("suppressed");
+  await page.waitForTimeout(1_500);
+  const settledPosition = await position.textContent();
+  await page.waitForTimeout(250);
+  await expect(position).toHaveText(settledPosition ?? "");
+
+  await toggle.uncheck();
+  await canvas.click({
+    position: { x: box.width * 0.6, y: box.height * 0.55 },
+  });
+  await page.waitForTimeout(250);
+  await expect(position).toHaveText(settledPosition ?? "");
+});
+
+test("completed lethal projectiles leave visible renderer-owned floor drops without an implicit save", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-floor-drop-count", /[1-9]/, {
+    timeout: 4_000,
+  });
+  await expect(page.getByTestId("resources")).toContainText("Wood 120");
+  await expect(page.getByTestId("save-message")).toContainText(
+    "Fresh runtime: no committed save loaded.",
   );
 });
 
@@ -238,7 +282,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await choices.first().click();
   await expect(modal).toBeHidden();
   await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(resources).toContainText("Boss Core 1");
+  await expect(resources).toContainText("Boss Core 0");
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );

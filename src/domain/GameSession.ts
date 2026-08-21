@@ -19,8 +19,10 @@ import type {
   BuildingKind,
   BuildingState,
   CombatStats,
+  DestinationCommand,
   EnemyKind,
   EnemyState,
+  FloorDropState,
   GameSnapshot,
   InputSource,
   MoveCommand,
@@ -178,17 +180,20 @@ export class GameSession {
   private buildings: BuildingState[];
   private enemies = new Map<string, RuntimeEnemy>();
   private projectiles: RuntimeProjectile[] = [];
+  private floorDrops: FloorDropState[] = [];
   private defeatedBossIds = new Set<string>();
   private upgrades = new Set<UpgradeId>();
   private pendingUpgradeChoices: UpgradeId[] = [];
   private nextBuildingSerial: number;
   private nextProjectileSerial = 1;
+  private nextFloorDropSerial = 1;
   private committedSavePoint: SettlementCampfire;
   private input: MoveCommand = {
     intent: { x: 0, y: 0 },
     source: "system",
     at: 0,
   };
+  private destination: Vector2 | null = null;
   private elapsed = 0;
   private attackElapsed = 0;
   private farmHarvestElapsed = 0;
@@ -236,8 +241,22 @@ export class GameSession {
   }
 
   move(command: MoveCommand): void {
+    this.destination = null;
     this.input = {
       intent: boundedMoveIntent(command.intent),
+      source: command.source,
+      at: command.at,
+    };
+  }
+
+  setDestination(command: DestinationCommand): void {
+    if (!isFinitePosition(command.destination)) {
+      this.message = "Tap-to-move ignored an invalid destination.";
+      return;
+    }
+    this.destination = roundVector(command.destination);
+    this.input = {
+      intent: { x: 0, y: 0 },
       source: command.source,
       at: command.at,
     };
@@ -247,16 +266,18 @@ export class GameSession {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
     this.updateProjectiles(delta);
+    const destinationMoving = this.moveTowardDestination(delta);
     const movement = magnitude(this.input.intent);
-    const moving = movement >= MOVEMENT_THRESHOLD;
+    const moving = destinationMoving || movement >= MOVEMENT_THRESHOLD;
 
     if (moving) {
-      this.player.position = roundVector(
-        add(
-          this.player.position,
-          scale(this.input.intent, this.combatStats().moveSpeed * delta),
-        ),
-      );
+      if (!destinationMoving)
+        this.player.position = roundVector(
+          add(
+            this.player.position,
+            scale(this.input.intent, this.combatStats().moveSpeed * delta),
+          ),
+        );
       this.combatStatus = "Moving: basic auto-attack suppressed";
       this.attackElapsed = 0;
       this.farmHarvestElapsed = 0;
@@ -265,6 +286,7 @@ export class GameSession {
       this.updateAutoCombat(delta);
     }
 
+    this.collectNearbyFloorDrops();
     this.updateEnemyPursuit(delta);
     this.updateEnemyRespawns();
     this.updateEnemyAttacks(delta);
@@ -392,11 +414,13 @@ export class GameSession {
     this.buildings = [];
     this.enemies = new Map();
     this.projectiles = [];
+    this.floorDrops = [];
     this.defeatedBossIds = new Set();
     this.upgrades = new Set();
     this.pendingUpgradeChoices = [];
     this.nextBuildingSerial = 1;
     this.nextProjectileSerial = 1;
+    this.nextFloorDropSerial = 1;
     this.committedSavePoint = {
       id: "campfire:home",
       label: "home campfire",
@@ -404,6 +428,7 @@ export class GameSession {
       level: 1,
     };
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
+    this.destination = null;
     this.attackElapsed = 0;
     this.farmHarvestElapsed = 0;
     this.message = `New deterministic world started with seed “${cleanSeed}”. Nothing has been saved.`;
@@ -462,7 +487,9 @@ export class GameSession {
       ...building,
       position: copyVector(building.position),
     }));
-    const moving = magnitude(this.input.intent) >= MOVEMENT_THRESHOLD;
+    const moving =
+      this.destination !== null ||
+      magnitude(this.input.intent) >= MOVEMENT_THRESHOLD;
     const savePoint = this.nearbyCampfire();
     return {
       world: { ...this.world },
@@ -511,6 +538,14 @@ export class GameSession {
           ),
         };
       }),
+      floorDrops: this.floorDrops
+        .filter((drop) =>
+          visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
+        )
+        .map((drop): FloorDropState => ({
+          ...drop,
+          position: copyVector(drop.position),
+        })),
       buildings,
       visibleBuildings: buildings.filter((building) =>
         visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),
@@ -518,6 +553,8 @@ export class GameSession {
       visibleChunks,
       moving,
       inputSource: this.input.source,
+      destination:
+        this.destination === null ? null : copyVector(this.destination),
       combatStatus: this.combatStatus,
       effects: this.describeEffects(),
       defeatedBossIds: [...this.defeatedBossIds].sort(),
@@ -666,6 +703,33 @@ export class GameSession {
     }
   }
 
+  private moveTowardDestination(delta: number): boolean {
+    if (this.destination === null) return false;
+    const offset = {
+      x: this.destination.x - this.player.position.x,
+      y: this.destination.y - this.player.position.y,
+    };
+    const remainingDistance = magnitude(offset);
+    const maximumTravel = this.combatStats().moveSpeed * delta;
+    if (
+      remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
+      maximumTravel >= remainingDistance
+    ) {
+      this.player.position = copyVector(this.destination);
+      this.destination = null;
+      this.input = {
+        intent: { x: 0, y: 0 },
+        source: "system",
+        at: this.elapsed,
+      };
+      return false;
+    }
+    this.player.position = roundVector(
+      add(this.player.position, scale(normalize(offset), maximumTravel)),
+    );
+    return true;
+  }
+
   private updateEnemyPursuit(delta: number): void {
     for (const enemy of this.enemies.values()) {
       if (enemy.defeated) continue;
@@ -728,6 +792,7 @@ export class GameSession {
     this.player.position = copyVector(this.committedSavePoint.position);
     this.player.hp = this.player.maxHp;
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
+    this.destination = null;
     this.attackElapsed = 0;
     this.farmHarvestElapsed = 0;
     this.message = `You fell and returned to ${this.committedSavePoint.label}. ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% of carried resources was lost; no save was made.`;
@@ -735,9 +800,13 @@ export class GameSession {
 
   private defeatEnemy(enemy: RuntimeEnemy): void {
     const definition = enemyDefinitions[enemy.kind];
-    this.resources = this.collectResources(
-      scaleResources(definition.drops, enemy.dropMultiplier),
-    );
+    this.floorDrops = [
+      ...this.floorDrops,
+      ...this.createFloorDrops(
+        enemy,
+        scaleResources(definition.drops, enemy.dropMultiplier),
+      ),
+    ];
     enemy.defeated = true;
     if (enemy.kind === "boss") {
       this.defeatedBossIds.add(enemy.id);
@@ -747,12 +816,72 @@ export class GameSession {
       );
       this.message =
         this.pendingUpgradeChoices.length === 3
-          ? "The Ember Wyrm is defeated: Boss Core gained. Choose one unowned upgrade, then campfire-save it."
-          : "The Ember Wyrm is defeated: Boss Core gained. No complete unowned upgrade trio remains.";
+          ? "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. Choose one unowned upgrade, then campfire-save it."
+          : "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. No complete unowned upgrade trio remains.";
     } else {
       enemy.respawnAt = this.elapsed + (definition.respawnSeconds ?? 0);
-      this.message = `${enemy.kind} defeated: data-defined resources collected. It will respawn later; no save was made.`;
+      this.message = `${enemy.kind} defeated: data-defined resource drops remain on the ground. It will respawn later; no save was made.`;
     }
+  }
+
+  private createFloorDrops(
+    enemy: RuntimeEnemy,
+    resources: ResourceBag,
+  ): FloorDropState[] {
+    const droppedResources = resourceKinds.filter(
+      (resource) => resources[resource] > 0,
+    );
+    const serial = this.nextFloorDropSerial;
+    this.nextFloorDropSerial += 1;
+    const startAngle = ((hashText(enemy.id) % 360) * Math.PI) / 180;
+    return droppedResources.map((resource, index) => {
+      const angle =
+        startAngle + (index * Math.PI * 2) / droppedResources.length;
+      return {
+        id: `drop:${enemy.id}:${serial}:${resource}`,
+        resource,
+        amount: resources[resource],
+        position: roundVector(
+          add(enemy.position, {
+            x: Math.cos(angle) * gameplayTuning.floorDropOffsetDistance,
+            y: Math.sin(angle) * gameplayTuning.floorDropOffsetDistance,
+          }),
+        ),
+      };
+    });
+  }
+
+  private collectNearbyFloorDrops(): void {
+    if (this.floorDrops.length === 0) return;
+    const remaining: FloorDropState[] = [];
+    let collectedAny = false;
+    for (const drop of this.floorDrops) {
+      if (
+        distance(this.player.position, drop.position) >
+        gameplayTuning.floorDropCollectDistance
+      ) {
+        remaining.push(drop);
+        continue;
+      }
+      const capacityRemaining = resourceDefinitions[drop.resource]
+        .storageLimited
+        ? Math.max(0, this.materialCapacity() - this.resources[drop.resource])
+        : Number.POSITIVE_INFINITY;
+      const collectedAmount = Math.min(drop.amount, capacityRemaining);
+      if (collectedAmount <= 0) {
+        remaining.push(drop);
+        continue;
+      }
+      const resources = cloneResources(this.resources);
+      resources[drop.resource] += collectedAmount;
+      this.resources = this.clampResourcesToCapacity(resources);
+      collectedAny = true;
+      if (collectedAmount < drop.amount)
+        remaining.push({ ...drop, amount: drop.amount - collectedAmount });
+    }
+    this.floorDrops = remaining;
+    if (collectedAny)
+      this.message = "Collected floor drops on contact; no save was made.";
   }
 
   private applyPassiveEffects(delta: number): void {

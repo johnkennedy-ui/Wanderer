@@ -116,6 +116,15 @@ input {
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+.tap-to-move-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+.tap-to-move-toggle input {
+  min-width: auto;
+}
 .coordinates label {
   display: grid;
   gap: 0.15rem;
@@ -180,6 +189,20 @@ input {
   background: #e6d690;
   box-shadow: 0 0 0 4px rgb(230 214 144 / 22%);
   will-change: transform;
+}
+.world-player-hp {
+  position: absolute;
+  z-index: 0;
+  transform: translate(-50%, -100%);
+  padding: 0.18rem 0.4rem;
+  border: 1px solid rgb(196 225 255 / 72%);
+  border-radius: 999px;
+  background: rgb(10 24 35 / 78%);
+  color: #d9ecff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
 }
 .upgrade-modal {
   position: absolute;
