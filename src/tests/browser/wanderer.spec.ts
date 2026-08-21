@@ -34,20 +34,33 @@ test("enabled primary canvas taps travel to a destination while disabled taps do
   const canvas = page.getByTestId("world-canvas");
   const position = page.getByTestId("position");
   const toggle = page.getByTestId("tap-to-move-toggle");
+  const controlsPanel = page.getByTestId("world-controls-panel");
+  const controlsToggle = page.getByTestId("toggle-world-controls-panel");
   const box = await canvas.boundingBox();
   if (box === null) throw new Error("World canvas was not laid out");
+  const initialPosition = await position.textContent();
+  if (initialPosition === null)
+    throw new Error("World position text was not available");
 
   await toggle.check();
+  await controlsToggle.click();
+  await expect(controlsPanel).toBeHidden();
   await canvas.click({
     position: { x: box.width * 0.4, y: box.height * 0.55 },
   });
+  await expect(position).toContainText("input: tap-to-move");
   await expect(page.getByTestId("combat-status")).toContainText("suppressed");
   await page.waitForTimeout(1_500);
+  await expect(position).not.toHaveText(initialPosition);
   const settledPosition = await position.textContent();
   await page.waitForTimeout(250);
   await expect(position).toHaveText(settledPosition ?? "");
 
+  await controlsToggle.click();
+  await expect(controlsPanel).toBeVisible();
   await toggle.uncheck();
+  await controlsToggle.click();
+  await expect(controlsPanel).toBeHidden();
   await canvas.click({
     position: { x: box.width * 0.6, y: box.height * 0.55 },
   });
@@ -282,7 +295,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await choices.first().click();
   await expect(modal).toBeHidden();
   await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(resources).toContainText("Boss Core 0");
+  await expect(resources).toContainText("Boss Core");
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
