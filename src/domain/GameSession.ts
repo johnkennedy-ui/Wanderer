@@ -44,7 +44,8 @@ const DEFAULT_WORLD: WorldIdentity = {
   seed: "wanderer-known-seed",
   generatorVersion: "wanderer-web-v1",
 };
-const MOVEMENT_THRESHOLD = 0.15;
+/** Shared by command handling and the virtual-stick adapter. */
+export const MOVEMENT_THRESHOLD = 0.08;
 
 interface RuntimeEnemy {
   id: string;
@@ -96,6 +97,12 @@ const copyVector = (position: Vector2): Vector2 => ({
 });
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
+
+const boundedMoveIntent = (intent: Vector2): Vector2 => {
+  if (!isFinitePosition(intent)) return { x: 0, y: 0 };
+  const length = magnitude(intent);
+  return length > 1 ? scale(intent, 1 / length) : copyVector(intent);
+};
 
 const hashText = (text: string): number => {
   let hash = 2_166_136_261;
@@ -229,8 +236,11 @@ export class GameSession {
   }
 
   move(command: MoveCommand): void {
-    const normalized = normalize(command.intent);
-    this.input = { intent: normalized, source: command.source, at: command.at };
+    this.input = {
+      intent: boundedMoveIntent(command.intent),
+      source: command.source,
+      at: command.at,
+    };
   }
 
   tick(deltaSeconds: number): void {
@@ -484,16 +494,23 @@ export class GameSession {
           defeated: enemy.defeated,
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
-      projectiles: this.projectiles.map((projectile): ProjectileState => ({
-        id: projectile.id,
-        origin: copyVector(projectile.origin),
-        targetId: projectile.targetId,
-        targetPosition: copyVector(projectile.targetPosition),
-        progress: Math.min(
-          1,
-          projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
-        ),
-      })),
+      projectiles: this.projectiles.map((projectile): ProjectileState => {
+        const target = this.enemies.get(projectile.targetId);
+        return {
+          id: projectile.id,
+          origin: copyVector(projectile.origin),
+          targetId: projectile.targetId,
+          targetPosition: copyVector(
+            target !== undefined && !target.defeated
+              ? target.position
+              : projectile.targetPosition,
+          ),
+          progress: Math.min(
+            1,
+            projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
+          ),
+        };
+      }),
       buildings,
       visibleBuildings: buildings.filter((building) =>
         visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),

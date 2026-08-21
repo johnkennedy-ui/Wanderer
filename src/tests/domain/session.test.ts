@@ -62,6 +62,47 @@ const placeAndUpgradeTo = (
 };
 
 describe("GameSession", () => {
+  it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {
+    const session = new GameSession();
+    session.move({ intent: { x: 0.07, y: 0 }, source: "virtual-stick", at: 1 });
+    session.tick(0.1);
+    expect(session.snapshot().moving).toBe(false);
+    expect(session.snapshot().player.position).toEqual({ x: 0, y: 0 });
+
+    session.move({ intent: { x: 0.2, y: 0 }, source: "virtual-stick", at: 2 });
+    session.tick(0.1);
+    expect(session.snapshot().moving).toBe(true);
+    expect(session.snapshot().player.position).toEqual({ x: 0.06, y: 0 });
+
+    session.move({ intent: { x: 3, y: 4 }, source: "virtual-stick", at: 3 });
+    session.tick(0.1);
+    expect(session.snapshot().player.position).toEqual({ x: 0.24, y: 0.24 });
+  });
+
+  it("projects a live target position while a transient projectile is in flight", () => {
+    const session = new GameSession();
+    advance(session, gameplayTuning.baseAttackIntervalSeconds);
+    const launched = session.snapshot();
+    const launchedProjectile = launched.projectiles[0];
+    if (launchedProjectile === undefined)
+      throw new Error("stationary auto-combat should launch a projectile");
+
+    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 1 });
+    session.tick(0.1);
+    const inFlight = session.snapshot();
+    const projectile = inFlight.projectiles[0];
+    const target = inFlight.enemies.find(
+      (enemy) => enemy.id === launchedProjectile.targetId,
+    );
+
+    expect(projectile).toBeDefined();
+    expect(target).toBeDefined();
+    expect(projectile?.targetPosition).toEqual(target?.position);
+    expect(projectile?.targetPosition).not.toEqual(
+      launchedProjectile.targetPosition,
+    );
+  });
+
   it("launches a transient projectile that completes while movement suppresses later attacks", () => {
     const session = new GameSession();
     const before = session.snapshot();

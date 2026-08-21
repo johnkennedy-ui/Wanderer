@@ -107,7 +107,7 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
   await expect(combat).toContainText("Auto-attacking");
 });
 
-test("virtual-stick tap, cancellation, capture loss, and blur safely clear movement", async ({
+test("virtual-stick short drag, cancellation, capture loss, and blur safely clear movement", async ({
   page,
 }) => {
   await page.goto("/");
@@ -123,11 +123,15 @@ test("virtual-stick tap, cancellation, capture loss, and blur safely clear movem
     clientX: box.x + box.width / 2,
     clientY: box.y + box.height / 2,
   };
+  const shortRight = {
+    clientX: box.x + box.width * 0.55,
+    clientY: box.y + box.height / 2,
+  };
 
-  await stick.dispatchEvent("pointerdown", { pointerId: 11, ...right });
+  await stick.dispatchEvent("pointerdown", { pointerId: 11, ...shortRight });
   await expect(stick).toHaveAttribute("data-active", "true");
   await expect(combat).toContainText("suppressed");
-  await stick.dispatchEvent("pointerup", { pointerId: 11, ...right });
+  await stick.dispatchEvent("pointerup", { pointerId: 11, ...shortRight });
   await expect(stick).toHaveAttribute("data-active", "false");
   await expect(combat).toContainText("Auto-attacking");
 

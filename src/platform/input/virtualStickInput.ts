@@ -1,8 +1,9 @@
+import { MOVEMENT_THRESHOLD } from "../../domain/GameSession";
 import type { MoveCommand, Vector2 } from "../../domain/types";
 import type { InputAdapter, MoveSink } from "./keyboardInput";
 
 const STICK_RADIUS = 42;
-const DRIFT_THRESHOLD = 0.15;
+const DRIFT_THRESHOLD = MOVEMENT_THRESHOLD;
 
 const command = (intent: Vector2): MoveCommand => ({
   intent,

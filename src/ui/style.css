@@ -148,17 +148,17 @@ input {
   position: absolute;
   left: max(0.75rem, env(safe-area-inset-left));
   bottom: max(0.75rem, env(safe-area-inset-bottom));
-  padding: 0.5rem;
+  padding: 0.65rem;
   text-align: center;
 }
 .touch-controls p {
   margin: 0.28rem 0 0;
 }
 .virtual-stick {
-  width: 116px;
-  height: 116px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
-  border: 2px solid rgb(230 214 144 / 75%);
+  border: 3px solid rgb(230 214 144 / 75%);
   background: rgb(15 38 46 / 80%);
   touch-action: none;
   user-select: none;
@@ -171,8 +171,8 @@ input {
   cursor: grabbing;
 }
 .stick-knob {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   position: absolute;
   inset: 0;
   margin: auto;
@@ -219,7 +219,7 @@ h2 {
     max-height: 48vh;
   }
   .touch-controls {
-    transform: scale(0.88);
+    transform: scale(0.94);
     transform-origin: bottom left;
   }
 }
