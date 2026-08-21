@@ -14,6 +14,12 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   await expect(page.getByTestId("resources")).toContainText("Essence");
   await expect(page.getByTestId("resources")).toContainText("Boss Core");
   await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
+  await expect(page.getByTestId("boss-route-cue")).toContainText(
+    "boss is 6m east of the home Campfire",
+  );
+  await expect(page.getByTestId("native-truth-boundary")).toHaveText(
+    "Browser MVP evidence only: native Android wrapper/device, APK/AAB, and Google Play evidence are unverified.",
+  );
 });
 
 test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
@@ -105,4 +111,47 @@ test("invalid normal-building placement rejects without adding a record", async 
   await expect(page.getByTestId("building-list")).toBeEmpty();
   await expect(resources).toHaveText(before ?? "");
   await page.keyboard.up("d");
+});
+
+test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const saveMessage = page.getByTestId("save-message");
+  const position = page.getByTestId("position");
+  const combat = page.getByTestId("combat-status");
+  const modal = page.getByTestId("upgrade-modal");
+  const resources = page.getByTestId("resources");
+
+  await expect(saveMessage).toContainText(
+    "Fresh runtime: no committed save loaded.",
+  );
+  await page.keyboard.down("d");
+  await expect(position).toContainText("input: keyboard");
+  await page.waitForTimeout(1_000);
+  await page.keyboard.up("d");
+  await expect(combat).toContainText("Auto-attacking");
+
+  await expect(modal).toBeVisible({ timeout: 8_000 });
+  const choices = modal.getByRole("button");
+  await expect(choices).toHaveCount(3);
+  const choiceIds = await choices.evaluateAll((buttons) =>
+    buttons.map((button) => button.dataset.testid),
+  );
+  expect(new Set(choiceIds).size).toBe(3);
+
+  await choices.first().click();
+  await expect(modal).toBeHidden();
+  await expect(page.getByTestId("message")).toContainText("applied in runtime");
+  await expect(resources).toContainText("Boss Core 1");
+  await expect(saveMessage).toContainText(
+    "Fresh runtime: no committed save loaded.",
+  );
+
+  await page.reload();
+  await expect(saveMessage).toContainText(
+    "Fresh runtime: no committed save loaded.",
+  );
+  await expect(resources).toContainText("Boss Core 0");
+  await expect(modal).toBeHidden();
 });

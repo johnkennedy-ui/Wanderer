@@ -53,6 +53,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       </div>
       <div class="resources" data-testid="resources"></div>
       <p class="message" data-testid="message" aria-live="polite"></p>
+      <p class="subtle" data-testid="boss-route-cue">Ember Wyrm route: the boss is 6m east of the home Campfire. Move east, then stop within basic-attack range.</p>
+      <p class="subtle" data-testid="native-truth-boundary">Browser MVP evidence only: native Android wrapper/device, APK/AAB, and Google Play evidence are unverified.</p>
     </section>
     <section class="side-panel panel" aria-label="World controls">
       <label>Known seed <input data-testid="seed-input" value="wanderer-known-seed" maxlength="48" /></label>
@@ -196,16 +198,20 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         ),
       );
       upgradeModal.hidden = snapshot.pendingUpgradeChoices.length === 0;
-      upgradeChoices.replaceChildren();
-      for (const id of snapshot.pendingUpgradeChoices) {
-        const definition = upgradeDefinitions.find(
-          (upgrade) => upgrade.id === id,
-        );
-        const button = document.createElement("button");
-        button.dataset.testid = `upgrade-${id}`;
-        button.textContent = `${definition?.label ?? id}: ${definition?.description ?? ""}`;
-        button.addEventListener("click", () => intents.chooseUpgrade(id));
-        upgradeChoices.append(button);
+      const choiceKey = snapshot.pendingUpgradeChoices.join("|");
+      if (upgradeChoices.dataset.choiceKey !== choiceKey) {
+        upgradeChoices.replaceChildren();
+        for (const id of snapshot.pendingUpgradeChoices) {
+          const definition = upgradeDefinitions.find(
+            (upgrade) => upgrade.id === id,
+          );
+          const button = document.createElement("button");
+          button.dataset.testid = `upgrade-${id}`;
+          button.textContent = `${definition?.label ?? id}: ${definition?.description ?? ""}`;
+          button.addEventListener("click", () => intents.chooseUpgrade(id));
+          upgradeChoices.append(button);
+        }
+        upgradeChoices.dataset.choiceKey = choiceKey;
       }
     },
     dispose(): void {
