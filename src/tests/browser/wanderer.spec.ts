@@ -172,10 +172,13 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   expect(new Set(choiceIds).size).toBe(3);
   await page.mouse.click(8, 8);
   await expect(modal).toBeVisible();
+  const selectedUpgradeLabel = (await choices.first().innerText()).split(
+    ":",
+  )[0];
 
   await choices.first().click();
   await expect(modal).toBeHidden();
-  await expect(page.getByTestId("message")).toContainText("applied in runtime");
+  await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
   await expect(resources).toContainText("Boss Core 1");
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
