@@ -65,7 +65,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <label>X <input data-testid="building-x" type="number" step="0.5" value="1" /></label>
         <label>Y <input data-testid="building-y" type="number" step="0.5" value="1" /></label>
       </div>
-      <p class="subtle">Campfire can bootstrap anywhere valid. Other buildings must be within 6m of a campfire.</p>
+      <p class="subtle" data-testid="build-radius">Campfire can bootstrap anywhere valid. Other buildings use the active Campfire L1–L3 radius.</p>
       <div class="build-buttons" data-testid="build-buttons"></div>
       <p data-testid="placement-message" class="subtle"></p>
       <div class="building-list" data-testid="building-list"></div>
@@ -145,7 +145,11 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       text(byTestId("combat-status"), snapshot.combatStatus);
       text(
         byTestId("resources"),
-        `Wood ${snapshot.resources.wood} · Ore ${snapshot.resources.ore} · Food ${snapshot.resources.food} · Boss Cores ${snapshot.resources.bossCore}`,
+        `Wood ${snapshot.resources.wood} · Stone ${snapshot.resources.stone} · Metal / Scrap ${snapshot.resources.scrap} · Essence ${snapshot.resources.essence} · Boss Core ${snapshot.resources.bossCore} · capacity ${snapshot.materialCapacity} each (Boss Core exempt)`,
+      );
+      text(
+        byTestId("build-radius"),
+        `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m.`,
       );
       text(byTestId("message"), snapshot.message);
       saveButton.disabled = !snapshot.canSave;

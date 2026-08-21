@@ -1,4 +1,19 @@
-export type ResourceKind = "wood" | "ore" | "food" | "bossCore";
+export const resourceKinds = [
+  "wood",
+  "stone",
+  "scrap",
+  "essence",
+  "bossCore",
+] as const;
+
+export type ResourceKind = (typeof resourceKinds)[number];
+export type CommonResourceKind = Exclude<ResourceKind, "bossCore">;
+export const commonResourceKinds: readonly CommonResourceKind[] = [
+  "wood",
+  "stone",
+  "scrap",
+  "essence",
+];
 
 export type ResourceBag = Record<ResourceKind, number>;
 
@@ -23,6 +38,8 @@ export interface EnemyState {
   readonly position: Vector2;
   readonly hp: number;
   readonly maxHp: number;
+  readonly damage: number;
+  readonly dangerTier: number;
   readonly respawnAt: number | null;
   readonly defeated: boolean;
 }
@@ -37,8 +54,20 @@ export interface BuildingState {
   readonly level: 1 | 2 | 3;
 }
 
-export type UpgradeId =
-  "sharpened-blade" | "quick-hands" | "iron-skin" | "ember-aura";
+export const upgradeIds = [
+  "sharpened-blade",
+  "quick-hands",
+  "iron-skin",
+  "ember-aura",
+  "long-reach",
+  "chain-strike",
+  "invigorating-edge",
+  "trailblazer",
+  "fortified-heart",
+  "keen-focus",
+] as const;
+
+export type UpgradeId = (typeof upgradeIds)[number];
 
 export interface PlayerState {
   readonly position: Vector2;
@@ -62,10 +91,20 @@ export interface ChunkCampfire {
   readonly kind: "home" | "wild";
 }
 
+export interface DangerProfile {
+  readonly tier: number;
+  readonly label: string;
+  readonly distance: number;
+  readonly healthMultiplier: number;
+  readonly damageMultiplier: number;
+  readonly dropMultiplier: number;
+}
+
 export interface ChunkSpawn {
   readonly id: string;
   readonly kind: EnemyKind;
   readonly position: Vector2;
+  readonly danger: DangerProfile;
 }
 
 export interface ChunkRecipe {
@@ -83,10 +122,22 @@ export interface PlacementResult {
   readonly building?: BuildingState;
 }
 
+export interface CombatStats {
+  readonly attackDamage: number;
+  readonly attackIntervalSeconds: number;
+  readonly attackRange: number;
+  readonly moveSpeed: number;
+  readonly chainTargets: number;
+}
+
 export interface GameSnapshot {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
+  readonly materialCapacity: number;
+  readonly buildRadius: number;
+  readonly deathResourceLossRate: number;
+  readonly combatStats: CombatStats;
   readonly enemies: readonly EnemyState[];
   readonly buildings: readonly BuildingState[];
   readonly visibleBuildings: readonly BuildingState[];
@@ -104,7 +155,7 @@ export interface GameSnapshot {
 }
 
 export interface SaveDocument {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
@@ -114,6 +165,7 @@ export interface SaveDocument {
   readonly nextBuildingSerial: number;
   readonly committedAt: number;
   readonly savePointId: string;
+  readonly savePointPosition: Vector2;
 }
 
 export interface ValidCampfireSaveRequest {
@@ -123,7 +175,8 @@ export interface ValidCampfireSaveRequest {
 
 export const emptyResources = (): ResourceBag => ({
   wood: 0,
-  ore: 0,
-  food: 0,
+  stone: 0,
+  scrap: 0,
+  essence: 0,
   bossCore: 0,
 });

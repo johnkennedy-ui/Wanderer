@@ -64,10 +64,14 @@ export const createBrowserSaveStorage = (
       const previousPrimary = parseSaveDocument(
         store.getItem(SAVE_KEYS.primary),
       );
-      store.setItem(
-        SAVE_KEYS.backup,
-        JSON.stringify(previousPrimary ?? verifiedTemporary),
-      );
+      const backupCandidate = previousPrimary ?? verifiedTemporary;
+      store.setItem(SAVE_KEYS.backup, JSON.stringify(backupCandidate));
+      if (parseSaveDocument(store.getItem(SAVE_KEYS.backup)) === null)
+        return {
+          ok: false,
+          message:
+            "Save rejected: backup validation failed before primary write.",
+        };
       store.setItem(SAVE_KEYS.primary, serialized);
       const verifiedPrimary = parseSaveDocument(
         store.getItem(SAVE_KEYS.primary),

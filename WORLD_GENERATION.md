@@ -6,23 +6,14 @@ The deterministic base-world identity is:
 WorldSeed + WorldGeneratorVersion + chunk coordinate + named domain
 ```
 
-`src/domain/world.ts` derives independent named domain seeds for `terrain`,
-`poi`, `campfire`, `boss`, `encounter`, and `cosmetic`. A stable text hash,
-rather than `Math.random()` or a shared PRNG stream, produces recipe values.
-Changing call order or requesting another chunk first cannot perturb a chunk's
-obstacles, campfire, enemy IDs, or boss recipe.
+`src/domain/world.ts` derives independent named domain seeds for `terrain`, `poi`, `campfire`, `boss`, `encounter`, and `cosmetic`. A stable text hash, rather than `Math.random()` or a shared PRNG stream, produces recipe values. Changing call order or requesting another chunk first cannot perturb a chunk's obstacles, campfire, enemy IDs, boss recipe, or named domain seeds.
 
-Chunk keys use 16-unit coordinates. The session exposes a 3×3 neighborhood
-around the player to presentation. The Three.js adapter creates/disposes only
-that bounded projection; chunk meshes are never persistent identity or world
-authority.
+Chunk keys use 16-unit coordinates. The session exposes a 3×3 neighborhood around the player to presentation. The Three.js adapter creates/disposes only that bounded projection; chunk meshes are never persistent identity or world authority.
 
-Procedural objects use deterministic IDs composed from generator version, world
-seed, chunk coordinate, kind, and index. Player-built buildings use a stable
-session serial tied to the world seed. Saved data retains deltas such as
-buildings, boss defeat, player state, and upgrades—not render objects or a
-serialized generated map.
+Procedural objects use deterministic IDs composed from generator version, world seed, chunk coordinate, kind, and index. Player-built buildings use a stable session serial tied to the world seed. Saved data retains deltas such as buildings, boss defeat, player state, upgrades, and the committed save point — not render objects or a serialized generated map.
 
-The home chunk contains a stable home campfire, review scout/elite spawns, and
-the persistent `boss:ember-wyrm`. Unit tests request chunks in different orders
-and assert the same recipes and named domain seeds.
+## Distance danger overlay
+
+Danger is a pure deterministic overlay derived from chunk distance, not a new random or named-generation domain. Home is tier 0; Frontier, Wilds, and Deep Wilds progressively increase enemy health, damage, and common-material drop multipliers. This preserves terrain, POI, IDs, and named-domain stability while making far chunks materially more dangerous.
+
+The home chunk contains a stable home campfire, review scout/elite spawns, and the persistent `boss:ember-wyrm`. Unit tests request chunks in different orders, assert unchanged home identities, and compare deterministic near/far danger profiles.

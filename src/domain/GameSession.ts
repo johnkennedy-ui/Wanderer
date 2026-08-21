@@ -1,6 +1,9 @@
 import {
   buildingDefinitions,
   enemyDefinitions,
+  gameplayTuning,
+  resourceDefinitions,
+  upgradeDefinitionFor,
   upgradeDefinitions,
 } from "../data/definitions";
 import {
@@ -11,9 +14,11 @@ import {
   roundVector,
   scale,
 } from "./math";
+import { commonResourceKinds, emptyResources, resourceKinds } from "./types";
 import type {
   BuildingKind,
   BuildingState,
+  CombatStats,
   EnemyKind,
   EnemyState,
   GameSnapshot,
@@ -27,7 +32,6 @@ import type {
   Vector2,
   WorldIdentity,
 } from "./types";
-import { emptyResources } from "./types";
 import {
   chunkCoordinateFor,
   chunkKey,
@@ -40,9 +44,6 @@ const DEFAULT_WORLD: WorldIdentity = {
   generatorVersion: "wanderer-web-v1",
 };
 const MOVEMENT_THRESHOLD = 0.15;
-const PLAYER_SPEED = 3;
-const ATTACK_RANGE = 3.2;
-const SETTLEMENT_RADIUS = 6;
 
 interface RuntimeEnemy {
   id: string;
@@ -51,6 +52,10 @@ interface RuntimeEnemy {
   spawnPosition: Vector2;
   hp: number;
   maxHp: number;
+  damage: number;
+  dangerTier: number;
+  dropMultiplier: number;
+  attackEverySeconds: number;
   respawnAt: number | null;
   defeated: boolean;
   attackElapsed: number;
@@ -59,6 +64,13 @@ interface RuntimeEnemy {
 interface SessionOptions {
   readonly world?: WorldIdentity;
   readonly saved?: SaveDocument;
+}
+
+interface SettlementCampfire {
+  readonly id: string;
+  readonly label: string;
+  readonly position: Vector2;
+  readonly level: 1 | 2 | 3;
 }
 
 const cloneResources = (resources: ResourceBag): ResourceBag => ({
@@ -80,38 +92,58 @@ const hashText = (text: string): number => {
   return hash >>> 0;
 };
 
-const amountForLevel = (
-  resources: ResourceBag,
-  level: number,
-): ResourceBag => ({
-  wood: resources.wood * level,
-  ore: resources.ore * level,
-  food: resources.food * level,
-  bossCore: resources.bossCore * level,
-});
+const amountForLevel = (resources: ResourceBag, level: number): ResourceBag => {
+  const scaled = emptyResources();
+  for (const kind of resourceKinds) scaled[kind] = resources[kind] * level;
+  return scaled;
+};
 
-const addResources = (left: ResourceBag, right: ResourceBag): ResourceBag => ({
-  wood: left.wood + right.wood,
-  ore: left.ore + right.ore,
-  food: left.food + right.food,
-  bossCore: left.bossCore + right.bossCore,
-});
+const addResources = (left: ResourceBag, right: ResourceBag): ResourceBag => {
+  const total = emptyResources();
+  for (const kind of resourceKinds) total[kind] = left[kind] + right[kind];
+  return total;
+};
 
 const subtractResources = (
   left: ResourceBag,
   right: ResourceBag,
-): ResourceBag => ({
-  wood: left.wood - right.wood,
-  ore: left.ore - right.ore,
-  food: left.food - right.food,
-  bossCore: left.bossCore - right.bossCore,
-});
+): ResourceBag => {
+  const total = emptyResources();
+  for (const kind of resourceKinds) total[kind] = left[kind] - right[kind];
+  return total;
+};
+
+const scaleResources = (
+  resources: ResourceBag,
+  multiplier: number,
+): ResourceBag => {
+  const scaled = emptyResources();
+  for (const kind of resourceKinds)
+    scaled[kind] = Math.floor(resources[kind] * multiplier);
+  return scaled;
+};
 
 const canAfford = (have: ResourceBag, cost: ResourceBag): boolean =>
-  have.wood >= cost.wood &&
-  have.ore >= cost.ore &&
-  have.food >= cost.food &&
-  have.bossCore >= cost.bossCore;
+  resourceKinds.every((kind) => have[kind] >= cost[kind]);
+
+/**
+ * Returns exactly three deterministic, distinct, currently unowned choices.
+ * It deliberately offers no fallback when fewer than three upgrades remain.
+ */
+export const selectBossUpgradeChoices = (
+  seed: string,
+  owned: Iterable<UpgradeId>,
+): UpgradeId[] => {
+  const ownedIds = new Set(owned);
+  const available = upgradeDefinitions
+    .map((upgrade) => upgrade.id)
+    .filter((id) => !ownedIds.has(id));
+  if (available.length < 3) return [];
+  const start = hashText(`${seed}|boss:ember-wyrm`) % available.length;
+  return [0, 1, 2].map(
+    (offset) => available[(start + offset) % available.length],
+  );
+};
 
 /**
  * The sole mutable gameplay authority. It knows no browser, renderer, storage,
@@ -128,6 +160,7 @@ export class GameSession {
   private upgrades = new Set<UpgradeId>();
   private pendingUpgradeChoices: UpgradeId[] = [];
   private nextBuildingSerial: number;
+  private committedSavePoint: SettlementCampfire;
   private input: MoveCommand = {
     intent: { x: 0, y: 0 },
     source: "system",
@@ -135,6 +168,7 @@ export class GameSession {
   };
   private elapsed = 0;
   private attackElapsed = 0;
+  private farmHarvestElapsed = 0;
   private message =
     "Reach the nearby scout, then travel east to challenge the Ember Wyrm.";
   private combatStatus = "Stationary: seeking a target";
@@ -151,7 +185,7 @@ export class GameSession {
       : { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 };
     this.resources = saved
       ? cloneResources(saved.resources)
-      : { wood: 120, ore: 75, food: 60, bossCore: 0 };
+      : { wood: 120, stone: 120, scrap: 120, essence: 20, bossCore: 0 };
     this.buildings = saved
       ? saved.buildings.map((building) => ({
           ...building,
@@ -161,6 +195,20 @@ export class GameSession {
     this.defeatedBossIds = new Set(saved?.defeatedBossIds ?? []);
     this.upgrades = new Set(saved?.upgrades ?? []);
     this.nextBuildingSerial = saved?.nextBuildingSerial ?? 1;
+    this.committedSavePoint = saved
+      ? {
+          id: saved.savePointId,
+          label: "committed campfire",
+          position: copyVector(saved.savePointPosition),
+          level: 1,
+        }
+      : {
+          id: "campfire:home",
+          label: "home campfire",
+          position: { x: 0, y: 0 },
+          level: 1,
+        };
+    this.resources = this.clampResourcesToCapacity(this.resources);
     this.ensureNeighborhoodEnemies();
   }
 
@@ -179,13 +227,14 @@ export class GameSession {
       this.player.position = roundVector(
         add(
           this.player.position,
-          scale(this.input.intent, PLAYER_SPEED * delta),
+          scale(this.input.intent, this.combatStats().moveSpeed * delta),
         ),
       );
       this.combatStatus = "Moving: basic auto-attack suppressed";
       this.attackElapsed = 0;
+      this.farmHarvestElapsed = 0;
     } else {
-      this.applyPassiveHealing(delta);
+      this.applyPassiveEffects(delta);
       this.updateAutoCombat(delta);
     }
 
@@ -249,7 +298,8 @@ export class GameSession {
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? upgraded : candidate,
     );
-    this.message = `${building.kind} upgraded to level ${nextLevel}; the change remains unsaved.`;
+    this.resources = this.clampResourcesToCapacity(this.resources);
+    this.message = `${building.kind} upgraded to level ${nextLevel}; ${buildingDefinitions[building.kind].levelEffects[nextLevel - 1]} The change remains unsaved.`;
     return { ok: true, reason: "upgraded", building: upgraded };
   }
 
@@ -262,33 +312,38 @@ export class GameSession {
         amountForLevel(buildingDefinitions[building.kind].baseCost, level),
       )
       .reduce(addResources, emptyResources());
-    const refund: ResourceBag = {
-      wood: Math.floor(cumulativeCost.wood / 2),
-      ore: Math.floor(cumulativeCost.ore / 2),
-      food: Math.floor(cumulativeCost.food / 2),
-      bossCore: 0,
-    };
-    this.resources = addResources(this.resources, refund);
+    const refund = scaleResources(
+      cumulativeCost,
+      gameplayTuning.buildingRefundRate,
+    );
     this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
-    this.message = `${building.kind} demolished safely; 50% of its invested resources were refunded.`;
+    this.resources = this.collectResources(refund);
+    this.message = `${building.kind} demolished safely; ${(gameplayTuning.buildingRefundRate * 100).toFixed(0)}% of its invested resources were refunded.`;
     return { ok: true, reason: "demolished", building };
   }
 
   chooseUpgrade(id: UpgradeId): boolean {
     if (
       this.pendingUpgradeChoices.length !== 3 ||
-      !this.pendingUpgradeChoices.includes(id)
+      !this.pendingUpgradeChoices.includes(id) ||
+      this.upgrades.has(id)
     ) {
-      this.message = "Choose exactly one of the current boss reward options.";
+      this.message =
+        "Choose exactly one unowned upgrade from the current boss reward options.";
       return false;
     }
     this.upgrades.add(id);
-    if (id === "iron-skin") {
-      this.player.maxHp += 25;
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
+    const maxHealthIncrease =
+      upgradeDefinitionFor(id)?.modifier.maxHealthAdd ?? 0;
+    if (maxHealthIncrease > 0) {
+      this.player.maxHp += maxHealthIncrease;
+      this.player.hp = Math.min(
+        this.player.maxHp,
+        this.player.hp + maxHealthIncrease,
+      );
     }
     this.pendingUpgradeChoices = [];
-    this.message = `${upgradeDefinitions.find((upgrade) => upgrade.id === id)?.label ?? id} applied in runtime. Campfire-save it to keep it.`;
+    this.message = `${upgradeDefinitionFor(id)?.label ?? id} applied in runtime. Campfire-save it to keep it.`;
     return true;
   }
 
@@ -299,15 +354,28 @@ export class GameSession {
       generatorVersion: DEFAULT_WORLD.generatorVersion,
     };
     this.player = { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 };
-    this.resources = { wood: 120, ore: 75, food: 60, bossCore: 0 };
+    this.resources = {
+      wood: 120,
+      stone: 120,
+      scrap: 120,
+      essence: 20,
+      bossCore: 0,
+    };
     this.buildings = [];
     this.enemies = new Map();
     this.defeatedBossIds = new Set();
     this.upgrades = new Set();
     this.pendingUpgradeChoices = [];
     this.nextBuildingSerial = 1;
+    this.committedSavePoint = {
+      id: "campfire:home",
+      label: "home campfire",
+      position: { x: 0, y: 0 },
+      level: 1,
+    };
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
     this.attackElapsed = 0;
+    this.farmHarvestElapsed = 0;
     this.message = `New deterministic world started with seed “${cleanSeed}”. Nothing has been saved.`;
     this.ensureNeighborhoodEnemies();
   }
@@ -322,7 +390,7 @@ export class GameSession {
       return null;
     }
     const save: SaveDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       world: { ...this.world },
       player: {
         position: copyVector(this.player.position),
@@ -339,8 +407,20 @@ export class GameSession {
       nextBuildingSerial: this.nextBuildingSerial,
       committedAt,
       savePointId: savePoint.id,
+      savePointPosition: copyVector(savePoint.position),
     };
     return { document: save, savePointLabel: savePoint.label };
+  }
+
+  /** Called by the composition root only after the storage adapter reports success. */
+  recordSaveCommitted(document: SaveDocument): void {
+    this.committedSavePoint = {
+      id: document.savePointId,
+      label: "committed campfire",
+      position: copyVector(document.savePointPosition),
+      level: 1,
+    };
+    this.message = `Campfire save committed at ${document.savePointId}. Death now returns to this save point; no death save is made.`;
   }
 
   snapshot(): GameSnapshot {
@@ -362,6 +442,10 @@ export class GameSession {
         maxHp: this.player.maxHp,
       },
       resources: cloneResources(this.resources),
+      materialCapacity: this.materialCapacity(),
+      buildRadius: this.currentSettlementBuildRadius(),
+      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
+      combatStats: this.combatStats(),
       enemies: [...this.enemies.values()]
         .filter(
           (enemy) =>
@@ -374,6 +458,8 @@ export class GameSession {
           position: copyVector(enemy.position),
           hp: enemy.hp,
           maxHp: enemy.maxHp,
+          damage: enemy.damage,
+          dangerTier: enemy.dangerTier,
           respawnAt: enemy.respawnAt,
           defeated: enemy.defeated,
         }))
@@ -408,8 +494,15 @@ export class GameSession {
           kind: spawn.kind,
           position: copyVector(spawn.position),
           spawnPosition: copyVector(spawn.position),
-          hp: definition.maxHp,
-          maxHp: definition.maxHp,
+          hp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
+          maxHp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
+          damage: Math.max(
+            1,
+            Math.ceil(definition.damage * spawn.danger.damageMultiplier),
+          ),
+          dangerTier: spawn.danger.tier,
+          dropMultiplier: spawn.danger.dropMultiplier,
+          attackEverySeconds: definition.attackEverySeconds,
           respawnAt: null,
           defeated: false,
           attackElapsed: 0,
@@ -419,30 +512,62 @@ export class GameSession {
   }
 
   private updateAutoCombat(delta: number): void {
-    const target = [...this.enemies.values()]
-      .filter(
-        (enemy) =>
-          !enemy.defeated &&
-          distance(this.player.position, enemy.position) <= ATTACK_RANGE,
-      )
-      .sort((left, right) => {
-        const difference =
-          distance(this.player.position, left.position) -
-          distance(this.player.position, right.position);
-        return difference === 0 ? left.id.localeCompare(right.id) : difference;
-      })[0];
+    const stats = this.combatStats();
+    const targets = this.targetsInRange(stats.attackRange);
+    const target = targets[0];
     if (target === undefined) {
       this.combatStatus = "Stationary: seeking a target";
       this.attackElapsed = 0;
       return;
     }
     this.attackElapsed += delta;
-    const interval = this.upgrades.has("quick-hands") ? 0.38 : 0.5;
     this.combatStatus = `Auto-attacking ${target.kind} (${Math.ceil(target.hp)}/${target.maxHp})`;
-    if (this.attackElapsed < interval) return;
+    if (this.attackElapsed < stats.attackIntervalSeconds) return;
     this.attackElapsed = 0;
-    target.hp -= this.attackDamage();
-    if (target.hp <= 0) this.defeatEnemy(target);
+
+    let landedHits = this.resolveBasicHit(target, stats.attackDamage) ? 1 : 0;
+    const chainDamageMultiplier = this.upgradeModifierTotal(
+      "chainDamageMultiplier",
+    );
+    if (stats.chainTargets > 0 && chainDamageMultiplier > 0) {
+      for (const secondary of targets.slice(1, 1 + stats.chainTargets)) {
+        if (
+          this.resolveBasicHit(
+            secondary,
+            stats.attackDamage * chainDamageMultiplier,
+          )
+        )
+          landedHits += 1;
+      }
+    }
+    const hitHeal = this.upgradeModifierTotal("hitHeal");
+    if (landedHits > 0 && hitHeal > 0)
+      this.player.hp = Math.min(
+        this.player.maxHp,
+        this.player.hp + landedHits * hitHeal,
+      );
+  }
+
+  private resolveBasicHit(enemy: RuntimeEnemy, amount: number): boolean {
+    if (enemy.defeated) return false;
+    enemy.hp -= amount;
+    if (enemy.hp <= 0) this.defeatEnemy(enemy);
+    return true;
+  }
+
+  private targetsInRange(range: number): RuntimeEnemy[] {
+    return [...this.enemies.values()]
+      .filter(
+        (enemy) =>
+          !enemy.defeated &&
+          distance(this.player.position, enemy.position) <= range,
+      )
+      .sort((left, right) => {
+        const difference =
+          distance(this.player.position, left.position) -
+          distance(this.player.position, right.position);
+        return difference === 0 ? left.id.localeCompare(right.id) : difference;
+      });
   }
 
   private updateEnemyRespawns(): void {
@@ -468,90 +593,87 @@ export class GameSession {
         distance(this.player.position, enemy.position) > 1.8
       )
         continue;
-      const definition = enemyDefinitions[enemy.kind];
       enemy.attackElapsed += delta;
-      if (enemy.attackElapsed < definition.attackEverySeconds) continue;
+      if (enemy.attackElapsed < enemy.attackEverySeconds) continue;
       enemy.attackElapsed = 0;
-      this.player.hp -= definition.damage;
+      this.player.hp -= enemy.damage;
       if (this.player.hp <= 0) {
-        this.player.position = { x: 0, y: 0 };
-        this.player.hp = this.player.maxHp;
-        this.resources = {
-          ...this.resources,
-          food: Math.max(0, this.resources.food - 5),
-        };
-        this.message =
-          "You fell and returned to the home campfire. Five food was lost; no save was made.";
+        this.handleDeath();
+        return;
       }
     }
   }
 
+  private handleDeath(): void {
+    const carriedLoss = scaleResources(
+      this.resources,
+      gameplayTuning.deathResourceLossRate,
+    );
+    this.resources = subtractResources(this.resources, carriedLoss);
+    this.player.position = copyVector(this.committedSavePoint.position);
+    this.player.hp = this.player.maxHp;
+    this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
+    this.attackElapsed = 0;
+    this.farmHarvestElapsed = 0;
+    this.message = `You fell and returned to ${this.committedSavePoint.label}. ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% of carried resources was lost; no save was made.`;
+  }
+
   private defeatEnemy(enemy: RuntimeEnemy): void {
     const definition = enemyDefinitions[enemy.kind];
-    this.resources = addResources(this.resources, definition.drops);
-    if (enemy.kind !== "boss")
-      this.resources = addResources(this.resources, {
-        wood: 1,
-        ore: 0,
-        food: 0,
-        bossCore: 0,
-      });
+    this.resources = this.collectResources(
+      scaleResources(definition.drops, enemy.dropMultiplier),
+    );
     enemy.defeated = true;
     if (enemy.kind === "boss") {
       this.defeatedBossIds.add(enemy.id);
-      this.pendingUpgradeChoices = this.bossUpgradeChoices();
+      this.pendingUpgradeChoices = selectBossUpgradeChoices(
+        this.world.seed,
+        this.upgrades,
+      );
       this.message =
-        "The Ember Wyrm is defeated: Boss Core gained. Choose one permanent upgrade, then campfire-save it.";
+        this.pendingUpgradeChoices.length === 3
+          ? "The Ember Wyrm is defeated: Boss Core gained. Choose one unowned upgrade, then campfire-save it."
+          : "The Ember Wyrm is defeated: Boss Core gained. No complete unowned upgrade trio remains.";
     } else {
       enemy.respawnAt = this.elapsed + (definition.respawnSeconds ?? 0);
-      this.message = `${enemy.kind} defeated: resources collected. It will respawn later; no save was made.`;
+      this.message = `${enemy.kind} defeated: data-defined resources collected. It will respawn later; no save was made.`;
     }
   }
 
-  private bossUpgradeChoices(): UpgradeId[] {
-    const available = upgradeDefinitions
-      .map((upgrade) => upgrade.id)
-      .filter((id) => !this.upgrades.has(id));
-    const source =
-      available.length >= 3
-        ? available
-        : upgradeDefinitions.map((upgrade) => upgrade.id);
-    const start =
-      hashText(`${this.world.seed}|boss:ember-wyrm`) % source.length;
-    return [0, 1, 2].map((offset) => source[(start + offset) % source.length]);
-  }
-
-  private attackDamage(): number {
-    const workshopBonus = this.buildings
-      .filter((building) => building.kind === "Workshop")
-      .reduce((total, building) => total + building.level * 4, 0);
-    return (
-      12 +
-      workshopBonus +
-      (this.upgrades.has("sharpened-blade") ? 7 : 0) +
-      (this.upgrades.has("ember-aura") ? 3 : 0)
-    );
-  }
-
-  private applyPassiveHealing(delta: number): void {
+  private applyPassiveEffects(delta: number): void {
     const nearby = this.nearbyCampfire();
     if (nearby !== null) {
-      const healerLevels = this.buildings
-        .filter((building) => building.kind === "Healer")
-        .reduce((total, building) => total + building.level, 0);
+      const healing =
+        gameplayTuning.baseCampfireHealingPerSecond +
+        this.buildings
+          .filter((building) => building.kind === "Healer")
+          .reduce(
+            (total, building) =>
+              total +
+              gameplayTuning.healerHealingBonusByLevel[building.level - 1],
+            0,
+          );
       this.player.hp = Math.min(
         this.player.maxHp,
-        this.player.hp + delta * (3 + healerLevels),
+        this.player.hp + delta * healing,
       );
     }
-    const farmLevels = this.buildings
-      .filter((building) => building.kind === "Farm")
-      .reduce((total, building) => total + building.level, 0);
-    if (farmLevels > 0)
-      this.player.hp = Math.min(
-        this.player.maxHp,
-        this.player.hp + delta * farmLevels * 0.5,
-      );
+
+    const farms = this.buildings.filter((building) => building.kind === "Farm");
+    if (farms.length === 0) {
+      this.farmHarvestElapsed = 0;
+      return;
+    }
+    this.farmHarvestElapsed += delta;
+    if (this.farmHarvestElapsed < gameplayTuning.farmHarvestEverySeconds)
+      return;
+    this.farmHarvestElapsed = 0;
+    const harvest = farms
+      .map((farm) => gameplayTuning.farmHarvestByLevel[farm.level - 1])
+      .reduce(addResources, emptyResources());
+    this.resources = this.collectResources(harvest);
+    this.message =
+      "Farm harvest collected while stationary; storage capacity was enforced.";
   }
 
   private validateBuildingPosition(
@@ -570,14 +692,16 @@ export class GameSession {
     ) {
       return "overlaps an existing building";
     }
-    if (
-      kind !== "Campfire" &&
-      !this.settlementCampfires().some(
-        (campfire) =>
-          distance(campfire.position, position) <= SETTLEMENT_RADIUS,
-      )
-    ) {
-      return `outside the ${SETTLEMENT_RADIUS}m campfire settlement radius`;
+    if (kind !== "Campfire") {
+      const campfire = this.settlementCampfiresAround(position).find(
+        (candidate) =>
+          distance(candidate.position, position) <=
+          this.campfireBuildRadius(candidate.level),
+      );
+      if (campfire === undefined) {
+        const nearestRadius = this.currentSettlementBuildRadius();
+        return `outside the ${nearestRadius}m campfire settlement radius`;
+      }
     }
     return null;
   }
@@ -589,18 +713,14 @@ export class GameSession {
     );
   }
 
-  private settlementCampfires(): readonly {
-    id: string;
-    label: string;
-    position: Vector2;
-  }[] {
-    const base = visibleChunkCoordinates(this.player.position).flatMap(
-      (coordinate) =>
-        generateChunk(this.world, coordinate).campfires.map((campfire) => ({
-          id: campfire.id,
-          label: campfire.kind === "home" ? "home campfire" : "wild campfire",
-          position: campfire.position,
-        })),
+  private settlementCampfiresAround(position: Vector2): SettlementCampfire[] {
+    const base = visibleChunkCoordinates(position).flatMap((coordinate) =>
+      generateChunk(this.world, coordinate).campfires.map((campfire) => ({
+        id: campfire.id,
+        label: campfire.kind === "home" ? "home campfire" : "wild campfire",
+        position: campfire.position,
+        level: 1 as const,
+      })),
     );
     const playerBuilt = this.buildings
       .filter((building) => building.kind === "Campfire")
@@ -608,43 +728,117 @@ export class GameSession {
         id: building.id,
         label: "player campfire",
         position: building.position,
+        level: building.level,
       }));
     return [...base, ...playerBuilt];
   }
 
-  private nearbyCampfire(): {
-    id: string;
-    label: string;
-    position: Vector2;
-  } | null {
+  private nearbyCampfire(): SettlementCampfire | null {
     return (
-      this.settlementCampfires().find(
+      this.settlementCampfiresAround(this.player.position).find(
         (campfire) => distance(this.player.position, campfire.position) <= 2,
       ) ?? null
     );
   }
 
+  private campfireBuildRadius(level: 1 | 2 | 3): number {
+    return gameplayTuning.campfireBuildRadiusByLevel[level - 1];
+  }
+
+  private currentSettlementBuildRadius(): number {
+    const campfires = this.settlementCampfiresAround(this.player.position);
+    return Math.max(
+      gameplayTuning.campfireBuildRadiusByLevel[0],
+      ...campfires.map((campfire) => this.campfireBuildRadius(campfire.level)),
+    );
+  }
+
+  private materialCapacity(): number {
+    return (
+      gameplayTuning.baseMaterialCapacity +
+      this.buildings
+        .filter((building) => building.kind === "Storage")
+        .reduce(
+          (total, building) =>
+            total +
+            gameplayTuning.storageCapacityBonusByLevel[building.level - 1],
+          0,
+        )
+    );
+  }
+
+  private collectResources(delta: ResourceBag): ResourceBag {
+    return this.clampResourcesToCapacity(addResources(this.resources, delta));
+  }
+
+  private clampResourcesToCapacity(resources: ResourceBag): ResourceBag {
+    const clamped = cloneResources(resources);
+    const capacity = this.materialCapacity();
+    for (const kind of commonResourceKinds)
+      if (resourceDefinitions[kind].storageLimited)
+        clamped[kind] = Math.min(capacity, Math.max(0, clamped[kind]));
+    clamped.bossCore = Math.max(0, clamped.bossCore);
+    return clamped;
+  }
+
+  private combatStats(): CombatStats {
+    let attackDamage =
+      gameplayTuning.baseAttackDamage +
+      this.buildings
+        .filter((building) => building.kind === "Workshop")
+        .reduce(
+          (total, building) =>
+            total +
+            gameplayTuning.workshopDamageBonusByLevel[building.level - 1],
+          0,
+        );
+    let attackIntervalSeconds = gameplayTuning.baseAttackIntervalSeconds;
+    let attackRange = gameplayTuning.baseAttackRange;
+    let moveSpeed = gameplayTuning.baseMoveSpeed;
+    let chainTargets = 0;
+
+    for (const id of this.upgrades) {
+      const modifier = upgradeDefinitionFor(id)?.modifier;
+      if (modifier === undefined) continue;
+      attackDamage += modifier.attackDamageAdd ?? 0;
+      attackIntervalSeconds *= modifier.attackIntervalMultiplier ?? 1;
+      attackRange *= modifier.attackRangeMultiplier ?? 1;
+      moveSpeed *= modifier.moveSpeedMultiplier ?? 1;
+      chainTargets += modifier.chainTargets ?? 0;
+    }
+    return {
+      attackDamage,
+      attackIntervalSeconds,
+      attackRange,
+      moveSpeed,
+      chainTargets,
+    };
+  }
+
+  private upgradeModifierTotal(
+    field: "chainDamageMultiplier" | "hitHeal",
+  ): number {
+    return [...this.upgrades].reduce(
+      (total, id) => total + (upgradeDefinitionFor(id)?.modifier[field] ?? 0),
+      0,
+    );
+  }
+
   private describeEffects(): string[] {
     const effects = [
-      "Hearth Ward: heals while stationary near a campfire",
-      "Forager’s Instinct: normal kills grant +1 wood",
+      `Storage: ${this.materialCapacity()} each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.`,
+      `Hearth Ward: ${gameplayTuning.baseCampfireHealingPerSecond} health/s while stationary near a campfire.`,
+      `Death: ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% carried-resource loss; no death save.`,
     ];
-    const workshop = this.buildings
-      .filter((building) => building.kind === "Workshop")
-      .reduce((sum, building) => sum + building.level, 0);
-    const farm = this.buildings
-      .filter((building) => building.kind === "Farm")
-      .reduce((sum, building) => sum + building.level, 0);
-    if (workshop > 0)
-      effects.push(`Workshop Training: +${workshop * 4} basic damage`);
-    if (farm > 0)
+    for (const building of this.buildings)
       effects.push(
-        `Farm Rations: +${(farm * 0.5).toFixed(1)} stationary health/s`,
+        `${buildingDefinitions[building.kind].label} L${building.level}: ${buildingDefinitions[building.kind].levelEffects[building.level - 1]}`,
       );
-    for (const id of this.upgrades)
-      effects.push(
-        upgradeDefinitions.find((upgrade) => upgrade.id === id)?.label ?? id,
-      );
+    for (const id of this.upgrades) {
+      const upgrade = upgradeDefinitionFor(id);
+      if (upgrade !== undefined)
+        effects.push(`${upgrade.label}: ${upgrade.description}`);
+    }
     return effects;
   }
 

@@ -34,18 +34,24 @@ The browser test uses Playwright's isolated temporary profile. `dist/`,
 
 ## Implemented slice
 
-- deterministic named-seed chunks and bounded primitive Three.js projection;
-- one movement command boundary for keyboard and touch stick;
-- stationary auto-combat, normal/elite/boss enemies, drops, respawns, passive
-  effects, Boss Core, and exactly-three-choice boss rewards;
-- all five building types with placement, relocation, upgrades, and demolition;
-- explicit campfire-only versioned browser saves with temporary/primary/backup
-  recovery; and
-- a `dist`-based Capacitor configuration only.
+- deterministic named-seed chunks, distance-scaled danger, and a bounded
+  primitive Three.js projection;
+- one movement command boundary for keyboard and touch stick, with stationary
+  auto-combat;
+- five data-backed resource roles: Wood, Stone, Metal / Scrap, Essence, and
+  Boss Core. Storage caps each common material; Boss Core is saved but exempt;
+- normal, elite, and boss drops; ten boss upgrades including additive,
+  multiplicative, and Chain Strike hit-resolution behavior;
+- exactly Campfire, Workshop, Farm, Storage, and Healer, each with real L1-L3
+  effects, placement, relocation, upgrades, and demolition/refunds; and
+- explicit campfire-only version-2 browser saves with save-point respawn,
+  25% carried-resource death loss, temporary/primary/backup recovery, and no
+  automatic persistence.
 
 ## Truth boundary
 
 This cut does **not** create `android/`, run `cap add android`, sync a native
 wrapper, produce an APK/AAB, install to a device, test Capacitor lifecycle, or
-claim Android/Play evidence. See [ANDROID_BUILD.md](ANDROID_BUILD.md) for the
-separate generated-wrapper follow-on.
+claim Android/Play evidence. Native Android remains ungenerated and
+unverified. See [ANDROID_BUILD.md](ANDROID_BUILD.md) for the separate
+generated-wrapper follow-on.

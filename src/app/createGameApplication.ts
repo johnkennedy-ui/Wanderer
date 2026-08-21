@@ -33,6 +33,7 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
         return;
       }
       const result = storage.commit(request.document);
+      if (result.ok) session.recordSaveCommitted(request.document);
       platformMessage = result.ok
         ? `${result.message} Save point: ${request.savePointLabel}.`
         : result.message;

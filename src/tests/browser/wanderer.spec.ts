@@ -8,6 +8,25 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("virtual-stick")).toBeVisible();
   await expect(page.getByTestId("save-button")).toBeEnabled();
+  await expect(page.getByTestId("resources")).toContainText("Wood");
+  await expect(page.getByTestId("resources")).toContainText("Stone");
+  await expect(page.getByTestId("resources")).toContainText("Metal / Scrap");
+  await expect(page.getByTestId("resources")).toContainText("Essence");
+  await expect(page.getByTestId("resources")).toContainText("Boss Core");
+  await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
+});
+
+test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByTestId("build-Storage").click();
+  await expect(page.getByTestId("resources")).toContainText(
+    "capacity 180 each",
+  );
+  await expect(page.getByTestId("effects")).toContainText(
+    "Boss Core is exempt",
+  );
 });
 
 test("keyboard movement and touch-stick movement share the stationary auto-attack gate", async ({
