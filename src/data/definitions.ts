@@ -94,6 +94,7 @@ export const gameplayTuning = Object.freeze({
   buildingRefundRate: 0.5,
   baseAttackDamage: 12,
   baseAttackIntervalSeconds: 0.5,
+  basicProjectileTravelSeconds: 0.3,
   baseAttackRange: 3.2,
   baseMoveSpeed: 3,
   enemyAttackStandoff: 1.8,

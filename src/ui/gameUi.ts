@@ -54,6 +54,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <span data-testid="position"></span>
         <span data-testid="health"></span>
         <span data-testid="combat-status"></span>
+        <span data-testid="projectile-status"></span>
       </div>
       <div class="resources" data-testid="resources"></div>
       <p class="message" data-testid="message" aria-live="polite"></p>
@@ -80,10 +81,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <ul data-testid="effects" class="effects"></ul>
     </section>
     <section class="touch-controls" aria-label="Touch movement">
-      <div class="virtual-stick" data-testid="virtual-stick" aria-label="Virtual movement stick">
+      <div class="virtual-stick" data-testid="virtual-stick" data-active="false" aria-label="Virtual movement stick">
         <div class="stick-knob" data-stick-knob></div>
       </div>
-      <p>WASD / arrows · drag the stick to move</p>
+      <p>WASD / arrows · tap or drag the stick to move</p>
     </section>
     <section class="upgrade-modal" data-testid="upgrade-modal" hidden aria-live="assertive">
       <div class="upgrade-card">
@@ -186,6 +187,12 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         `Health: ${Math.ceil(snapshot.player.hp)} / ${snapshot.player.maxHp}`,
       );
       text(byTestId("combat-status"), snapshot.combatStatus);
+      text(
+        byTestId("projectile-status"),
+        snapshot.projectiles.length === 1
+          ? "Projectile: 1 in flight"
+          : `Projectile: ${snapshot.projectiles.length} in flight`,
+      );
       text(
         byTestId("resources"),
         `Wood ${snapshot.resources.wood} · Stone ${snapshot.resources.stone} · Metal / Scrap ${snapshot.resources.scrap} · Essence ${snapshot.resources.essence} · Boss Core ${snapshot.resources.bossCore} · capacity ${snapshot.materialCapacity} each (Boss Core exempt)`,

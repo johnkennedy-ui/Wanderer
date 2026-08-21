@@ -1,5 +1,10 @@
 import * as THREE from "three";
-import type { BuildingKind, GameSnapshot, Vector2 } from "../../domain/types";
+import type {
+  BuildingKind,
+  GameSnapshot,
+  ProjectileState,
+  Vector2,
+} from "../../domain/types";
 
 export interface ThreeRenderer {
   render(snapshot: GameSnapshot): void;
@@ -29,6 +34,15 @@ const enemyColor = (kind: string): number => {
   if (kind === "spitter") return 0x6a9f58;
   return 0xc75c5c;
 };
+
+const projectilePosition = (projectile: ProjectileState): Vector2 => ({
+  x:
+    projectile.origin.x +
+    (projectile.targetPosition.x - projectile.origin.x) * projectile.progress,
+  y:
+    projectile.origin.y +
+    (projectile.targetPosition.y - projectile.origin.y) * projectile.progress,
+});
 
 const disposeGroup = (group: THREE.Group): void => {
   group.traverse((object) => {
@@ -127,6 +141,19 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         );
         mesh.position.y = height / 2;
         addMarker(mesh, enemy.position);
+      }
+      for (const projectile of snapshot.projectiles) {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.17, 10, 10),
+          new THREE.MeshStandardMaterial({
+            color: 0xffe082,
+            emissive: 0x8a5a00,
+            roughness: 0.35,
+          }),
+        );
+        mesh.position.copy(toWorld(projectilePosition(projectile)));
+        mesh.position.y = 0.72;
+        projection.add(mesh);
       }
       const player = cylinder(0.45, 1.05, 0x58a6ff);
       player.position.y = 0.525;

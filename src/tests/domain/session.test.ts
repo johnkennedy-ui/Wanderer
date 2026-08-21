@@ -62,6 +62,54 @@ const placeAndUpgradeTo = (
 };
 
 describe("GameSession", () => {
+  it("launches a transient projectile that completes while movement suppresses later attacks", () => {
+    const session = new GameSession();
+    const before = session.snapshot();
+    const targetBefore = before.enemies.find(
+      (enemy) => enemy.id === "enemy:starter-scout",
+    );
+    if (targetBefore === undefined)
+      throw new Error("starter scout should be active near the initial player");
+
+    advance(session, gameplayTuning.baseAttackIntervalSeconds);
+    const launched = session.snapshot();
+    expect(launched.projectiles).toHaveLength(1);
+    expect(launched.projectiles[0]).toMatchObject({
+      origin: { x: 0, y: 0 },
+      targetId: targetBefore.id,
+      progress: 0,
+    });
+    expect(
+      launched.enemies.find((enemy) => enemy.id === targetBefore.id)?.hp,
+    ).toBe(targetBefore.hp);
+
+    const request = session.createValidCampfireSaveRequest(77);
+    if (request === null)
+      throw new Error("home campfire should issue a save request");
+    expect(
+      new GameSession({ saved: request.document }).snapshot().projectiles,
+    ).toEqual([]);
+
+    session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });
+    advance(session, gameplayTuning.basicProjectileTravelSeconds);
+    const completed = session.snapshot();
+    const targetAfter = completed.enemies.find(
+      (enemy) => enemy.id === targetBefore.id,
+    );
+    expect(completed.moving).toBe(true);
+    expect(completed.projectiles).toEqual([]);
+    expect(targetAfter?.hp).toBe(
+      targetBefore.hp - launched.combatStats.attackDamage,
+    );
+
+    advance(session, 1);
+    expect(session.snapshot().projectiles).toEqual([]);
+    expect(
+      session.snapshot().enemies.find((enemy) => enemy.id === targetBefore.id)
+        ?.hp,
+    ).toBe(targetAfter?.hp);
+  });
+
   it("immediately suppresses basic attacks while meaningful movement is present", () => {
     const session = new GameSession();
     const scoutBefore = session
@@ -75,6 +123,7 @@ describe("GameSession", () => {
 
     expect(session.snapshot().moving).toBe(true);
     expect(session.snapshot().combatStatus).toContain("suppressed");
+    expect(session.snapshot().projectiles).toEqual([]);
     expect(scoutAfter?.hp).toBe(scoutBefore?.hp);
 
     session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
@@ -333,7 +382,12 @@ describe("GameSession", () => {
     const scoutBefore = before.find(
       (enemy) => enemy.id === "enemy:starter-scout",
     );
-    advance(session, 0.6);
+    advance(
+      session,
+      gameplayTuning.baseAttackIntervalSeconds +
+        gameplayTuning.basicProjectileTravelSeconds +
+        0.1,
+    );
     const after = session.snapshot().enemies;
     const scoutAfter = after.find(
       (enemy) => enemy.id === "enemy:starter-scout",
@@ -361,7 +415,7 @@ describe("GameSession", () => {
     session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });
     advance(session, 1);
     session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
-    advance(session, 4.2);
+    advance(session, 4.2 + gameplayTuning.basicProjectileTravelSeconds);
     const choices = session.snapshot().pendingUpgradeChoices;
     expect(session.snapshot().resources.bossCore).toBe(1);
     expect(choices).toHaveLength(3);

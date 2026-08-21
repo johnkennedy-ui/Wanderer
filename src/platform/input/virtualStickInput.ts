@@ -18,8 +18,16 @@ export const createVirtualStickInput = (
   let activePointer: number | null = null;
 
   const setVisual = (intent: Vector2): void => {
+    const active = Math.hypot(intent.x, intent.y) >= DRIFT_THRESHOLD;
+    element.classList.toggle("is-active", active);
+    element.dataset.active = String(active);
     if (knob !== null)
-      knob.style.transform = `translate(${intent.x * STICK_RADIUS}px, ${intent.y * STICK_RADIUS}px)`;
+      knob.style.transform =
+        "translate(" +
+        intent.x * STICK_RADIUS +
+        "px, " +
+        intent.y * STICK_RADIUS +
+        "px)";
   };
   const emitFromPointer = (event: PointerEvent): void => {
     const bounds = element.getBoundingClientRect();
@@ -40,13 +48,25 @@ export const createVirtualStickInput = (
     setVisual(intent);
     sink(command(intent));
   };
-  const release = (event: PointerEvent): void => {
-    if (activePointer !== event.pointerId) return;
+  const clear = (): void => {
+    if (activePointer === null) return;
     activePointer = null;
     setVisual({ x: 0, y: 0 });
     sink(command({ x: 0, y: 0 }));
   };
+  const release = (event: PointerEvent): void => {
+    if (activePointer !== event.pointerId) return;
+    const pointerId = activePointer;
+    clear();
+    try {
+      if (element.hasPointerCapture(pointerId))
+        element.releasePointerCapture(pointerId);
+    } catch {
+      // Capture is optional for synthetic/browser-compatibility pointer events.
+    }
+  };
   const down = (event: PointerEvent): void => {
+    if (activePointer !== null) return;
     event.preventDefault();
     activePointer = event.pointerId;
     try {
@@ -59,16 +79,37 @@ export const createVirtualStickInput = (
   const move = (event: PointerEvent): void => {
     if (activePointer === event.pointerId) emitFromPointer(event);
   };
+  const lostCapture = (event: PointerEvent): void => {
+    if (activePointer === event.pointerId) clear();
+  };
   element.addEventListener("pointerdown", down);
   element.addEventListener("pointermove", move);
   element.addEventListener("pointerup", release);
   element.addEventListener("pointercancel", release);
+  element.addEventListener("lostpointercapture", lostCapture);
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  window.addEventListener("blur", clear);
   return {
     dispose(): void {
+      const pointerId = activePointer;
+      clear();
+      if (pointerId !== null) {
+        try {
+          if (element.hasPointerCapture(pointerId))
+            element.releasePointerCapture(pointerId);
+        } catch {
+          // Capture is optional for synthetic/browser-compatibility pointer events.
+        }
+      }
       element.removeEventListener("pointerdown", down);
       element.removeEventListener("pointermove", move);
       element.removeEventListener("pointerup", release);
       element.removeEventListener("pointercancel", release);
+      element.removeEventListener("lostpointercapture", lostCapture);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("blur", clear);
     },
   };
 };

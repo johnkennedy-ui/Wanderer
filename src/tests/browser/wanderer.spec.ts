@@ -7,6 +7,9 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   await expect(page.getByTestId("world-canvas")).toBeVisible();
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("virtual-stick")).toBeVisible();
+  await expect(page.getByTestId("projectile-status")).toContainText(
+    "in flight",
+  );
   await expect(page.getByTestId("save-button")).toBeEnabled();
   await expect(page.getByTestId("resources")).toContainText("Wood");
   await expect(page.getByTestId("resources")).toContainText("Stone");
@@ -92,6 +95,7 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
     clientY: box.y + box.height / 2,
   });
   await page.waitForTimeout(100);
+  await expect(stick).toHaveAttribute("data-active", "true");
   await expect(page.getByTestId("position")).toContainText("virtual-stick");
   await expect(combat).toContainText("suppressed");
   await stick.dispatchEvent("pointerup", {
@@ -99,6 +103,57 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
     clientX: box.x + box.width - 8,
     clientY: box.y + box.height / 2,
   });
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await expect(combat).toContainText("Auto-attacking");
+});
+
+test("virtual-stick tap, cancellation, capture loss, and blur safely clear movement", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const combat = page.getByTestId("combat-status");
+  const stick = page.getByTestId("virtual-stick");
+  const box = await stick.boundingBox();
+  if (box === null) throw new Error("Virtual stick was not laid out");
+  const right = {
+    clientX: box.x + box.width - 8,
+    clientY: box.y + box.height / 2,
+  };
+  const center = {
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
+  };
+
+  await stick.dispatchEvent("pointerdown", { pointerId: 11, ...right });
+  await expect(stick).toHaveAttribute("data-active", "true");
+  await expect(combat).toContainText("suppressed");
+  await stick.dispatchEvent("pointerup", { pointerId: 11, ...right });
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await expect(combat).toContainText("Auto-attacking");
+
+  await stick.dispatchEvent("pointerdown", { pointerId: 12, ...center });
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await stick.dispatchEvent("pointermove", { pointerId: 12, ...right });
+  await expect(stick).toHaveAttribute("data-active", "true");
+  await expect(combat).toContainText("suppressed");
+  await stick.dispatchEvent("pointercancel", { pointerId: 12, ...right });
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await expect(combat).toContainText("Auto-attacking");
+
+  await stick.dispatchEvent("pointerdown", { pointerId: 13, ...right });
+  await expect(stick).toHaveAttribute("data-active", "true");
+  await stick.dispatchEvent("lostpointercapture", {
+    pointerId: 13,
+    ...right,
+  });
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await expect(combat).toContainText("Auto-attacking");
+
+  await stick.dispatchEvent("pointerdown", { pointerId: 14, ...right });
+  await expect(stick).toHaveAttribute("data-active", "true");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(stick).toHaveAttribute("data-active", "false");
+  await expect(combat).toContainText("Auto-attacking");
 });
 
 test("visible campfire save commits and later unsaved movement rolls back on reload", async ({

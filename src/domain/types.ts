@@ -44,6 +44,15 @@ export interface EnemyState {
   readonly defeated: boolean;
 }
 
+/** A disposable visual/combat flight snapshot. It is never part of a save. */
+export interface ProjectileState {
+  readonly id: string;
+  readonly origin: Vector2;
+  readonly targetId: string;
+  readonly targetPosition: Vector2;
+  readonly progress: number;
+}
+
 export type BuildingKind =
   "Campfire" | "Workshop" | "Farm" | "Storage" | "Healer";
 
@@ -139,6 +148,7 @@ export interface GameSnapshot {
   readonly deathResourceLossRate: number;
   readonly combatStats: CombatStats;
   readonly enemies: readonly EnemyState[];
+  readonly projectiles: readonly ProjectileState[];
   readonly buildings: readonly BuildingState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];

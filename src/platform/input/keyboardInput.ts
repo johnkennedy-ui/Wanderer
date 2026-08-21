@@ -49,12 +49,20 @@ export const createKeyboardInput = (sink: MoveSink): InputAdapter => {
     pressed.delete(key);
     emit();
   };
+  const clear = (): void => {
+    if (pressed.size === 0) return;
+    pressed.clear();
+    emit();
+  };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", clear);
   return {
     dispose(): void {
+      clear();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clear);
     },
   };
 };

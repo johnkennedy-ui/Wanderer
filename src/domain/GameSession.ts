@@ -25,6 +25,7 @@ import type {
   InputSource,
   MoveCommand,
   PlacementResult,
+  ProjectileState,
   ResourceBag,
   SaveDocument,
   UpgradeId,
@@ -60,6 +61,18 @@ interface RuntimeEnemy {
   respawnAt: number | null;
   defeated: boolean;
   attackElapsed: number;
+}
+
+interface RuntimeProjectile {
+  readonly id: string;
+  readonly origin: Vector2;
+  readonly targetId: string;
+  readonly targetPosition: Vector2;
+  readonly damage: number;
+  readonly chainTargetIds: readonly string[];
+  readonly chainDamage: number;
+  readonly hitHeal: number;
+  elapsed: number;
 }
 
 interface SessionOptions {
@@ -157,10 +170,12 @@ export class GameSession {
   private resources: ResourceBag;
   private buildings: BuildingState[];
   private enemies = new Map<string, RuntimeEnemy>();
+  private projectiles: RuntimeProjectile[] = [];
   private defeatedBossIds = new Set<string>();
   private upgrades = new Set<UpgradeId>();
   private pendingUpgradeChoices: UpgradeId[] = [];
   private nextBuildingSerial: number;
+  private nextProjectileSerial = 1;
   private committedSavePoint: SettlementCampfire;
   private input: MoveCommand = {
     intent: { x: 0, y: 0 },
@@ -221,6 +236,7 @@ export class GameSession {
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
+    this.updateProjectiles(delta);
     const movement = magnitude(this.input.intent);
     const moving = movement >= MOVEMENT_THRESHOLD;
 
@@ -365,10 +381,12 @@ export class GameSession {
     };
     this.buildings = [];
     this.enemies = new Map();
+    this.projectiles = [];
     this.defeatedBossIds = new Set();
     this.upgrades = new Set();
     this.pendingUpgradeChoices = [];
     this.nextBuildingSerial = 1;
+    this.nextProjectileSerial = 1;
     this.committedSavePoint = {
       id: "campfire:home",
       label: "home campfire",
@@ -466,6 +484,16 @@ export class GameSession {
           defeated: enemy.defeated,
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
+      projectiles: this.projectiles.map((projectile): ProjectileState => ({
+        id: projectile.id,
+        origin: copyVector(projectile.origin),
+        targetId: projectile.targetId,
+        targetPosition: copyVector(projectile.targetPosition),
+        progress: Math.min(
+          1,
+          projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
+        ),
+      })),
       buildings,
       visibleBuildings: buildings.filter((building) =>
         visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),
@@ -528,26 +556,58 @@ export class GameSession {
     if (this.attackElapsed < stats.attackIntervalSeconds) return;
     this.attackElapsed = 0;
 
-    let landedHits = this.resolveBasicHit(target, stats.attackDamage) ? 1 : 0;
     const chainDamageMultiplier = this.upgradeModifierTotal(
       "chainDamageMultiplier",
     );
-    if (stats.chainTargets > 0 && chainDamageMultiplier > 0) {
-      for (const secondary of targets.slice(1, 1 + stats.chainTargets)) {
-        if (
-          this.resolveBasicHit(
-            secondary,
-            stats.attackDamage * chainDamageMultiplier,
-          )
-        )
-          landedHits += 1;
-      }
+    this.projectiles.push({
+      id: "projectile:" + this.nextProjectileSerial.toString().padStart(4, "0"),
+      origin: copyVector(this.player.position),
+      targetId: target.id,
+      targetPosition: copyVector(target.position),
+      damage: stats.attackDamage,
+      chainTargetIds:
+        stats.chainTargets > 0 && chainDamageMultiplier > 0
+          ? targets
+              .slice(1, 1 + stats.chainTargets)
+              .map((secondary) => secondary.id)
+          : [],
+      chainDamage: stats.attackDamage * chainDamageMultiplier,
+      hitHeal: this.upgradeModifierTotal("hitHeal"),
+      elapsed: 0,
+    });
+    this.nextProjectileSerial += 1;
+  }
+
+  private updateProjectiles(delta: number): void {
+    const completed: RuntimeProjectile[] = [];
+    this.projectiles = this.projectiles.filter((projectile) => {
+      projectile.elapsed += delta;
+      if (projectile.elapsed < gameplayTuning.basicProjectileTravelSeconds)
+        return true;
+      completed.push(projectile);
+      return false;
+    });
+    for (const projectile of completed) this.resolveProjectileHit(projectile);
+  }
+
+  private resolveProjectileHit(projectile: RuntimeProjectile): void {
+    const primary = this.enemies.get(projectile.targetId);
+    let landedHits =
+      primary !== undefined && this.resolveBasicHit(primary, projectile.damage)
+        ? 1
+        : 0;
+    for (const targetId of projectile.chainTargetIds) {
+      const secondary = this.enemies.get(targetId);
+      if (
+        secondary !== undefined &&
+        this.resolveBasicHit(secondary, projectile.chainDamage)
+      )
+        landedHits += 1;
     }
-    const hitHeal = this.upgradeModifierTotal("hitHeal");
-    if (landedHits > 0 && hitHeal > 0)
+    if (landedHits > 0 && projectile.hitHeal > 0)
       this.player.hp = Math.min(
         this.player.maxHp,
-        this.player.hp + landedHits * hitHeal,
+        this.player.hp + landedHits * projectile.hitHeal,
       );
   }
 
