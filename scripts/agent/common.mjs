@@ -106,6 +106,9 @@ export const normaliseRepositoryPath = (path) => path.split(sep).join("/");
 export const isApprovedSpecification = (path) =>
   /^FRANK_.+\.md$/i.test(basename(path));
 
+const isAgentRuntimeOrDependencyPath = (path) =>
+  /^(?:\.agent|node_modules)(?:\/|$)/.test(normaliseRepositoryPath(path));
+
 export const parseGitStatus = (output) => {
   const entries = output
     .split("\n")
@@ -233,7 +236,9 @@ export const changedFilesSince = (cwd, baselineCommit) => {
     .map(normaliseRepositoryPath)
     .filter((path) => !isApprovedSpecification(path));
 
-  return [...new Set([...trackedChanges, ...untrackedChanges])];
+  return [...new Set([...trackedChanges, ...untrackedChanges])].filter(
+    (path) => !isAgentRuntimeOrDependencyPath(path),
+  );
 };
 
 export const resolveWithinRepository = (cwd, requestedPath) => {
