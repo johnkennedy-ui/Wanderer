@@ -41,70 +41,31 @@ import type {
 import {
   chunkCoordinateFor,
   chunkKey,
-  DEFAULT_WORLD_GENERATOR_VERSION,
   generateChunk,
   visibleChunkCoordinates,
 } from "./world";
+import {
+  cloneResources,
+  copyVector,
+  createFreshSessionState,
+  DEFAULT_WORLD,
+  hydrateSessionState,
+} from "./session/sessionState";
+import type {
+  RuntimeEnemy,
+  RuntimeProjectile,
+  SessionState,
+  SettlementCampfire,
+} from "./session/sessionState";
+import { projectCurrentSave } from "./session/saveProjection";
 
 /** Compatibility export for callers that have not yet moved to inputPolicy. */
 export { MOVEMENT_THRESHOLD } from "./inputPolicy";
-
-const DEFAULT_WORLD: WorldIdentity = Object.freeze({
-  seed: "wanderer-known-seed",
-  generatorVersion: DEFAULT_WORLD_GENERATOR_VERSION,
-});
-interface RuntimeEnemy {
-  id: string;
-  kind: EnemyKind;
-  position: Vector2;
-  spawnPosition: Vector2;
-  hp: number;
-  maxHp: number;
-  damage: number;
-  dangerTier: number;
-  dropMultiplier: number;
-  moveSpeed: number;
-  attackEverySeconds: number;
-  respawnAt: number | null;
-  defeated: boolean;
-  attackElapsed: number;
-}
-
-interface RuntimeProjectile {
-  readonly id: string;
-  readonly origin: Vector2;
-  readonly targetId: string;
-  readonly targetPosition: Vector2;
-  readonly damage: number;
-  readonly chainTargetIds: readonly string[];
-  readonly chainDamage: number;
-  readonly hitHeal: number;
-  elapsed: number;
-}
 
 interface SessionOptions {
   readonly world?: WorldIdentity;
   readonly saved?: CurrentSave;
 }
-
-interface SettlementCampfire {
-  readonly id: string;
-  readonly label: string;
-  readonly position: Vector2;
-  readonly level: 1 | 2 | 3;
-}
-
-const cloneResources = (resources: ReadonlyResourceBag): ResourceBag => ({
-  ...resources,
-});
-const copyWorldIdentity = (world: WorldIdentity): WorldIdentity => ({
-  seed: world.seed,
-  generatorVersion: world.generatorVersion,
-});
-const copyVector = (position: Vector2): Vector2 => ({
-  x: position.x,
-  y: position.y,
-});
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
 
@@ -188,72 +149,61 @@ export const selectBossUpgradeChoices = (
  * immutable-shaped snapshots.
  */
 export class GameSession {
-  private world: WorldIdentity;
-  private player: { position: Vector2; hp: number; maxHp: number };
-  private resources: ResourceBag;
-  private buildings: BuildingState[];
-  private enemies = new Map<string, RuntimeEnemy>();
-  private projectiles: RuntimeProjectile[] = [];
-  private floorDrops: FloorDropState[] = [];
-  private defeatedBossIds = new Set<string>();
-  private upgrades = new Set<UpgradeId>();
-  private pendingUpgradeChoices: UpgradeId[] = [];
-  private nextBuildingSerial: number;
-  private nextProjectileSerial = 1;
-  private nextFloorDropSerial = 1;
-  private committedSavePoint: SettlementCampfire;
-  private input: MoveCommand = {
-    intent: { x: 0, y: 0 },
-    source: "system",
-    at: 0,
-  };
-  private destination: Vector2 | null = null;
-  private elapsed = 0;
-  private attackElapsed = 0;
-  private farmHarvestElapsed = 0;
-  private message =
-    "Reach the nearby scout, then travel east to challenge the Ember Wyrm.";
-  private combatStatus = "Stationary: seeking a target";
+  private world!: WorldIdentity;
+  private player!: { position: Vector2; hp: number; maxHp: number };
+  private resources!: ResourceBag;
+  private buildings!: BuildingState[];
+  private enemies!: Map<string, RuntimeEnemy>;
+  private projectiles!: RuntimeProjectile[];
+  private floorDrops!: FloorDropState[];
+  private defeatedBossIds!: Set<string>;
+  private upgrades!: Set<UpgradeId>;
+  private pendingUpgradeChoices!: UpgradeId[];
+  private nextBuildingSerial!: number;
+  private nextProjectileSerial!: number;
+  private nextFloorDropSerial!: number;
+  private committedSavePoint!: SettlementCampfire;
+  private input!: MoveCommand;
+  private destination!: Vector2 | null;
+  private elapsed!: number;
+  private attackElapsed!: number;
+  private farmHarvestElapsed!: number;
+  private message!: string;
+  private combatStatus!: string;
 
   constructor(options: SessionOptions = {}) {
-    const saved = options.saved;
-    this.world = copyWorldIdentity(
-      saved?.world ?? options.world ?? DEFAULT_WORLD,
+    this.replaceState(
+      options.saved === undefined
+        ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
+        : hydrateSessionState(options.saved),
     );
-    this.player = saved
-      ? {
-          position: copyVector(saved.player.position),
-          hp: saved.player.hp,
-          maxHp: saved.player.maxHp,
-        }
-      : { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 };
-    this.resources = saved
-      ? cloneResources(saved.resources)
-      : { wood: 120, stone: 120, scrap: 120, essence: 20, bossCore: 0 };
-    this.buildings = saved
-      ? saved.buildings.map((building) => ({
-          ...building,
-          position: copyVector(building.position),
-        }))
-      : [];
-    this.defeatedBossIds = new Set(saved?.defeatedBossIds ?? []);
-    this.upgrades = new Set(saved?.upgrades ?? []);
-    this.nextBuildingSerial = saved?.nextBuildingSerial ?? 1;
-    this.committedSavePoint = saved
-      ? {
-          id: saved.savePointId,
-          label: "committed campfire",
-          position: copyVector(saved.savePointPosition),
-          level: 1,
-        }
-      : {
-          id: "campfire:home",
-          label: "home campfire",
-          position: { x: 0, y: 0 },
-          level: 1,
-        };
     this.resources = this.clampResourcesToCapacity(this.resources);
     this.ensureNeighborhoodEnemies();
+  }
+
+  /** The sole lifecycle boundary that replaces instance-owned session state. */
+  private replaceState(state: SessionState): void {
+    this.world = state.world;
+    this.player = state.player;
+    this.resources = state.resources;
+    this.buildings = state.buildings;
+    this.enemies = state.enemies;
+    this.projectiles = state.projectiles;
+    this.floorDrops = state.floorDrops;
+    this.defeatedBossIds = state.defeatedBossIds;
+    this.upgrades = state.upgrades;
+    this.pendingUpgradeChoices = state.pendingUpgradeChoices;
+    this.nextBuildingSerial = state.nextBuildingSerial;
+    this.nextProjectileSerial = state.nextProjectileSerial;
+    this.nextFloorDropSerial = state.nextFloorDropSerial;
+    this.committedSavePoint = state.committedSavePoint;
+    this.input = state.input;
+    this.destination = state.destination;
+    this.elapsed = state.elapsed;
+    this.attackElapsed = state.attackElapsed;
+    this.farmHarvestElapsed = state.farmHarvestElapsed;
+    this.message = state.message;
+    this.combatStatus = state.combatStatus;
   }
 
   move(command: MoveCommand): void {
@@ -407,39 +357,17 @@ export class GameSession {
 
   resetWorld(seed: string): void {
     const cleanSeed = seed.trim() || DEFAULT_WORLD.seed;
-    this.world = {
-      seed: cleanSeed,
-      generatorVersion: DEFAULT_WORLD.generatorVersion,
-    };
-    this.player = { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 };
-    this.resources = {
-      wood: 120,
-      stone: 120,
-      scrap: 120,
-      essence: 20,
-      bossCore: 0,
-    };
-    this.buildings = [];
-    this.enemies = new Map();
-    this.projectiles = [];
-    this.floorDrops = [];
-    this.defeatedBossIds = new Set();
-    this.upgrades = new Set();
-    this.pendingUpgradeChoices = [];
-    this.nextBuildingSerial = 1;
-    this.nextProjectileSerial = 1;
-    this.nextFloorDropSerial = 1;
-    this.committedSavePoint = {
-      id: "campfire:home",
-      label: "home campfire",
-      position: { x: 0, y: 0 },
-      level: 1,
-    };
-    this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
-    this.destination = null;
-    this.attackElapsed = 0;
-    this.farmHarvestElapsed = 0;
-    this.message = `New deterministic world started with seed “${cleanSeed}”. Nothing has been saved.`;
+    this.replaceState(
+      createFreshSessionState({
+        world: {
+          seed: cleanSeed,
+          generatorVersion: DEFAULT_WORLD.generatorVersion,
+        },
+        elapsed: this.elapsed,
+        message: `New deterministic world started with seed “${cleanSeed}”. Nothing has been saved.`,
+        combatStatus: this.combatStatus,
+      }),
+    );
     this.ensureNeighborhoodEnemies();
   }
 
@@ -452,26 +380,19 @@ export class GameSession {
         "Save rejected: stand within 2m of a home, wild, or player Campfire.";
       return null;
     }
-    const save: CurrentSave = {
-      schemaVersion: 2,
-      world: { ...this.world },
-      player: {
-        position: copyVector(this.player.position),
-        hp: this.player.hp,
-        maxHp: this.player.maxHp,
+    const save = projectCurrentSave(
+      {
+        world: this.world,
+        player: this.player,
+        resources: this.resources,
+        buildings: this.buildings,
+        defeatedBossIds: this.defeatedBossIds,
+        upgrades: this.upgrades,
+        nextBuildingSerial: this.nextBuildingSerial,
       },
-      resources: cloneResources(this.resources),
-      buildings: this.buildings.map((building) => ({
-        ...building,
-        position: copyVector(building.position),
-      })),
-      defeatedBossIds: [...this.defeatedBossIds].sort(),
-      upgrades: [...this.upgrades].sort(),
-      nextBuildingSerial: this.nextBuildingSerial,
       committedAt,
-      savePointId: savePoint.id,
-      savePointPosition: copyVector(savePoint.position),
-    };
+      savePoint,
+    );
     return { document: save, savePointLabel: savePoint.label };
   }
 
