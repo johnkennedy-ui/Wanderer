@@ -162,10 +162,7 @@ export const enemyPursuitPosition = ({
   if (remainingDistance <= 0) return enemyPosition;
 
   const travel = Math.min(moveSpeed * delta, remainingDistance);
-  const nextPosition = add(
-    enemyPosition,
-    scale(normalize(separation), travel),
-  );
+  const nextPosition = add(enemyPosition, scale(normalize(separation), travel));
   return distance(nextPosition, playerPosition) < attackStandoff
     ? add(
         playerPosition,
