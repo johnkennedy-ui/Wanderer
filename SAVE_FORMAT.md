@@ -22,7 +22,20 @@ Released documents remain schema version `2`:
 }
 ```
 
-`src/domain/persistence/saveV2.ts` owns this historical DTO and its literal validation values. It deliberately does not import live `ResourceBag`, player/building runtime state, or current content catalogues. A future runtime resource or upgrade therefore cannot silently redefine schema 2. The checked-in JSON documents in `src/tests/fixtures/saves/v2/` are historical compatibility fixtures: do not regenerate or edit them just because a new implementation would otherwise fail.
+`src/domain/persistence/saveV2.ts` owns this frozen historical DTO and its
+literal validation values. It deliberately does not import live `ResourceBag`,
+player/building runtime state, or current content catalogues. A future runtime
+resource or upgrade therefore cannot silently redefine schema 2. The checked-in
+JSON documents in `src/tests/fixtures/saves/v2/` are historical compatibility
+fixtures: do not regenerate or edit them just because a new implementation
+would otherwise fail.
+
+`src/domain/persistence/currentSave.ts` owns the separate current in-memory
+hydration representation and the explicit V2 serialization projection.
+`migrateSaveV2` converts a validated historical DTO to that current shape in
+memory; `GameSession` then clones it with `hydrateSessionState`. The reverse
+copy-out is `projectCurrentSave`. Runtime types may evolve around this boundary
+without silently changing the released V2 wire validator or JSON field names.
 
 The current in-memory hydration model is separate. Loading performs a pure sequence:
 
@@ -31,7 +44,10 @@ raw string → JSON parse → schema identification → frozen V2 decode
 → in-memory migration/normalisation → current-state validation → GameSession hydration
 ```
 
-No stage writes browser storage. A migrated state is stored only by a later, valid, explicit campfire save.
+No decode, migration, or hydration stage writes browser storage. A migrated
+state is stored only by a later, valid, explicit campfire save. Historical
+fixtures and existing V2 documents must remain loadable with schema version 2;
+loading must never rewrite them.
 
 The decoder distinguishes `absent`, `invalid-json`, `invalid-document`, `unsupported-schema`, and `unsupported-generator`. A present corrupt or unsupported save is not silently treated as a first launch. A valid backup may still recover it, with a recovery warning.
 
@@ -41,7 +57,12 @@ The current runtime accepts the released `wanderer-web-v1` generator. An unknown
 
 Persistent resource, building, enemy, boss, and upgrade IDs are opaque serialized values. They are append-only: display labels may change, but existing IDs must not be renamed or removed without an explicit compatibility definition, alias, or migration. Historical schema validators retain their own frozen values rather than importing an evolving active-ID list.
 
-Player-built building IDs keep their existing `building:<stable-world-seed-hash>:<session-serial>` strategy. The stable hash is derived from the world seed and the serial is the persisted `nextBuildingSerial` sequence; do not replace these compatible opaque IDs with GUIDs. A new building kind may be appended to the active catalogue only with the same explicit compatibility discipline.
+Player-built building IDs keep their existing
+`building:<stable-world-seed-hash>:<session-serial>` strategy. The stable hash
+is derived from the world seed and the serial is the persisted
+`nextBuildingSerial` sequence; do not replace these compatible opaque IDs with
+GUIDs. A new building kind may be appended to the active catalogue only with
+the same explicit compatibility discipline.
 
 Runtime-only enemy cooldowns, projectiles, floor drops, Three.js meshes, DOM identity, keyboard/touch state, and framework identifiers are never persisted.
 
@@ -59,4 +80,7 @@ On load, primary is checked before backup. A valid primary wins. An absent or in
 
 `savePointId` and `savePointPosition` become the committed death-return point only after browser storage reports a successful explicit commit. Death returns to that committed position, applies the named 25% carried-resource loss rule, and makes no write.
 
-This is browser localStorage evidence only. A later Capacitor storage adapter must separately prove equivalent temporary/primary/backup semantics and the same no-write-on-load behavior.
+This is browser localStorage evidence only. A later Capacitor storage adapter
+must separately prove equivalent temporary/primary/backup semantics and the
+same no-write-on-load behaviour. Changing an adapter does not authorize a key
+rename, a startup migration write, or a weaker corrupt-save recovery path.

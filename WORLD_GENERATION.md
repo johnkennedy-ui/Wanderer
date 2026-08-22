@@ -25,10 +25,11 @@ The home chunk contains a stable home campfire, review scout/elite spawns, and t
 
 ## Released generator versions
 
-`src/domain/world.ts` is an explicit dispatcher. A save records its generator
-identity and is routed to that exact released implementation; an unknown
-identity is rejected with a typed unsupported-generator failure. It is never
-silently passed to the newest recipe.
+`src/domain/world.ts` owns an immutable explicit dispatcher. A save records its
+generator identity and is routed to that exact released implementation; an
+unknown identity is rejected with a typed unsupported-generator failure. It is
+never silently passed to the newest recipe. The supported version tuple and
+dispatcher are append-only compatibility tables, not automatic registration.
 
 Released generator modules are append-only compatibility contracts. Do not edit
 `generators/wandererWebV1.ts` to alter procedural output. A terrain recipe,
@@ -42,4 +43,6 @@ fixtures under `src/tests/fixtures/world/v1/` were captured from released
 commit `30fd4845ae716599b214573e5663d8437abc4ed3`; their hashes must not be
 regenerated merely to accept a changed recipe. The tests cover home, positive,
 negative, and distant coordinates and assert the same identity-preserving
-recipe output after every extraction or refactor.
+recipe output after every extraction or refactor. This is a review rule as well
+as a test rule: a fixture update is valid only when deliberately introducing a
+new generator version, never to redefine V1.

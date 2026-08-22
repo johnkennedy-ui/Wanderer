@@ -18,6 +18,26 @@ object held by `createGameApplication`. It is never a singleton, static
 `current`, registry entry, DOM lookup result, or service-locator result.
 `src/main.ts` only starts the explicit application composition root.
 
+## Session lifecycle and presentation boundaries
+
+`GameSession` remains the public gameplay façade, while bounded lifecycle work
+is kept explicit. `src/domain/session/sessionState.ts` creates a complete fresh
+or reset state with `createFreshSessionState` and clones a validated current
+save with `hydrateSessionState`. `src/domain/session/saveProjection.ts` copies
+only the persistence fields into `CurrentSave` through `projectCurrentSave`.
+These helpers create or copy state for one session instance; none retains a
+global session, cache, registry, or authority.
+
+Commands leave the session with typed `GameNotice` values rather than
+English-message conventions. `src/ui/noticePresentation.ts` owns wording and
+must exhaustively present each notice kind. Behavioural UI code must use the
+notice kind/facts, never `startsWith`, `includes`, or an exact display phrase.
+
+Presentation gets narrow read models: `GameUiSnapshot` for the DOM UI and
+`GameRendererSnapshot` for the disposable Three.js renderer. `GameSnapshot`
+remains a transitional aggregate for existing consumers, but new consumers
+must not use it to acquire unrelated authority or mutable session internals.
+
 ## Allowed dependency direction
 
 | Source area     | May depend on                                           | Must not depend on                                                            |
@@ -61,6 +81,22 @@ input source != gameplay command
   domains. Presentation projections, Three meshes, DOM rows, and input visuals
   are disposable and never own gameplay or save state.
 
+## Allowed and prohibited authority patterns
+
+Allowed: immutable module constants; deeply frozen authored definitions;
+immutable version-dispatch tables; pure functions; narrow explicit contracts;
+test-only factories and fixtures; and non-authoritative, disposable local
+caches owned by a session, application, renderer, or adapter instance.
+
+Prohibited: mutable module-level `let`/`var`; exported mutable singleton
+objects; module-level runtime `Map`, `Set`, or arrays; mutable static fields;
+global stores; global event buses; service locators; generic `Services` bags;
+application-wide dependency containers; automatic runtime registration;
+reflection-based feature discovery; concrete platform-adapter imports; and
+domain imports from application, UI, or platform layers. A platform adapter
+may share a narrow contract/helper module, but it must not reach through a
+concrete sibling adapter.
+
 ## Executable architecture guard
 
 `npm run check:architecture` uses the TypeScript compiler API with the
@@ -89,9 +125,26 @@ Focused fixtures deliberately introduce every prohibited pattern and also prove
 that immutable constants and deeply frozen catalogues remain accepted. They are
 test-only evidence; the production scan is never narrowed to accommodate them.
 
+## Machine enforcement versus review rules
+
+`npm run check:architecture` mechanically enforces the rule IDs above across
+all production TypeScript under `src/`. `npm run verify` also typechecks,
+unit-tests, and builds the root production output; those tests cover frozen
+save and generator fixtures. The guard intentionally does not decide whether a
+new save field needs a schema, whether a generator recipe changed, whether an
+ID remains compatible, or whether a storage adapter preserves recovery
+semantics. Those are compatibility review rules backed by the relevant
+fixtures, focused tests, and the validation sequence in `AGENTS.md` and
+`TEST_MATRIX.md`.
+
+Tests are excluded from the production import scan so they can create local
+fixtures and explicit test sessions; this is not permission for production
+code to create a second composition root.
+
 Run the full local gate before handing a candidate off:
 
 ```bash
+npm ci
 npm run verify
 npm run test:browser
 VITE_BASE_PATH=/Wanderer/ npm run build
