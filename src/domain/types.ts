@@ -155,45 +155,12 @@ export interface ChunkRecipe {
   readonly spawns: readonly ChunkSpawn[];
 }
 
-export interface PlacementResult {
-  readonly ok: boolean;
-  readonly reason: string;
-  readonly building?: BuildingState;
-}
-
 export interface CombatStats {
   readonly attackDamage: number;
   readonly attackIntervalSeconds: number;
   readonly attackRange: number;
   readonly moveSpeed: number;
   readonly chainTargets: number;
-}
-
-export interface GameSnapshot {
-  readonly world: WorldIdentity;
-  readonly player: PlayerState;
-  readonly resources: ResourceBag;
-  readonly materialCapacity: number;
-  readonly buildRadius: number;
-  readonly deathResourceLossRate: number;
-  readonly combatStats: CombatStats;
-  readonly enemies: readonly EnemyState[];
-  readonly projectiles: readonly ProjectileState[];
-  readonly floorDrops: readonly FloorDropState[];
-  readonly buildings: readonly BuildingState[];
-  readonly visibleBuildings: readonly BuildingState[];
-  readonly visibleChunks: readonly ChunkRecipe[];
-  readonly moving: boolean;
-  readonly inputSource: InputSource;
-  readonly destination: Vector2 | null;
-  readonly combatStatus: string;
-  readonly effects: readonly string[];
-  readonly defeatedBossIds: readonly string[];
-  readonly upgrades: readonly UpgradeId[];
-  readonly pendingUpgradeChoices: readonly UpgradeId[];
-  readonly canSave: boolean;
-  readonly savePointLabel: string | null;
-  readonly message: string;
 }
 
 /**

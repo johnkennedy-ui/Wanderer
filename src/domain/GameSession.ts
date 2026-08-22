@@ -17,6 +17,13 @@ import {
 } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import { commonResourceKinds, emptyResources, resourceKinds } from "./types";
+import { copyGameNotice } from "./notices";
+import type {
+  GameNotice,
+  GameSnapshot,
+  PlacementRejection,
+  PlacementResult,
+} from "./notices";
 import type {
   BuildingKind,
   BuildingState,
@@ -25,10 +32,8 @@ import type {
   EnemyKind,
   EnemyState,
   FloorDropState,
-  GameSnapshot,
   InputSource,
   MoveCommand,
-  PlacementResult,
   ProjectileState,
   ResourceBag,
   ReadonlyResourceBag,
@@ -168,7 +173,7 @@ export class GameSession {
   private elapsed!: number;
   private attackElapsed!: number;
   private farmHarvestElapsed!: number;
-  private message!: string;
+  private notice!: GameNotice;
   private combatStatus!: string;
 
   constructor(options: SessionOptions = {}) {
@@ -202,7 +207,7 @@ export class GameSession {
     this.elapsed = state.elapsed;
     this.attackElapsed = state.attackElapsed;
     this.farmHarvestElapsed = state.farmHarvestElapsed;
-    this.message = state.message;
+    this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
 
@@ -217,7 +222,7 @@ export class GameSession {
 
   setDestination(command: DestinationCommand): void {
     if (!isFinitePosition(command.destination)) {
-      this.message = "Tap-to-move ignored an invalid destination.";
+      this.notice = { kind: "tap-to-move.rejected.invalid-destination" };
       return;
     }
     this.destination = roundVector(command.destination);
@@ -264,7 +269,7 @@ export class GameSession {
     if (validation !== null) return this.rejectPlacement(validation);
     const cost = amountForLevel(buildingDefinitions[kind].baseCost, 1);
     if (!canAfford(this.resources, cost))
-      return this.rejectPlacement("insufficient resources");
+      return this.rejectPlacement({ kind: "insufficient-resources" });
 
     const building: BuildingState = {
       id: `building:${hashText(this.world.seed).toString(16)}:${this.nextBuildingSerial.toString().padStart(4, "0")}`,
@@ -275,13 +280,18 @@ export class GameSession {
     this.nextBuildingSerial += 1;
     this.resources = subtractResources(this.resources, cost);
     this.buildings = [...this.buildings, building];
-    this.message = `${kind} placed. It is runtime-only until an explicit campfire save.`;
-    return { ok: true, reason: "placed", building };
+    this.notice = {
+      kind: "building.placed",
+      buildingId: building.id,
+      buildingKind: building.kind,
+    };
+    return { ok: true, outcome: "placed", building };
   }
 
   relocateBuilding(id: string, position: Vector2): PlacementResult {
     const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined) return this.rejectPlacement("unknown building");
+    if (building === undefined)
+      return this.rejectPlacement({ kind: "unknown-building" });
     const validation = this.validateBuildingPosition(
       building.kind,
       position,
@@ -292,21 +302,27 @@ export class GameSession {
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? moved : candidate,
     );
-    this.message = `${building.kind} relocated atomically. Save at a campfire to commit it.`;
-    return { ok: true, reason: "relocated", building: moved };
+    this.notice = {
+      kind: "building.relocated",
+      buildingId: moved.id,
+      buildingKind: moved.kind,
+    };
+    return { ok: true, outcome: "relocated", building: moved };
   }
 
   upgradeBuilding(id: string): PlacementResult {
     const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined) return this.rejectPlacement("unknown building");
-    if (building.level === 3) return this.rejectPlacement("already level 3");
+    if (building === undefined)
+      return this.rejectPlacement({ kind: "unknown-building" });
+    if (building.level === 3)
+      return this.rejectPlacement({ kind: "already-level-3" });
     const nextLevel = (building.level + 1) as 2 | 3;
     const cost = amountForLevel(
       buildingDefinitions[building.kind].baseCost,
       nextLevel,
     );
     if (!canAfford(this.resources, cost))
-      return this.rejectPlacement("insufficient resources");
+      return this.rejectPlacement({ kind: "insufficient-resources" });
 
     const upgraded: BuildingState = { ...building, level: nextLevel };
     this.resources = subtractResources(this.resources, cost);
@@ -314,13 +330,19 @@ export class GameSession {
       candidate.id === id ? upgraded : candidate,
     );
     this.resources = this.clampResourcesToCapacity(this.resources);
-    this.message = `${building.kind} upgraded to level ${nextLevel}; ${buildingDefinitions[building.kind].levelEffects[nextLevel - 1]} The change remains unsaved.`;
-    return { ok: true, reason: "upgraded", building: upgraded };
+    this.notice = {
+      kind: "building.upgraded",
+      buildingId: upgraded.id,
+      buildingKind: upgraded.kind,
+      level: nextLevel,
+    };
+    return { ok: true, outcome: "upgraded", building: upgraded };
   }
 
   demolishBuilding(id: string): PlacementResult {
     const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined) return this.rejectPlacement("unknown building");
+    if (building === undefined)
+      return this.rejectPlacement({ kind: "unknown-building" });
     const cumulativeCost = [1, 2, 3]
       .filter((level) => level <= building.level)
       .map((level) =>
@@ -333,8 +355,13 @@ export class GameSession {
     );
     this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
     this.resources = this.collectResources(refund);
-    this.message = `${building.kind} demolished safely; ${(gameplayTuning.buildingRefundRate * 100).toFixed(0)}% of its invested resources were refunded.`;
-    return { ok: true, reason: "demolished", building };
+    this.notice = {
+      kind: "building.demolished",
+      buildingId: building.id,
+      buildingKind: building.kind,
+      refundRate: gameplayTuning.buildingRefundRate,
+    };
+    return { ok: true, outcome: "demolished", building };
   }
 
   chooseUpgrade(id: UpgradeId): boolean {
@@ -343,15 +370,14 @@ export class GameSession {
       !this.pendingUpgradeChoices.includes(id) ||
       this.upgrades.has(id)
     ) {
-      this.message =
-        "Choose exactly one unowned upgrade from the current boss reward options.";
+      this.notice = { kind: "upgrade.rejected.invalid-choice" };
       return false;
     }
     this.upgrades.add(id);
     const upgrade = upgradeDefinitionFor(id);
     this.applyUpgradeEffect(upgrade.effect);
     this.pendingUpgradeChoices = [];
-    this.message = `${upgrade.label} applied in runtime. Campfire-save it to keep it.`;
+    this.notice = { kind: "upgrade.applied", upgradeId: id };
     return true;
   }
 
@@ -364,7 +390,7 @@ export class GameSession {
           generatorVersion: DEFAULT_WORLD.generatorVersion,
         },
         elapsed: this.elapsed,
-        message: `New deterministic world started with seed “${cleanSeed}”. Nothing has been saved.`,
+        notice: { kind: "world.reset", seed: cleanSeed },
         combatStatus: this.combatStatus,
       }),
     );
@@ -376,8 +402,7 @@ export class GameSession {
   ): ValidCampfireSaveRequest | null {
     const savePoint = this.nearbyCampfire();
     if (savePoint === null) {
-      this.message =
-        "Save rejected: stand within 2m of a home, wild, or player Campfire.";
+      this.notice = { kind: "save.rejected.not-near-campfire" };
       return null;
     }
     const save = projectCurrentSave(
@@ -404,7 +429,10 @@ export class GameSession {
       position: copyVector(document.savePointPosition),
       level: 1,
     };
-    this.message = `Campfire save committed at ${document.savePointId}. Death now returns to this save point; no death save is made.`;
+    this.notice = {
+      kind: "save.committed",
+      savePointId: document.savePointId,
+    };
   }
 
   snapshot(): GameSnapshot {
@@ -412,85 +440,126 @@ export class GameSession {
       (coordinate) => generateChunk(this.world, coordinate),
     );
     const visibleChunkKeys = new Set(visibleChunks.map((chunk) => chunk.key));
+    const world = { ...this.world };
+    const player = {
+      position: copyVector(this.player.position),
+      hp: this.player.hp,
+      maxHp: this.player.maxHp,
+    };
+    const resources = cloneResources(this.resources);
     const buildings = this.buildings.map((building) => ({
       ...building,
       position: copyVector(building.position),
     }));
+    const visibleBuildings = buildings.filter((building) =>
+      visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),
+    );
+    const enemies = [...this.enemies.values()]
+      .filter(
+        (enemy) =>
+          !enemy.defeated &&
+          visibleChunkKeys.has(chunkKey(chunkCoordinateFor(enemy.position))),
+      )
+      .map((enemy) => ({
+        id: enemy.id,
+        kind: enemy.kind,
+        position: copyVector(enemy.position),
+        hp: enemy.hp,
+        maxHp: enemy.maxHp,
+        damage: enemy.damage,
+        dangerTier: enemy.dangerTier,
+        respawnAt: enemy.respawnAt,
+        defeated: enemy.defeated,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const projectiles = this.projectiles.map((projectile): ProjectileState => {
+      const target = this.enemies.get(projectile.targetId);
+      return {
+        id: projectile.id,
+        origin: copyVector(projectile.origin),
+        targetId: projectile.targetId,
+        targetPosition: copyVector(
+          target !== undefined && !target.defeated
+            ? target.position
+            : projectile.targetPosition,
+        ),
+        progress: Math.min(
+          1,
+          projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
+        ),
+      };
+    });
+    const floorDrops = this.floorDrops
+      .filter((drop) =>
+        visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
+      )
+      .map((drop): FloorDropState => ({
+        ...drop,
+        position: copyVector(drop.position),
+      }));
     const moving =
       this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
-    return {
-      world: { ...this.world },
-      player: {
-        position: copyVector(this.player.position),
-        hp: this.player.hp,
-        maxHp: this.player.maxHp,
-      },
-      resources: cloneResources(this.resources),
-      materialCapacity: this.materialCapacity(),
-      buildRadius: this.currentSettlementBuildRadius(),
-      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
-      combatStats: this.combatStats(),
-      enemies: [...this.enemies.values()]
-        .filter(
-          (enemy) =>
-            !enemy.defeated &&
-            visibleChunkKeys.has(chunkKey(chunkCoordinateFor(enemy.position))),
-        )
-        .map((enemy) => ({
-          id: enemy.id,
-          kind: enemy.kind,
-          position: copyVector(enemy.position),
-          hp: enemy.hp,
-          maxHp: enemy.maxHp,
-          damage: enemy.damage,
-          dangerTier: enemy.dangerTier,
-          respawnAt: enemy.respawnAt,
-          defeated: enemy.defeated,
-        }))
-        .sort((left, right) => left.id.localeCompare(right.id)),
-      projectiles: this.projectiles.map((projectile): ProjectileState => {
-        const target = this.enemies.get(projectile.targetId);
-        return {
-          id: projectile.id,
-          origin: copyVector(projectile.origin),
-          targetId: projectile.targetId,
-          targetPosition: copyVector(
-            target !== undefined && !target.defeated
-              ? target.position
-              : projectile.targetPosition,
-          ),
-          progress: Math.min(
-            1,
-            projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
-          ),
-        };
-      }),
-      floorDrops: this.floorDrops
-        .filter((drop) =>
-          visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
-        )
-        .map((drop): FloorDropState => ({
-          ...drop,
-          position: copyVector(drop.position),
-        })),
+    const materialCapacity = this.materialCapacity();
+    const buildRadius = this.currentSettlementBuildRadius();
+    const combatStats = this.combatStats();
+    const effects = this.describeEffects();
+    const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
+    const canSave = savePoint !== null;
+    const savePointLabel = savePoint?.label ?? null;
+    const notice = copyGameNotice(this.notice);
+    const ui = {
+      world,
+      player,
+      resources,
+      materialCapacity,
+      buildRadius,
+      inputSource: this.input.source,
+      combatStatus: this.combatStatus,
+      projectileCount: projectiles.length,
       buildings,
-      visibleBuildings: buildings.filter((building) =>
-        visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),
-      ),
+      effects,
+      pendingUpgradeChoices,
+      canSave,
+      savePointLabel,
+      notice,
+    };
+    const renderer = {
+      player,
+      enemies,
+      projectiles,
+      floorDrops,
+      visibleBuildings,
+      visibleChunks,
+    };
+    return {
+      ui,
+      renderer,
+      world,
+      player,
+      resources,
+      materialCapacity,
+      buildRadius,
+      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
+      combatStats,
+      enemies,
+      projectiles,
+      floorDrops,
+      buildings,
+      visibleBuildings,
       visibleChunks,
       moving,
       inputSource: this.input.source,
       destination:
         this.destination === null ? null : copyVector(this.destination),
       combatStatus: this.combatStatus,
-      effects: this.describeEffects(),
+      effects,
       defeatedBossIds: [...this.defeatedBossIds].sort(),
       upgrades: [...this.upgrades].sort(),
-      pendingUpgradeChoices: [...this.pendingUpgradeChoices],
-      canSave: savePoint !== null,
-      savePointLabel: savePoint?.label ?? null,
-      message: this.message,
+      pendingUpgradeChoices,
+      canSave,
+      savePointLabel,
+      notice,
     };
   }
 
@@ -721,7 +790,11 @@ export class GameSession {
     this.destination = null;
     this.attackElapsed = 0;
     this.farmHarvestElapsed = 0;
-    this.message = `You fell and returned to ${this.committedSavePoint.label}. ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% of carried resources was lost; no save was made.`;
+    this.notice = {
+      kind: "player.died",
+      savePointLabel: this.committedSavePoint.label,
+      resourceLossRate: gameplayTuning.deathResourceLossRate,
+    };
   }
 
   private defeatEnemy(enemy: RuntimeEnemy): void {
@@ -740,13 +813,17 @@ export class GameSession {
         this.world.seed,
         this.upgrades,
       );
-      this.message =
-        this.pendingUpgradeChoices.length === 3
-          ? "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. Choose one unowned upgrade, then campfire-save it."
-          : "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. No complete unowned upgrade trio remains.";
+      this.notice = {
+        kind: "boss.defeated",
+        hasUpgradeChoices: this.pendingUpgradeChoices.length === 3,
+      };
     } else {
       enemy.respawnAt = this.elapsed + (definition.respawnSeconds ?? 0);
-      this.message = `${enemy.kind} defeated: data-defined resource drops remain on the ground. It will respawn later; no save was made.`;
+      this.notice = {
+        kind: "enemy.defeated",
+        enemyKind: enemy.kind,
+        respawns: true,
+      };
     }
   }
 
@@ -806,8 +883,7 @@ export class GameSession {
         remaining.push({ ...drop, amount: drop.amount - collectedAmount });
     }
     this.floorDrops = remaining;
-    if (collectedAny)
-      this.message = "Collected floor drops on contact; no save was made.";
+    if (collectedAny) this.notice = { kind: "drop.collected" };
   }
 
   private applyPassiveEffects(delta: number): void {
@@ -842,17 +918,16 @@ export class GameSession {
       .map((farm) => gameplayTuning.farmHarvestByLevel[farm.level - 1])
       .reduce(addResources, emptyResources());
     this.resources = this.collectResources(harvest);
-    this.message =
-      "Farm harvest collected while stationary; storage capacity was enforced.";
+    this.notice = { kind: "farm.harvested" };
   }
 
   private validateBuildingPosition(
     kind: BuildingKind,
     position: Vector2,
     ignoredId?: string,
-  ): string | null {
-    if (!isFinitePosition(position)) return "invalid coordinates";
-    if (this.isTerrainBlocked(position)) return "blocked terrain";
+  ): PlacementRejection | null {
+    if (!isFinitePosition(position)) return { kind: "invalid-coordinates" };
+    if (this.isTerrainBlocked(position)) return { kind: "blocked-terrain" };
     if (
       this.buildings.some(
         (building) =>
@@ -860,7 +935,7 @@ export class GameSession {
           distance(building.position, position) < 1.25,
       )
     ) {
-      return "overlaps an existing building";
+      return { kind: "overlaps-existing-building" };
     }
     if (kind !== "Campfire") {
       const campfire = this.settlementCampfiresAround(position).find(
@@ -870,7 +945,7 @@ export class GameSession {
       );
       if (campfire === undefined) {
         const nearestRadius = this.currentSettlementBuildRadius();
-        return `outside the ${nearestRadius}m campfire settlement radius`;
+        return { kind: "outside-settlement-radius", radius: nearestRadius };
       }
     }
     return null;
@@ -1069,9 +1144,9 @@ export class GameSession {
     return effects;
   }
 
-  private rejectPlacement(reason: string): PlacementResult {
-    this.message = `Building action rejected: ${reason}. No resources or records changed.`;
-    return { ok: false, reason };
+  private rejectPlacement(rejection: PlacementRejection): PlacementResult {
+    this.notice = { kind: "building.rejected", rejection };
+    return { ok: false, rejection };
   }
 
   private clampPlayerState(): void {

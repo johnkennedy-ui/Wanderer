@@ -1,16 +1,16 @@
 import * as THREE from "three";
 import { resourceDefinitions } from "../../data/definitions";
+import type { GameRendererSnapshot } from "../../domain/notices";
 import type {
   BuildingKind,
   EnemyKind,
-  GameSnapshot,
   ProjectileState,
   Vector2,
 } from "../../domain/types";
 
 export interface ThreeRenderer {
   readonly canvas: HTMLCanvasElement;
-  render(snapshot: GameSnapshot): void;
+  render(snapshot: GameRendererSnapshot): void;
   worldPositionFromClientPoint(
     clientX: number,
     clientY: number,
@@ -150,7 +150,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     return { x: worldIntersection.x, y: -worldIntersection.z };
   };
 
-  const positionPlayerHealthLabel = (snapshot: GameSnapshot): void => {
+  const positionPlayerHealthLabel = (snapshot: GameRendererSnapshot): void => {
     const projected = toWorld(snapshot.player.position);
     projected.y = 1.75;
     projected.project(camera);
@@ -162,7 +162,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   return {
     canvas,
     worldPositionFromClientPoint,
-    render(snapshot: GameSnapshot): void {
+    render(snapshot: GameRendererSnapshot): void {
       disposeGroup(projection);
       for (const chunk of snapshot.visibleChunks) {
         for (const obstacle of chunk.obstacles)

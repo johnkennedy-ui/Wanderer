@@ -94,8 +94,7 @@ describe("GameSession", () => {
       elapsed: 0,
       attackElapsed: 0,
       farmHarvestElapsed: 0,
-      message:
-        "Reach the nearby scout, then travel east to challenge the Ember Wyrm.",
+      notice: { kind: "session.ready" },
       combatStatus: "Stationary: seeking a target",
     });
     expect(fresh.enemies).toEqual(new Map());
@@ -134,8 +133,7 @@ describe("GameSession", () => {
       elapsed: 0,
       attackElapsed: 0,
       farmHarvestElapsed: 0,
-      message:
-        "Reach the nearby scout, then travel east to challenge the Ember Wyrm.",
+      notice: { kind: "session.ready" },
       combatStatus: "Stationary: seeking a target",
     });
     expect(hydrated.enemies).toEqual(new Map());
@@ -206,6 +204,69 @@ describe("GameSession", () => {
     expect(hydrated.snapshot().world).toEqual({
       seed: "caller-owned-save-world",
       generatorVersion: "wanderer-web-v1",
+    });
+  });
+
+  it("uses typed outcomes and gives UI and renderer narrow projections", () => {
+    const session = new GameSession();
+    const fresh = session.snapshot();
+    expect(fresh.notice).toEqual({ kind: "session.ready" });
+    expect(fresh.ui.notice).toEqual({ kind: "session.ready" });
+    expect(fresh.ui).not.toHaveProperty("visibleChunks");
+    expect(fresh.renderer).not.toHaveProperty("resources");
+
+    expect(session.placeBuilding("Workshop", { x: 48.1, y: 48.1 })).toEqual({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
+    expect(session.snapshot().ui.notice).toEqual({
+      kind: "building.rejected",
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
+
+    const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
+    if (!placed.ok) throw new Error("Workshop should be placed");
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.placed",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+    });
+
+    const upgraded = session.upgradeBuilding(placed.building.id);
+    if (!upgraded.ok) throw new Error("Workshop should be upgraded");
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.upgraded",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+      level: 2,
+    });
+
+    expect(session.demolishBuilding(placed.building.id).ok).toBe(true);
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.demolished",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+      refundRate: gameplayTuning.buildingRefundRate,
+    });
+
+    session.setDestination({
+      destination: { x: Number.NaN, y: 0 },
+      source: "tap-to-move",
+      at: 1,
+    });
+    expect(session.snapshot().notice).toEqual({
+      kind: "tap-to-move.rejected.invalid-destination",
+    });
+
+    const remote = new GameSession({
+      saved: {
+        ...savedAtHome(),
+        player: { position: { x: 80, y: 80 }, hp: 100, maxHp: 100 },
+      },
+    });
+    expect(remote.createValidCampfireSaveRequest(2)).toBeNull();
+    expect(remote.snapshot().notice).toEqual({
+      kind: "save.rejected.not-near-campfire",
     });
   });
 
@@ -460,6 +521,11 @@ describe("GameSession", () => {
     );
     const afterDefeat = session.snapshot();
     const drops = afterDefeat.floorDrops;
+    expect(afterDefeat.notice).toEqual({
+      kind: "enemy.defeated",
+      enemyKind: "scout",
+      respawns: true,
+    });
     expect(drops).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ resource: "wood", amount: 5 }),
@@ -535,14 +601,16 @@ describe("GameSession", () => {
     if (campfire.building === undefined)
       throw new Error("Campfire was not built");
 
-    expect(session.placeBuilding("Workshop", { x: 8, y: 10 }).reason).toBe(
-      "outside the 6m campfire settlement radius",
-    );
+    expect(session.placeBuilding("Workshop", { x: 8, y: 10 })).toMatchObject({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
     expect(session.upgradeBuilding(campfire.building.id).ok).toBe(true);
     expect(session.placeBuilding("Workshop", { x: 8, y: 10 }).ok).toBe(true);
-    expect(session.placeBuilding("Healer", { x: 8, y: 13 }).reason).toBe(
-      "outside the 9m campfire settlement radius",
-    );
+    expect(session.placeBuilding("Healer", { x: 8, y: 13 })).toMatchObject({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 9 },
+    });
     expect(session.upgradeBuilding(campfire.building.id).ok).toBe(true);
     expect(session.placeBuilding("Healer", { x: 8, y: 13 }).ok).toBe(true);
     expect(session.snapshot().buildRadius).toBe(
@@ -798,6 +866,10 @@ describe("GameSession", () => {
     const storage = createBrowserSaveStorage(new MemoryStore());
     expect(storage.commit(request!.document).ok).toBe(true);
     session.recordSaveCommitted(request!.document);
+    expect(session.snapshot().notice).toEqual({
+      kind: "save.committed",
+      savePointId: request!.document.savePointId,
+    });
     const savedReload = new GameSession({
       saved: storage.load().document ?? undefined,
     });
@@ -833,7 +905,11 @@ describe("GameSession", () => {
       essence: 75,
       bossCore: 6,
     });
-    expect(session.snapshot().message).toContain("25% of carried resources");
+    expect(session.snapshot().notice).toEqual({
+      kind: "player.died",
+      savePointLabel: "committed campfire",
+      resourceLossRate: 0.25,
+    });
     expect(storage.load().document).toEqual(committed);
   });
 });

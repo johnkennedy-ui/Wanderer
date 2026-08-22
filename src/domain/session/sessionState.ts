@@ -1,4 +1,5 @@
 import { DEFAULT_WORLD_GENERATOR_VERSION } from "../world";
+import type { GameNotice } from "../notices";
 import type {
   BuildingState,
   CurrentSave,
@@ -18,8 +19,9 @@ export const DEFAULT_WORLD = Object.freeze({
   generatorVersion: DEFAULT_WORLD_GENERATOR_VERSION,
 } satisfies WorldIdentity);
 
-export const DEFAULT_SESSION_MESSAGE =
-  "Reach the nearby scout, then travel east to challenge the Ember Wyrm.";
+export const DEFAULT_SESSION_NOTICE = Object.freeze({
+  kind: "session.ready",
+} as const satisfies GameNotice);
 export const DEFAULT_COMBAT_STATUS = "Stationary: seeking a target";
 
 /** Runtime-only enemy state; it is recreated from deterministic chunks on hydrate. */
@@ -90,7 +92,7 @@ export interface SessionState {
   elapsed: number;
   attackElapsed: number;
   farmHarvestElapsed: number;
-  message: string;
+  notice: GameNotice;
   combatStatus: string;
 }
 
@@ -143,7 +145,7 @@ export interface FreshSessionStateOptions {
   readonly world?: WorldIdentity;
   /** Reset preserves accumulated session time so command timestamps stay monotonic. */
   readonly elapsed?: number;
-  readonly message?: string;
+  readonly notice?: GameNotice;
   /** Reset preserves the existing presentation status for compatibility. */
   readonly combatStatus?: string;
 }
@@ -173,7 +175,7 @@ export const createFreshSessionState = (
     elapsed,
     attackElapsed: 0,
     farmHarvestElapsed: 0,
-    message: options.message ?? DEFAULT_SESSION_MESSAGE,
+    notice: options.notice ?? DEFAULT_SESSION_NOTICE,
     combatStatus: options.combatStatus ?? DEFAULT_COMBAT_STATUS,
   };
 };
@@ -211,6 +213,6 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   elapsed: 0,
   attackElapsed: 0,
   farmHarvestElapsed: 0,
-  message: DEFAULT_SESSION_MESSAGE,
+  notice: DEFAULT_SESSION_NOTICE,
   combatStatus: DEFAULT_COMBAT_STATUS,
 });

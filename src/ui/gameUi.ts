@@ -1,11 +1,11 @@
 import { buildingDefinitions, upgradeDefinitionFor } from "../data/definitions";
+import type { GameUiSnapshot } from "../domain/notices";
 import { buildingKinds } from "../domain/types";
-import type {
-  BuildingKind,
-  GameSnapshot,
-  UpgradeId,
-  Vector2,
-} from "../domain/types";
+import type { BuildingKind, UpgradeId, Vector2 } from "../domain/types";
+import {
+  presentGameNotice,
+  presentPlacementNotice,
+} from "./noticePresentation";
 
 export interface UiIntents {
   save(): void;
@@ -21,7 +21,7 @@ export interface GameUi {
   readonly worldHost: HTMLElement;
   readonly virtualStick: HTMLElement;
   isTapToMoveEnabled(): boolean;
-  render(snapshot: GameSnapshot): void;
+  render(snapshot: GameUiSnapshot): void;
   showTransient(message: string): void;
   dispose(): void;
 }
@@ -173,7 +173,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     showTransient(message: string): void {
       text(saveMessage, message);
     },
-    render(snapshot: GameSnapshot): void {
+    render(snapshot: GameUiSnapshot): void {
       text(
         byTestId("seed"),
         `Seed: ${snapshot.world.seed} · generator ${snapshot.world.generatorVersion}`,
@@ -189,9 +189,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       text(byTestId("combat-status"), snapshot.combatStatus);
       text(
         byTestId("projectile-status"),
-        snapshot.projectiles.length === 1
+        snapshot.projectileCount === 1
           ? "Projectile: 1 in flight"
-          : `Projectile: ${snapshot.projectiles.length} in flight`,
+          : `Projectile: ${snapshot.projectileCount} in flight`,
       );
       text(
         byTestId("resources"),
@@ -201,18 +201,12 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         byTestId("build-radius"),
         `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m.`,
       );
-      text(byTestId("message"), snapshot.message);
+      text(byTestId("message"), presentGameNotice(snapshot.notice));
       saveButton.disabled = !snapshot.canSave;
       saveButton.textContent = snapshot.canSave
         ? `Save at ${snapshot.savePointLabel}`
         : "Save at campfire (move closer)";
-      placementMessage.textContent =
-        snapshot.message.startsWith("Building") ||
-        snapshot.message.includes("placed") ||
-        snapshot.message.includes("relocated") ||
-        snapshot.message.includes("demolished")
-          ? snapshot.message
-          : "";
+      text(placementMessage, presentPlacementNotice(snapshot.notice));
 
       buildingList.replaceChildren();
       for (const building of snapshot.buildings) {
