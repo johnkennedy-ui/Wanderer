@@ -29,6 +29,27 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
   );
 });
 
+test("a present corrupt save is surfaced and left untouched on built-output boot", async ({
+  page,
+}) => {
+  const corruptPrimary = "{not valid JSON";
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: "wanderer.save.primary", value: corruptPrimary },
+  );
+
+  await page.goto(applicationPath);
+  await expect(page.getByTestId("save-message")).toContainText(
+    "Save was not loaded: Save data is not valid JSON.",
+  );
+  await expect(
+    page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      "wanderer.save.primary",
+    ),
+  ).resolves.toBe(corruptPrimary);
+});
+
 test("enabled primary canvas taps travel to a destination", async ({
   page,
 }) => {

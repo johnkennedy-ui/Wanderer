@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "world": {
+    "seed": "v2-recovery-primary",
+    "generatorVersion": "wanderer-web-v1"
+  },
+  "player": {
+    "position": { "x": -8.5, "y": 16.25 },
+    "hp": 57,
+    "maxHp": 100
+  },
+  "resources": {
+    "wood": 17,
+    "stone": 23,
+    "scrap": 11,
+    "essence": 4,
+    "bossCore": 0
+  },
+  "buildings": [
+    {
+      "id": "building:recovery:0007",
+      "kind": "Healer",
+      "position": { "x": -1, "y": -1 },
+      "level": 1
+    }
+  ],
+  "defeatedBossIds": [],
+  "upgrades": ["keen-focus"],
+  "nextBuildingSerial": 8,
+  "committedAt": 1700000000789,
+  "savePointId": "campfire:wanderer-web-v1:v2-recovery-primary:-1:1:0",
+  "savePointPosition": { "x": -11.25, "y": 20.75 }
+}

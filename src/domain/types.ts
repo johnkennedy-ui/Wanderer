@@ -181,7 +181,11 @@ export interface GameSnapshot {
   readonly message: string;
 }
 
-export interface SaveDocument {
+/**
+ * Current in-memory state used to hydrate a GameSession. The frozen released
+ * schema-2 wire DTO lives independently in persistence/saveV2.ts.
+ */
+export interface CurrentSave {
   readonly schemaVersion: 2;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
@@ -195,8 +199,11 @@ export interface SaveDocument {
   readonly savePointPosition: Vector2;
 }
 
+/** Compatibility alias for callers that still use the historical name. */
+export type SaveDocument = CurrentSave;
+
 export interface ValidCampfireSaveRequest {
-  readonly document: SaveDocument;
+  readonly document: CurrentSave;
   readonly savePointLabel: string;
 }
 

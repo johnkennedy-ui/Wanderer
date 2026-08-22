@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "world": {
+    "seed": "v2-progressed-frontier",
+    "generatorVersion": "wanderer-web-v1"
+  },
+  "player": {
+    "position": { "x": 17.25, "y": -4.5 },
+    "hp": 84,
+    "maxHp": 100
+  },
+  "resources": {
+    "wood": 95,
+    "stone": 41,
+    "scrap": 27,
+    "essence": 9,
+    "bossCore": 1
+  },
+  "buildings": [],
+  "defeatedBossIds": ["boss:ember-wyrm"],
+  "upgrades": ["sharpened-blade", "quick-hands"],
+  "nextBuildingSerial": 4,
+  "committedAt": 1700000000123,
+  "savePointId": "campfire:wanderer-web-v1:v2-progressed-frontier:1:0:0",
+  "savePointPosition": { "x": 22.25, "y": 5.75 }
+}

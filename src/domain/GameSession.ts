@@ -31,7 +31,7 @@ import type {
   ProjectileState,
   ResourceBag,
   ReadonlyResourceBag,
-  SaveDocument,
+  CurrentSave,
   UpgradeId,
   ValidCampfireSaveRequest,
   Vector2,
@@ -40,6 +40,7 @@ import type {
 import {
   chunkCoordinateFor,
   chunkKey,
+  DEFAULT_WORLD_GENERATOR_VERSION,
   generateChunk,
   visibleChunkCoordinates,
 } from "./world";
@@ -49,7 +50,7 @@ export { MOVEMENT_THRESHOLD } from "./inputPolicy";
 
 const DEFAULT_WORLD: WorldIdentity = Object.freeze({
   seed: "wanderer-known-seed",
-  generatorVersion: "wanderer-web-v1",
+  generatorVersion: DEFAULT_WORLD_GENERATOR_VERSION,
 });
 interface RuntimeEnemy {
   id: string;
@@ -82,7 +83,7 @@ interface RuntimeProjectile {
 
 interface SessionOptions {
   readonly world?: WorldIdentity;
-  readonly saved?: SaveDocument;
+  readonly saved?: CurrentSave;
 }
 
 interface SettlementCampfire {
@@ -453,7 +454,7 @@ export class GameSession {
         "Save rejected: stand within 2m of a home, wild, or player Campfire.";
       return null;
     }
-    const save: SaveDocument = {
+    const save: CurrentSave = {
       schemaVersion: 2,
       world: { ...this.world },
       player: {
@@ -477,7 +478,7 @@ export class GameSession {
   }
 
   /** Called by the composition root only after the storage adapter reports success. */
-  recordSaveCommitted(document: SaveDocument): void {
+  recordSaveCommitted(document: CurrentSave): void {
     this.committedSavePoint = {
       id: document.savePointId,
       label: "committed campfire",

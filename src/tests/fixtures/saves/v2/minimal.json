@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "world": {
+    "seed": "wanderer-known-seed",
+    "generatorVersion": "wanderer-web-v1"
+  },
+  "player": {
+    "position": { "x": 0, "y": 0 },
+    "hp": 100,
+    "maxHp": 100
+  },
+  "resources": {
+    "wood": 120,
+    "stone": 120,
+    "scrap": 120,
+    "essence": 20,
+    "bossCore": 0
+  },
+  "buildings": [],
+  "defeatedBossIds": [],
+  "upgrades": [],
+  "nextBuildingSerial": 1,
+  "committedAt": 1700000000000,
+  "savePointId": "campfire:home",
+  "savePointPosition": { "x": 0, "y": 0 }
+}

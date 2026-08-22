@@ -16,12 +16,18 @@ export interface GameApplication {
 export const createGameApplication = (root: HTMLElement): GameApplication => {
   const storage = createBrowserSaveStorage();
   const recovered = storage.load();
-  const session = new GameSession({ saved: recovered.document ?? undefined });
-  let platformMessage =
-    recovered.warning ??
-    (recovered.source === "primary"
-      ? "Recovered last explicit campfire save."
-      : "Fresh runtime: no committed save loaded.");
+  const session = new GameSession({
+    saved: recovered.ok ? recovered.document : undefined,
+  });
+  let platformMessage: string;
+  if (recovered.ok) {
+    platformMessage =
+      recovered.warning ?? "Recovered last explicit campfire save.";
+  } else if (recovered.failure === "absent") {
+    platformMessage = "Fresh runtime: no committed save loaded.";
+  } else {
+    platformMessage = `Save was not loaded: ${recovered.message} Existing browser save data was left untouched.`;
+  }
   let animationFrame = 0;
   let previousFrame = performance.now();
 
@@ -36,7 +42,7 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
       const result = storage.commit(request.document);
       if (result.ok) session.recordSaveCommitted(request.document);
       platformMessage = result.ok
-        ? `${result.message} Save point: ${request.savePointLabel}.`
+        ? `${result.message}${result.cleanupWarning === null ? "" : ` ${result.cleanupWarning}`} Save point: ${request.savePointLabel}.`
         : result.message;
     },
     reset(seed: string): void {

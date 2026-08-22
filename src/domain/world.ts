@@ -8,6 +8,13 @@ import type {
 } from "./types";
 
 export const CHUNK_SIZE = 16;
+/** The only released generator accepted by the current runtime. */
+export const DEFAULT_WORLD_GENERATOR_VERSION = "wanderer-web-v1";
+
+/** Kept explicit so persistence rejects versions the runtime cannot replay. */
+export const isSupportedWorldGeneratorVersion = (version: string): boolean =>
+  version === DEFAULT_WORLD_GENERATOR_VERSION;
+
 const DOMAIN_NAMES = [
   "terrain",
   "poi",
