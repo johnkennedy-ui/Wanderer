@@ -12,13 +12,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
-import { selectFocusedChecks } from "../../../scripts/agent/checks.mjs";
+import * as checks from "../../../scripts/agent/checks.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { evaluateMissionStart } from "../../../scripts/agent/mission-start.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { runCommand } from "../../../scripts/agent/run.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { selectTrackedFormattingFiles } from "../../../scripts/agent/format.mjs";
+
+const { classifyChangedPath, selectFocusedChecks } = checks;
 
 const temporaryDirectories: string[] = [];
 
@@ -80,6 +82,38 @@ describe("changed-file check selection", () => {
     expect(
       commandIds(["src/platform/storage/browserSaveStorage.ts"]),
     ).toContain("save-tests");
+  });
+
+  it("classifies session-prefixed split-suite helpers as session changes", () => {
+    expect(
+      classifyChangedPath("src/tests/domain/session-test-helpers.ts"),
+    ).toBe("session");
+  });
+
+  it("routes split session suites to focused session tests", () => {
+    const selection = selectFocusedChecks([
+      "src/tests/domain/session-movement.test.ts",
+    ]);
+
+    expect(selection.mode).toBe("focused");
+    expect(selection.classifications).toEqual([
+      {
+        path: "src/tests/domain/session-movement.test.ts",
+        category: "session",
+      },
+    ]);
+    expect(commandIds(["src/tests/domain/session-movement.test.ts"])).toContain(
+      "session-tests",
+    );
+    expect(
+      selection.commands.find(
+        (selected: { id: string }) => selected.id === "session-tests",
+      )?.command,
+    ).toEqual(["npm", "run", "test", "--", "src/tests/domain/session-"]);
+    expect(selection.commandTexts.join("\n")).not.toContain("npm run verify");
+    expect(selection.commandTexts.join("\n")).not.toContain(
+      "npm run test:browser",
+    );
   });
 
   it("routes renderer changes to a built-output browser check", () => {
