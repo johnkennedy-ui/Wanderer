@@ -25,46 +25,90 @@ const runFixture = (fixture: "allowed" | "rejected") =>
     { encoding: "utf8" },
   );
 
-describe("TypeScript architecture guard", () => {
-  it("accepts immutable constants and deeply frozen catalogues", () => {
-    const result = runFixture("allowed");
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("architecture guard: PASS");
+const allowedFixture = runFixture("allowed");
+const rejectedFixture = runFixture("rejected");
+
+const expectAllowedFixture = (): void => {
+  expect(allowedFixture.error).toBeUndefined();
+  expect(allowedFixture.status).toBe(0);
+  expect(allowedFixture.stdout).toContain("architecture guard: PASS");
+  expect(allowedFixture.stdout).toContain("7 production TypeScript files");
+};
+
+const expectRejectedFixture = (): void => {
+  expect(rejectedFixture.error).toBeUndefined();
+  expect(rejectedFixture.status).toBe(1);
+};
+
+describe("TypeScript architecture guard self-tests", () => {
+  it("allows immutable constants, frozen catalogues, immutable generator dispatch, and instance-owned disposable caches", () => {
+    expectAllowedFixture();
   });
 
-  it("reports deliberate boundary violations with stable IDs and locations", () => {
-    const result = runFixture("rejected");
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    for (const ruleId of [
-      "ARCH001",
-      "ARCH002",
-      "ARCH003",
-      "ARCH004",
-      "ARCH005",
-      "ARCH006",
-      "ARCH007",
-      "ARCH008",
-      "ARCH009",
-      "ARCH010",
-      "ARCH011",
-      "ARCH012",
-      "ARCH013",
-    ])
-      expect(result.stderr).toContain(`[${ruleId}]`);
-    expect(result.stderr).toMatch(
+  it("allows narrow type-only imports through an input contract", () => {
+    expectAllowedFixture();
+  });
+
+  it("rejects GameSession construction and value-import authority outside composition", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
       /src\/platform\/illegalGameSession\.ts:\d+:\d+ \[ARCH001\]/,
     );
-    expect(result.stderr).toMatch(
-      /src\/platform\/adapter\.ts:\d+:\d+ \[ARCH004\]/,
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/platform\/illegalGameSession\.ts:\d+:\d+ \[ARCH002\]/,
     );
-    expect(result.stderr).toContain("UPPERCASE_MUTABLE");
-    expect(result.stderr).toMatch(
+  });
+
+  it("rejects mutable top-level state, singleton authority, and mutable statics", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
       /src\/domain\/illegalState\.ts:\d+:\d+ \[ARCH006\] exported mutable literal TYPE_ONLY_IMMUTABLE must be frozen/,
     );
-    expect(result.stderr).toMatch(
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalState\.ts:\d+:\d+ \[ARCH007\]/,
+    );
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalState\.ts:\d+:\d+ \[ARCH008\]/,
+    );
+  });
+
+  it("rejects pure-layer and concrete-adapter import leaks", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalImport\.ts:\d+:\d+ \[ARCH003\]/,
+    );
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/platform\/adapter\.ts:\d+:\d+ \[ARCH004\]/,
+    );
+  });
+
+  it("rejects production import cycles", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
       /src\/domain\/cycle[AB]\.ts:\d+:\d+ \[ARCH009\]/,
+    );
+  });
+
+  it("rejects automatic registration and service-locator authority", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/app\/illegalPatterns\.ts:\d+:\d+ \[ARCH010\]/,
+    );
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/app\/illegalPatterns\.ts:\d+:\d+ \[ARCH011\]/,
+    );
+  });
+
+  it("rejects browser, DOM, and storage APIs from pure domain code", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalBrowser\.ts:\d+:\d+ \[ARCH005\]/,
+    );
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalBrowser\.ts:\d+:\d+ \[ARCH012\]/,
+    );
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/illegalBrowser\.ts:\d+:\d+ \[ARCH013\]/,
     );
   });
 });

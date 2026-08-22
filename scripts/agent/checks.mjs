@@ -38,9 +38,8 @@ export const classifyChangedPath = (path) => {
   if (/(?:^|\/)(?:ui|rendering|renderer|app|lifecycle)(?:\/|\.|$)/.test(lower))
     return "presentation";
   if (
-    /(?:^|\/)(?:gamesession|session|economy|settlement|combat|progression)(?:\/|\.|$)/.test(
-      lower,
-    )
+    /(?:^|\/)(?:gamesession|session)(?:\/|[.-]|$)/.test(lower) ||
+    /(?:^|\/)(?:economy|settlement|combat|progression)(?:\/|\.|$)/.test(lower)
   )
     return "session";
   return "other";
@@ -212,7 +211,7 @@ export const selectFocusedChecks = (
       command(
         "session-tests",
         "session, economy, settlement, combat, or progression changed",
-        ["npm", "run", "test", "--", "src/tests/domain/session.test.ts"],
+        ["npm", "run", "test", "--", "src/tests/domain/session-"],
         240_000,
       ),
     );

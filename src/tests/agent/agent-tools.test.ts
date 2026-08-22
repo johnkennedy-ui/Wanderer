@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -12,13 +13,17 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
-import { selectFocusedChecks } from "../../../scripts/agent/checks.mjs";
+import * as checks from "../../../scripts/agent/checks.mjs";
+// @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
+import { changedFilesSince } from "../../../scripts/agent/common.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { evaluateMissionStart } from "../../../scripts/agent/mission-start.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { runCommand } from "../../../scripts/agent/run.mjs";
 // @ts-expect-error Command modules intentionally remain repository-native Node ESM without TS declarations.
 import { selectTrackedFormattingFiles } from "../../../scripts/agent/format.mjs";
+
+const { classifyChangedPath, selectFocusedChecks } = checks;
 
 const temporaryDirectories: string[] = [];
 
@@ -53,6 +58,40 @@ const temporaryGitRepository = () => {
   return cwd;
 };
 
+const temporaryCommittedSessionRepository = () => {
+  const cwd = temporaryMission();
+  mkdirSync(join(cwd, "src", "domain"), { recursive: true });
+  writeFileSync(
+    join(cwd, "src", "domain", "session-movement.ts"),
+    "export const movement = 0;\n",
+  );
+  execFileSync("git", ["init", "--quiet"], { cwd });
+  execFileSync("git", ["config", "core.excludesFile", "/dev/null"], {
+    cwd,
+  });
+  execFileSync("git", ["add", "src/domain/session-movement.ts"], { cwd });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Wanderer Agent Test",
+      "-c",
+      "user.email=wanderer-agent-test@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "baseline",
+    ],
+    { cwd },
+  );
+  const baselineCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+  }).trim();
+
+  return { cwd, baselineCommit };
+};
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0))
     rmSync(directory, { force: true, recursive: true });
@@ -82,6 +121,38 @@ describe("changed-file check selection", () => {
     ).toContain("save-tests");
   });
 
+  it("classifies session-prefixed split-suite helpers as session changes", () => {
+    expect(
+      classifyChangedPath("src/tests/domain/session-test-helpers.ts"),
+    ).toBe("session");
+  });
+
+  it("routes split session suites to focused session tests", () => {
+    const selection = selectFocusedChecks([
+      "src/tests/domain/session-movement.test.ts",
+    ]);
+
+    expect(selection.mode).toBe("focused");
+    expect(selection.classifications).toEqual([
+      {
+        path: "src/tests/domain/session-movement.test.ts",
+        category: "session",
+      },
+    ]);
+    expect(commandIds(["src/tests/domain/session-movement.test.ts"])).toContain(
+      "session-tests",
+    );
+    expect(
+      selection.commands.find(
+        (selected: { id: string }) => selected.id === "session-tests",
+      )?.command,
+    ).toEqual(["npm", "run", "test", "--", "src/tests/domain/session-"]);
+    expect(selection.commandTexts.join("\n")).not.toContain("npm run verify");
+    expect(selection.commandTexts.join("\n")).not.toContain(
+      "npm run test:browser",
+    );
+  });
+
   it("routes renderer changes to a built-output browser check", () => {
     const selection = selectFocusedChecks([
       "src/platform/rendering/threeRenderer.ts",
@@ -96,6 +167,54 @@ describe("changed-file check selection", () => {
   it("forces full mode for package and workflow changes", () => {
     expect(selectFocusedChecks(["package.json"]).mode).toBe("full");
     expect(selectFocusedChecks([".github/workflows/ci.yml"]).mode).toBe("full");
+  });
+
+  it("excludes runtime paths from a tracked session selection", () => {
+    const { cwd, baselineCommit } = temporaryCommittedSessionRepository();
+    writeFileSync(
+      join(cwd, "src", "domain", "session-movement.ts"),
+      "export const movement = 1;\n",
+    );
+    const dependencyDirectory = mkdtempSync(
+      join(tmpdir(), "wanderer-agent-dependency-"),
+    );
+    temporaryDirectories.push(dependencyDirectory);
+    symlinkSync(dependencyDirectory, join(cwd, "node_modules"), "dir");
+
+    const untrackedPaths = execFileSync(
+      "git",
+      ["ls-files", "--others", "--exclude-standard", "-z"],
+      { cwd, encoding: "utf8" },
+    )
+      .split("\0")
+      .filter(Boolean);
+    expect(untrackedPaths).toEqual(
+      expect.arrayContaining([".agent/mission.json", "node_modules"]),
+    );
+
+    const changedFiles = changedFilesSince(cwd, baselineCommit);
+    const selection = selectFocusedChecks(changedFiles, { baselineCommit });
+
+    expect(changedFiles).toEqual(["src/domain/session-movement.ts"]);
+    expect(selection.mode).toBe("focused");
+    expect(commandIds(changedFiles)).toContain("session-tests");
+    expect(selection.commandTexts.join("\n")).not.toContain("npm run verify");
+    expect(selection.commandTexts.join("\n")).not.toContain(
+      "npm run test:browser",
+    );
+  });
+
+  it("retains ordinary untracked source paths in changed-file selection", () => {
+    const { cwd, baselineCommit } = temporaryCommittedSessionRepository();
+    writeFileSync(
+      join(cwd, "src", "domain", "untracked-source.ts"),
+      "export const untracked = true;\n",
+    );
+
+    const changedFiles = changedFilesSince(cwd, baselineCommit);
+
+    expect(changedFiles).toContain("src/domain/untracked-source.ts");
+    expect(selectFocusedChecks(changedFiles).mode).toBe("full");
   });
 
   it("selects only repository-contained tracked files and excludes approved specifications", () => {
