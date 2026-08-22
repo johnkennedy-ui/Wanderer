@@ -169,28 +169,9 @@ const isLikelySingletonInitializer = (initializer) => {
   );
 };
 
-const hasConstAssertion = (expression) => {
-  let current = expression;
-  while (
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isParenthesizedExpression(current)
-  ) {
-    if (
-      ts.isAsExpression(current) &&
-      ts.isTypeReferenceNode(current.type) &&
-      current.type.typeName.getText() === "const"
-    )
-      return true;
-    current = current.expression;
-  }
-  return false;
-};
-
 const isMutableExportedLiteral = (declaration) => {
   if (declaration.initializer === undefined) return false;
   if (isFrozenInitializer(declaration.initializer)) return false;
-  if (hasConstAssertion(declaration.initializer)) return false;
   if (declaration.name.kind !== ts.SyntaxKind.Identifier) return false;
   const initializer = unwrapExpression(declaration.initializer);
   return (

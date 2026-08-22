@@ -61,6 +61,9 @@ describe("TypeScript architecture guard", () => {
     );
     expect(result.stderr).toContain("UPPERCASE_MUTABLE");
     expect(result.stderr).toMatch(
+      /src\/domain\/illegalState\.ts:\d+:\d+ \[ARCH006\] exported mutable literal TYPE_ONLY_IMMUTABLE must be frozen/,
+    );
+    expect(result.stderr).toMatch(
       /src\/domain\/cycle[AB]\.ts:\d+:\d+ \[ARCH009\]/,
     );
   });

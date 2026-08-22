@@ -1,11 +1,11 @@
 import { isSaveDocument, parseSaveDocument } from "../../domain/save";
 import type { SaveDocument } from "../../domain/types";
 
-export const SAVE_KEYS = {
+export const SAVE_KEYS = Object.freeze({
   temporary: "wanderer.save.temporary",
   primary: "wanderer.save.primary",
   backup: "wanderer.save.backup",
-} as const;
+} as const);
 
 export interface KeyValueStore {
   getItem(key: string): string | null;

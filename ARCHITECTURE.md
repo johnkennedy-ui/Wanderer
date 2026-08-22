@@ -48,7 +48,10 @@ input source != gameplay command
 
 - Definitions are deeply readonly and created through `deepFreeze`. Costs,
   drops, and nested tuning records cannot be mutated through TypeScript or at
-  runtime. This does not freeze `GameSession` runtime state.
+  runtime. Exported authored catalogues require runtime freezing through
+  `deepFreeze` or `Object.freeze`; TypeScript-only `readonly` or `as const`
+  does not protect them at runtime. This does not freeze `GameSession` runtime
+  state.
 - `GameSession` copies caller-supplied world identity during construction,
   including `saved.world`, rather than retaining mutable external references.
 - Manual campfire save is the only committed persistence transition. Storage
