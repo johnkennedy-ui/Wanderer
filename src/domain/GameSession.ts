@@ -72,6 +72,11 @@ import type {
 } from "./session/sessionState";
 import { projectGameSnapshot } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
+import {
+  findCampfireCoveringPosition,
+  findNearbyCampfire,
+  settlementBuildRadius,
+} from "./session/settlementPolicy";
 
 /** Compatibility export for callers that have not yet moved to inputPolicy. */
 export { MOVEMENT_THRESHOLD } from "./inputPolicy";
@@ -834,10 +839,10 @@ export class GameSession {
       return { kind: "overlaps-existing-building" };
     }
     if (kind !== "Campfire") {
-      const campfire = this.settlementCampfiresAround(position).find(
-        (candidate) =>
-          distance(candidate.position, position) <=
-          this.campfireBuildRadius(candidate.level),
+      const campfire = findCampfireCoveringPosition(
+        position,
+        this.settlementCampfiresAround(position),
+        gameplayTuning.campfireBuildRadiusByLevel,
       );
       if (campfire === undefined) {
         const nearestRadius = this.currentSettlementBuildRadius();
@@ -875,22 +880,16 @@ export class GameSession {
   }
 
   private nearbyCampfire(): SettlementCampfire | null {
-    return (
-      this.settlementCampfiresAround(this.player.position).find(
-        (campfire) => distance(this.player.position, campfire.position) <= 2,
-      ) ?? null
+    return findNearbyCampfire(
+      this.player.position,
+      this.settlementCampfiresAround(this.player.position),
     );
   }
 
-  private campfireBuildRadius(level: 1 | 2 | 3): number {
-    return gameplayTuning.campfireBuildRadiusByLevel[level - 1];
-  }
-
   private currentSettlementBuildRadius(): number {
-    const campfires = this.settlementCampfiresAround(this.player.position);
-    return Math.max(
-      gameplayTuning.campfireBuildRadiusByLevel[0],
-      ...campfires.map((campfire) => this.campfireBuildRadius(campfire.level)),
+    return settlementBuildRadius(
+      this.settlementCampfiresAround(this.player.position),
+      gameplayTuning.campfireBuildRadiusByLevel,
     );
   }
 
