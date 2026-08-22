@@ -584,6 +584,56 @@ describe("GameSession", () => {
     expect(session.snapshot().effects.join(" ")).toContain("Chain Strike");
   });
 
+  it("preserves tagged upgrade damage, timing, range, movement, and hit-healing semantics", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        upgrades: [
+          "sharpened-blade",
+          "quick-hands",
+          "ember-aura",
+          "long-reach",
+          "chain-strike",
+          "trailblazer",
+          "keen-focus",
+        ],
+      },
+    });
+
+    const stats = session.snapshot().combatStats;
+    expect(stats.attackDamage).toBe(22);
+    expect(stats.attackRange).toBeCloseTo(4.32, 8);
+    expect(stats.moveSpeed).toBeCloseTo(3.45, 8);
+    expect(stats.chainTargets).toBe(1);
+    expect(stats.attackIntervalSeconds).toBeCloseTo(0.31875, 8);
+
+    const withoutHitHealing = new GameSession({
+      saved: { ...base, player: { ...base.player, hp: 80 } },
+    });
+    const withHitHealing = new GameSession({
+      saved: {
+        ...base,
+        player: { ...base.player, hp: 80 },
+        upgrades: ["invigorating-edge"],
+      },
+    });
+    advance(
+      withoutHitHealing,
+      gameplayTuning.baseAttackIntervalSeconds +
+        gameplayTuning.basicProjectileTravelSeconds,
+    );
+    advance(
+      withHitHealing,
+      gameplayTuning.baseAttackIntervalSeconds +
+        gameplayTuning.basicProjectileTravelSeconds,
+    );
+    expect(withHitHealing.snapshot().player.hp).toBeCloseTo(
+      withoutHitHealing.snapshot().player.hp + 1,
+      8,
+    );
+  });
+
   it("keeps Boss Core and upgrades runtime-only until a later manual campfire commit", () => {
     const baseline = savedAtHome();
     const session = new GameSession({ saved: baseline });
@@ -605,15 +655,26 @@ describe("GameSession", () => {
     advance(session, 1);
     expect(session.snapshot().resources.bossCore).toBe(1);
     expect(choices).toHaveLength(3);
-    expect(session.chooseUpgrade(choices[0])).toBe(true);
+    expect(choices).toContain("iron-skin");
+    const playerBeforeUpgrade = session.snapshot().player;
+    expect(session.chooseUpgrade("iron-skin")).toBe(true);
+    expect(session.snapshot().player.maxHp).toBe(
+      playerBeforeUpgrade.maxHp + 25,
+    );
+    expect(session.snapshot().player.hp).toBe(
+      Math.min(playerBeforeUpgrade.maxHp + 25, playerBeforeUpgrade.hp + 25),
+    );
 
     const unsavedReload = new GameSession({ saved: baseline });
     expect(unsavedReload.snapshot().resources.bossCore).toBe(0);
     expect(unsavedReload.snapshot().upgrades).toEqual([]);
 
-    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 3 });
-    advance(session, 1);
-    session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 4 });
+    session.setDestination({
+      destination: { x: 0, y: 0 },
+      source: "tap-to-move",
+      at: 3,
+    });
+    advance(session, 3);
     const request = session.createValidCampfireSaveRequest(99);
     expect(request).not.toBeNull();
     const storage = createBrowserSaveStorage(new MemoryStore());
@@ -623,7 +684,7 @@ describe("GameSession", () => {
       saved: storage.load().document ?? undefined,
     });
     expect(savedReload.snapshot().resources.bossCore).toBe(1);
-    expect(savedReload.snapshot().upgrades).toContain(choices[0]);
+    expect(savedReload.snapshot().upgrades).toContain("iron-skin");
   });
 
   it("respawns at the committed save-point position, applies the configured 25% loss, and never commits on death", () => {

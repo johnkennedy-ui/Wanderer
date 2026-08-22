@@ -1,4 +1,5 @@
-import { buildingDefinitions, upgradeDefinitions } from "../data/definitions";
+import { buildingDefinitions, upgradeDefinitionFor } from "../data/definitions";
+import { buildingKinds } from "../domain/types";
 import type {
   BuildingKind,
   GameSnapshot,
@@ -24,14 +25,6 @@ export interface GameUi {
   showTransient(message: string): void;
   dispose(): void;
 }
-
-const buildingKinds: readonly BuildingKind[] = [
-  "Campfire",
-  "Workshop",
-  "Farm",
-  "Storage",
-  "Healer",
-];
 
 const text = (element: HTMLElement, value: string): void => {
   element.textContent = value;
@@ -257,12 +250,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       if (upgradeChoices.dataset.choiceKey !== choiceKey) {
         upgradeChoices.replaceChildren();
         for (const id of snapshot.pendingUpgradeChoices) {
-          const definition = upgradeDefinitions.find(
-            (upgrade) => upgrade.id === id,
-          );
+          const definition = upgradeDefinitionFor(id);
           const button = document.createElement("button");
           button.dataset.testid = `upgrade-${id}`;
-          button.textContent = `${definition?.label ?? id}: ${definition?.description ?? ""}`;
+          button.textContent = `${definition.label}: ${definition.description}`;
           button.addEventListener("click", () => intents.chooseUpgrade(id));
           upgradeChoices.append(button);
         }

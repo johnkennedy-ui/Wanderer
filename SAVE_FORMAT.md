@@ -41,6 +41,8 @@ The current runtime accepts the released `wanderer-web-v1` generator. An unknown
 
 Persistent resource, building, enemy, boss, and upgrade IDs are opaque serialized values. They are append-only: display labels may change, but existing IDs must not be renamed or removed without an explicit compatibility definition, alias, or migration. Historical schema validators retain their own frozen values rather than importing an evolving active-ID list.
 
+Player-built building IDs keep their existing `building:<stable-world-seed-hash>:<session-serial>` strategy. The stable hash is derived from the world seed and the serial is the persisted `nextBuildingSerial` sequence; do not replace these compatible opaque IDs with GUIDs. A new building kind may be appended to the active catalogue only with the same explicit compatibility discipline.
+
 Runtime-only enemy cooldowns, projectiles, floor drops, Three.js meshes, DOM identity, keyboard/touch state, and framework identifiers are never persisted.
 
 ## Browser keys and recovery

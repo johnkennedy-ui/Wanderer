@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { resourceDefinitions } from "../../data/definitions";
 import type {
   BuildingKind,
+  EnemyKind,
   GameSnapshot,
   ProjectileState,
   Vector2,
@@ -20,26 +21,32 @@ export interface ThreeRenderer {
 const toWorld = (position: Vector2): THREE.Vector3 =>
   new THREE.Vector3(position.x, 0, -position.y);
 
-const buildingColor: Readonly<Record<BuildingKind, number>> = {
+export const buildingColors = Object.freeze({
   Campfire: 0xff9f43,
   Workshop: 0x8d6e63,
   Farm: 0x4caf50,
   Storage: 0x607d8b,
   Healer: 0x9c6ade,
-};
+} satisfies Record<BuildingKind, number>);
+
+interface EnemyPresentation {
+  readonly color: number;
+  readonly height: number;
+  readonly radius: number;
+}
+
+export const enemyPresentation = Object.freeze({
+  scout: Object.freeze({ color: 0xc75c5c, height: 0.85, radius: 0.43 }),
+  brute: Object.freeze({ color: 0x8e2424, height: 0.85, radius: 0.43 }),
+  spitter: Object.freeze({ color: 0x6a9f58, height: 0.85, radius: 0.43 }),
+  elite: Object.freeze({ color: 0xfbc02d, height: 0.85, radius: 0.6 }),
+  boss: Object.freeze({ color: 0xd84315, height: 1.45, radius: 0.85 }),
+} satisfies Record<EnemyKind, EnemyPresentation>);
 
 export const defaultThreeCameraTuning = Object.freeze({
   fieldOfViewDegrees: 58,
   playerOffset: { x: 11, y: 17, z: 14 },
 });
-
-const enemyColor = (kind: string): number => {
-  if (kind === "boss") return 0xd84315;
-  if (kind === "elite") return 0xfbc02d;
-  if (kind === "brute") return 0x8e2424;
-  if (kind === "spitter") return 0x6a9f58;
-  return 0xc75c5c;
-};
 
 const projectilePosition = (projectile: ProjectileState): Vector2 => ({
   x:
@@ -170,19 +177,19 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         const mesh = cylinder(
           0.48 + building.level * 0.07,
           0.7 + building.level * 0.15,
-          buildingColor[building.kind],
+          buildingColors[building.kind],
         );
         mesh.position.y = (0.7 + building.level * 0.15) / 2;
         addMarker(mesh, building.position);
       }
       for (const enemy of snapshot.enemies) {
-        const height = enemy.kind === "boss" ? 1.45 : 0.85;
+        const presentation = enemyPresentation[enemy.kind];
         const mesh = cylinder(
-          enemy.kind === "boss" ? 0.85 : enemy.kind === "elite" ? 0.6 : 0.43,
-          height,
-          enemyColor(enemy.kind),
+          presentation.radius,
+          presentation.height,
+          presentation.color,
         );
-        mesh.position.y = height / 2;
+        mesh.position.y = presentation.height / 2;
         addMarker(mesh, enemy.position);
       }
       for (const projectile of snapshot.projectiles) {

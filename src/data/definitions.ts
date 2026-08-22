@@ -1,3 +1,4 @@
+import { upgradeIds } from "../domain/types";
 import type {
   BuildingKind,
   EnemyKind,
@@ -30,22 +31,24 @@ export interface BuildingDefinition {
   readonly levelEffects: readonly [string, string, string];
 }
 
-export interface UpgradeModifier {
-  readonly attackDamageAdd?: number;
-  readonly attackIntervalMultiplier?: number;
-  readonly attackRangeMultiplier?: number;
-  readonly moveSpeedMultiplier?: number;
-  readonly maxHealthAdd?: number;
-  readonly chainTargets?: number;
-  readonly chainDamageMultiplier?: number;
-  readonly hitHeal?: number;
-}
+export type UpgradeEffect =
+  | { readonly kind: "attack-damage"; readonly amount: number }
+  | { readonly kind: "attack-interval"; readonly multiplier: number }
+  | { readonly kind: "attack-range"; readonly multiplier: number }
+  | { readonly kind: "move-speed"; readonly multiplier: number }
+  | { readonly kind: "maximum-health"; readonly amount: number }
+  | {
+      readonly kind: "chain-strike";
+      readonly targetCount: number;
+      readonly damageMultiplier: number;
+    }
+  | { readonly kind: "hit-heal"; readonly amount: number };
 
 export interface UpgradeDefinition {
   readonly id: UpgradeId;
   readonly label: string;
   readonly description: string;
-  readonly modifier: UpgradeModifier;
+  readonly effect: UpgradeEffect;
 }
 
 const authoredResourceDefinitions = {
@@ -213,73 +216,85 @@ const authoredBuildingDefinitions = {
 
 export const buildingDefinitions = deepFreeze(authoredBuildingDefinitions);
 
-const authoredUpgradeDefinitions = [
-  {
+type UpgradeDefinitionCatalogue = {
+  readonly [Id in UpgradeId]: UpgradeDefinition & { readonly id: Id };
+};
+
+const authoredUpgradeDefinitionsById = {
+  "sharpened-blade": {
     id: "sharpened-blade",
     label: "Sharpened Blade",
     description: "+7 basic attack damage.",
-    modifier: { attackDamageAdd: 7 },
+    effect: { kind: "attack-damage", amount: 7 },
   },
-  {
+  "quick-hands": {
     id: "quick-hands",
     label: "Quick Hands",
     description: "Attack 25% faster (attack interval ×0.75).",
-    modifier: { attackIntervalMultiplier: 0.75 },
+    effect: { kind: "attack-interval", multiplier: 0.75 },
   },
-  {
+  "iron-skin": {
     id: "iron-skin",
     label: "Iron Skin",
     description: "+25 maximum health and heal 25 immediately.",
-    modifier: { maxHealthAdd: 25 },
+    effect: { kind: "maximum-health", amount: 25 },
   },
-  {
+  "ember-aura": {
     id: "ember-aura",
     label: "Ember Aura",
     description: "+3 basic attack damage.",
-    modifier: { attackDamageAdd: 3 },
+    effect: { kind: "attack-damage", amount: 3 },
   },
-  {
+  "long-reach": {
     id: "long-reach",
     label: "Long Reach",
     description: "35% more basic-attack range.",
-    modifier: { attackRangeMultiplier: 1.35 },
+    effect: { kind: "attack-range", multiplier: 1.35 },
   },
-  {
+  "chain-strike": {
     id: "chain-strike",
     label: "Chain Strike",
     description:
       "Each basic hit also strikes one other nearby target for 50% damage.",
-    modifier: { chainTargets: 1, chainDamageMultiplier: 0.5 },
+    effect: {
+      kind: "chain-strike",
+      targetCount: 1,
+      damageMultiplier: 0.5,
+    },
   },
-  {
+  "invigorating-edge": {
     id: "invigorating-edge",
     label: "Invigorating Edge",
     description: "Restore 1 health for every basic hit that lands.",
-    modifier: { hitHeal: 1 },
+    effect: { kind: "hit-heal", amount: 1 },
   },
-  {
+  trailblazer: {
     id: "trailblazer",
     label: "Trailblazer",
     description: "15% faster movement.",
-    modifier: { moveSpeedMultiplier: 1.15 },
+    effect: { kind: "move-speed", multiplier: 1.15 },
   },
-  {
+  "fortified-heart": {
     id: "fortified-heart",
     label: "Fortified Heart",
     description: "+15 maximum health and heal 15 immediately.",
-    modifier: { maxHealthAdd: 15 },
+    effect: { kind: "maximum-health", amount: 15 },
   },
-  {
+  "keen-focus": {
     id: "keen-focus",
     label: "Keen Focus",
     description: "15% faster basic attacks (attack interval ×0.85).",
-    modifier: { attackIntervalMultiplier: 0.85 },
+    effect: { kind: "attack-interval", multiplier: 0.85 },
   },
-] satisfies readonly UpgradeDefinition[];
+} satisfies UpgradeDefinitionCatalogue;
 
-export const upgradeDefinitions = deepFreeze(authoredUpgradeDefinitions);
+export const upgradeDefinitionsById = deepFreeze(
+  authoredUpgradeDefinitionsById,
+);
 
-export const upgradeDefinitionFor = (
-  id: UpgradeId,
-): UpgradeDefinition | undefined =>
-  upgradeDefinitions.find((upgrade) => upgrade.id === id);
+export const upgradeDefinitions = deepFreeze(
+  upgradeIds.map((id) => upgradeDefinitionsById[id]),
+);
+
+export const upgradeDefinitionFor = (id: UpgradeId): UpgradeDefinition =>
+  upgradeDefinitionsById[id];

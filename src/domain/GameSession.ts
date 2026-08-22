@@ -5,6 +5,7 @@ import {
   resourceDefinitions,
   upgradeDefinitionFor,
   upgradeDefinitions,
+  type UpgradeEffect,
 } from "../data/definitions";
 import {
   add,
@@ -106,6 +107,10 @@ const copyVector = (position: Vector2): Vector2 => ({
 });
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
+
+const exhaustUpgradeEffect = (effect: never): never => {
+  throw new Error(`Unhandled upgrade effect: ${JSON.stringify(effect)}`);
+};
 
 const hashText = (text: string): number => {
   let hash = 2_166_136_261;
@@ -393,17 +398,10 @@ export class GameSession {
       return false;
     }
     this.upgrades.add(id);
-    const maxHealthIncrease =
-      upgradeDefinitionFor(id)?.modifier.maxHealthAdd ?? 0;
-    if (maxHealthIncrease > 0) {
-      this.player.maxHp += maxHealthIncrease;
-      this.player.hp = Math.min(
-        this.player.maxHp,
-        this.player.hp + maxHealthIncrease,
-      );
-    }
+    const upgrade = upgradeDefinitionFor(id);
+    this.applyUpgradeEffect(upgrade.effect);
     this.pendingUpgradeChoices = [];
-    this.message = `${upgradeDefinitionFor(id)?.label ?? id} applied in runtime. Campfire-save it to keep it.`;
+    this.message = `${upgrade.label} applied in runtime. Campfire-save it to keep it.`;
     return true;
   }
 
@@ -619,9 +617,7 @@ export class GameSession {
     if (this.attackElapsed < stats.attackIntervalSeconds) return;
     this.attackElapsed = 0;
 
-    const chainDamageMultiplier = this.upgradeModifierTotal(
-      "chainDamageMultiplier",
-    );
+    const projectileEffects = this.projectileUpgradeEffects();
     this.projectiles.push({
       id: "projectile:" + this.nextProjectileSerial.toString().padStart(4, "0"),
       origin: copyVector(this.player.position),
@@ -629,13 +625,13 @@ export class GameSession {
       targetPosition: copyVector(target.position),
       damage: stats.attackDamage,
       chainTargetIds:
-        stats.chainTargets > 0 && chainDamageMultiplier > 0
+        stats.chainTargets > 0 && projectileEffects.chainDamageMultiplier > 0
           ? targets
               .slice(1, 1 + stats.chainTargets)
               .map((secondary) => secondary.id)
           : [],
-      chainDamage: stats.attackDamage * chainDamageMultiplier,
-      hitHeal: this.upgradeModifierTotal("hitHeal"),
+      chainDamage: stats.attackDamage * projectileEffects.chainDamageMultiplier,
+      hitHeal: projectileEffects.hitHeal,
       elapsed: 0,
     });
     this.nextProjectileSerial += 1;
@@ -1053,13 +1049,29 @@ export class GameSession {
     let chainTargets = 0;
 
     for (const id of this.upgrades) {
-      const modifier = upgradeDefinitionFor(id)?.modifier;
-      if (modifier === undefined) continue;
-      attackDamage += modifier.attackDamageAdd ?? 0;
-      attackIntervalSeconds *= modifier.attackIntervalMultiplier ?? 1;
-      attackRange *= modifier.attackRangeMultiplier ?? 1;
-      moveSpeed *= modifier.moveSpeedMultiplier ?? 1;
-      chainTargets += modifier.chainTargets ?? 0;
+      const effect = upgradeDefinitionFor(id).effect;
+      switch (effect.kind) {
+        case "attack-damage":
+          attackDamage += effect.amount;
+          break;
+        case "attack-interval":
+          attackIntervalSeconds *= effect.multiplier;
+          break;
+        case "attack-range":
+          attackRange *= effect.multiplier;
+          break;
+        case "move-speed":
+          moveSpeed *= effect.multiplier;
+          break;
+        case "chain-strike":
+          chainTargets += effect.targetCount;
+          break;
+        case "maximum-health":
+        case "hit-heal":
+          break;
+        default:
+          exhaustUpgradeEffect(effect);
+      }
     }
     return {
       attackDamage,
@@ -1070,13 +1082,53 @@ export class GameSession {
     };
   }
 
-  private upgradeModifierTotal(
-    field: "chainDamageMultiplier" | "hitHeal",
-  ): number {
-    return [...this.upgrades].reduce(
-      (total, id) => total + (upgradeDefinitionFor(id)?.modifier[field] ?? 0),
-      0,
-    );
+  private projectileUpgradeEffects(): {
+    readonly chainDamageMultiplier: number;
+    readonly hitHeal: number;
+  } {
+    let chainDamageMultiplier = 0;
+    let hitHeal = 0;
+    for (const id of this.upgrades) {
+      const effect = upgradeDefinitionFor(id).effect;
+      switch (effect.kind) {
+        case "chain-strike":
+          chainDamageMultiplier += effect.damageMultiplier;
+          break;
+        case "hit-heal":
+          hitHeal += effect.amount;
+          break;
+        case "attack-damage":
+        case "attack-interval":
+        case "attack-range":
+        case "move-speed":
+        case "maximum-health":
+          break;
+        default:
+          exhaustUpgradeEffect(effect);
+      }
+    }
+    return { chainDamageMultiplier, hitHeal };
+  }
+
+  private applyUpgradeEffect(effect: UpgradeEffect): void {
+    switch (effect.kind) {
+      case "maximum-health":
+        this.player.maxHp += effect.amount;
+        this.player.hp = Math.min(
+          this.player.maxHp,
+          this.player.hp + effect.amount,
+        );
+        return;
+      case "attack-damage":
+      case "attack-interval":
+      case "attack-range":
+      case "move-speed":
+      case "chain-strike":
+      case "hit-heal":
+        return;
+      default:
+        return exhaustUpgradeEffect(effect);
+    }
   }
 
   private describeEffects(): string[] {
@@ -1091,8 +1143,7 @@ export class GameSession {
       );
     for (const id of this.upgrades) {
       const upgrade = upgradeDefinitionFor(id);
-      if (upgrade !== undefined)
-        effects.push(`${upgrade.label}: ${upgrade.description}`);
+      effects.push(`${upgrade.label}: ${upgrade.description}`);
     }
     return effects;
   }

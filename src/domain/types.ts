@@ -37,7 +37,15 @@ export interface DestinationCommand {
   readonly at: number;
 }
 
-export type EnemyKind = "scout" | "brute" | "spitter" | "elite" | "boss";
+export const enemyKinds = Object.freeze([
+  "scout",
+  "brute",
+  "spitter",
+  "elite",
+  "boss",
+] as const);
+
+export type EnemyKind = (typeof enemyKinds)[number];
 
 export interface EnemyState {
   readonly id: string;
@@ -68,8 +76,15 @@ export interface FloorDropState {
   readonly position: Vector2;
 }
 
-export type BuildingKind =
-  "Campfire" | "Workshop" | "Farm" | "Storage" | "Healer";
+export const buildingKinds = Object.freeze([
+  "Campfire",
+  "Workshop",
+  "Farm",
+  "Storage",
+  "Healer",
+] as const);
+
+export type BuildingKind = (typeof buildingKinds)[number];
 
 export interface BuildingState {
   readonly id: string;
