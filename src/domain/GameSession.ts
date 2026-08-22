@@ -17,7 +17,6 @@ import {
 } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import { commonResourceKinds, emptyResources, resourceKinds } from "./types";
-import { copyGameNotice } from "./notices";
 import type {
   GameNotice,
   GameSnapshot,
@@ -34,7 +33,6 @@ import type {
   FloorDropState,
   InputSource,
   MoveCommand,
-  ProjectileState,
   ResourceBag,
   ReadonlyResourceBag,
   CurrentSave,
@@ -62,6 +60,7 @@ import type {
   SessionState,
   SettlementCampfire,
 } from "./session/sessionState";
+import { projectGameSnapshot } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 
 /** Compatibility export for callers that have not yet moved to inputPolicy. */
@@ -439,64 +438,6 @@ export class GameSession {
     const visibleChunks = visibleChunkCoordinates(this.player.position).map(
       (coordinate) => generateChunk(this.world, coordinate),
     );
-    const visibleChunkKeys = new Set(visibleChunks.map((chunk) => chunk.key));
-    const world = { ...this.world };
-    const player = {
-      position: copyVector(this.player.position),
-      hp: this.player.hp,
-      maxHp: this.player.maxHp,
-    };
-    const resources = cloneResources(this.resources);
-    const buildings = this.buildings.map((building) => ({
-      ...building,
-      position: copyVector(building.position),
-    }));
-    const visibleBuildings = buildings.filter((building) =>
-      visibleChunkKeys.has(chunkKey(chunkCoordinateFor(building.position))),
-    );
-    const enemies = [...this.enemies.values()]
-      .filter(
-        (enemy) =>
-          !enemy.defeated &&
-          visibleChunkKeys.has(chunkKey(chunkCoordinateFor(enemy.position))),
-      )
-      .map((enemy) => ({
-        id: enemy.id,
-        kind: enemy.kind,
-        position: copyVector(enemy.position),
-        hp: enemy.hp,
-        maxHp: enemy.maxHp,
-        damage: enemy.damage,
-        dangerTier: enemy.dangerTier,
-        respawnAt: enemy.respawnAt,
-        defeated: enemy.defeated,
-      }))
-      .sort((left, right) => left.id.localeCompare(right.id));
-    const projectiles = this.projectiles.map((projectile): ProjectileState => {
-      const target = this.enemies.get(projectile.targetId);
-      return {
-        id: projectile.id,
-        origin: copyVector(projectile.origin),
-        targetId: projectile.targetId,
-        targetPosition: copyVector(
-          target !== undefined && !target.defeated
-            ? target.position
-            : projectile.targetPosition,
-        ),
-        progress: Math.min(
-          1,
-          projectile.elapsed / gameplayTuning.basicProjectileTravelSeconds,
-        ),
-      };
-    });
-    const floorDrops = this.floorDrops
-      .filter((drop) =>
-        visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
-      )
-      .map((drop): FloorDropState => ({
-        ...drop,
-        position: copyVector(drop.position),
-      }));
     const moving =
       this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
@@ -507,60 +448,32 @@ export class GameSession {
     const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
     const canSave = savePoint !== null;
     const savePointLabel = savePoint?.label ?? null;
-    const notice = copyGameNotice(this.notice);
-    const ui = {
-      world,
-      player,
-      resources,
-      materialCapacity,
-      buildRadius,
-      inputSource: this.input.source,
-      combatStatus: this.combatStatus,
-      projectileCount: projectiles.length,
-      buildings,
-      effects,
-      pendingUpgradeChoices,
-      canSave,
-      savePointLabel,
-      notice,
-    };
-    const renderer = {
-      player,
-      enemies,
-      projectiles,
-      floorDrops,
-      visibleBuildings,
-      visibleChunks,
-    };
-    return {
-      ui,
-      renderer,
-      world,
-      player,
-      resources,
+    return projectGameSnapshot({
+      world: this.world,
+      player: this.player,
+      resources: this.resources,
       materialCapacity,
       buildRadius,
       deathResourceLossRate: gameplayTuning.deathResourceLossRate,
       combatStats,
-      enemies,
-      projectiles,
-      floorDrops,
-      buildings,
-      visibleBuildings,
+      enemies: this.enemies,
+      projectiles: this.projectiles,
+      floorDrops: this.floorDrops,
+      buildings: this.buildings,
       visibleChunks,
       moving,
       inputSource: this.input.source,
-      destination:
-        this.destination === null ? null : copyVector(this.destination),
+      destination: this.destination,
       combatStatus: this.combatStatus,
       effects,
-      defeatedBossIds: [...this.defeatedBossIds].sort(),
-      upgrades: [...this.upgrades].sort(),
+      defeatedBossIds: this.defeatedBossIds,
+      upgrades: this.upgrades,
       pendingUpgradeChoices,
       canSave,
       savePointLabel,
-      notice,
-    };
+      notice: this.notice,
+      projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
+    });
   }
 
   private ensureNeighborhoodEnemies(): void {

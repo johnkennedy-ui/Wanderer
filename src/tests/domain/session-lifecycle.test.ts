@@ -150,6 +150,65 @@ describe("GameSession lifecycle", () => {
     });
   });
 
+  it("keeps legacy aggregate, UI, and renderer snapshots aligned without exposing session state", () => {
+    const session = new GameSession();
+    const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
+    if (!placed.ok) throw new Error("Workshop should be placed");
+    expect(session.placeBuilding("Workshop", { x: 48.1, y: 48.1 })).toEqual({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
+
+    const snapshot = session.snapshot();
+    expect(snapshot.ui.world).toBe(snapshot.world);
+    expect(snapshot.ui.player).toBe(snapshot.player);
+    expect(snapshot.ui.resources).toBe(snapshot.resources);
+    expect(snapshot.ui.buildings).toBe(snapshot.buildings);
+    expect(snapshot.ui.effects).toBe(snapshot.effects);
+    expect(snapshot.ui.pendingUpgradeChoices).toBe(
+      snapshot.pendingUpgradeChoices,
+    );
+    expect(snapshot.ui.notice).toBe(snapshot.notice);
+    expect(snapshot.renderer.player).toBe(snapshot.player);
+    expect(snapshot.renderer.enemies).toBe(snapshot.enemies);
+    expect(snapshot.renderer.projectiles).toBe(snapshot.projectiles);
+    expect(snapshot.renderer.floorDrops).toBe(snapshot.floorDrops);
+    expect(snapshot.renderer.visibleBuildings).toBe(snapshot.visibleBuildings);
+    expect(snapshot.renderer.visibleChunks).toBe(snapshot.visibleChunks);
+
+    const rejection = snapshot.notice;
+    if (rejection.kind !== "building.rejected")
+      throw new Error("fixture should expose a typed building rejection");
+    const placementRejection = rejection.rejection;
+    if (placementRejection.kind !== "outside-settlement-radius")
+      throw new Error("fixture should expose a radius rejection");
+    const expected = {
+      worldSeed: snapshot.world.seed,
+      playerPosition: { ...snapshot.player.position },
+      wood: snapshot.resources.wood,
+      buildingPosition: { ...snapshot.buildings[0]!.position },
+      rejectionRadius: placementRejection.radius,
+    };
+    (snapshot.world as { seed: string }).seed = "mutated-snapshot";
+    (snapshot.player.position as { x: number }).x = 99;
+    (snapshot.resources as { wood: number }).wood = 0;
+    (snapshot.buildings[0]!.position as { x: number }).x = 99;
+    (placementRejection as { radius: number }).radius = 0;
+
+    const later = session.snapshot();
+    expect(later.world.seed).toBe(expected.worldSeed);
+    expect(later.player.position).toEqual(expected.playerPosition);
+    expect(later.resources.wood).toBe(expected.wood);
+    expect(later.buildings[0]!.position).toEqual(expected.buildingPosition);
+    expect(later.notice).toEqual({
+      kind: "building.rejected",
+      rejection: {
+        kind: "outside-settlement-radius",
+        radius: expected.rejectionRadius,
+      },
+    });
+  });
+
   it("uses typed outcomes and gives UI and renderer narrow projections", () => {
     const session = new GameSession();
     const fresh = session.snapshot();
