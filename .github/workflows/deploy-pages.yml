@@ -1,18 +1,21 @@
-name: Deploy Pages
+name: Verify and deploy Pages
 
 on:
+  pull_request:
   push:
     branches:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: pages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,11 +23,40 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Build
+      - name: Run canonical verification
+        run: npm run verify
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run built-output browser verification
+        run: npm run test:browser
+
+  build-pages:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Pages artifact from validated commit
         env:
           VITE_BASE_PATH: /Wanderer/
         run: npm run build
@@ -36,8 +68,11 @@ jobs:
           path: dist
 
   deploy:
-    needs: build
+    needs: build-pages
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

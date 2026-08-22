@@ -1,21 +1,20 @@
-export const resourceKinds = [
+export const resourceKinds = Object.freeze([
   "wood",
   "stone",
   "scrap",
   "essence",
   "bossCore",
-] as const;
+] as const);
 
 export type ResourceKind = (typeof resourceKinds)[number];
 export type CommonResourceKind = Exclude<ResourceKind, "bossCore">;
-export const commonResourceKinds: readonly CommonResourceKind[] = [
-  "wood",
-  "stone",
-  "scrap",
-  "essence",
-];
+export const commonResourceKinds: readonly CommonResourceKind[] = Object.freeze(
+  ["wood", "stone", "scrap", "essence"] as const,
+);
 
 export type ResourceBag = Record<ResourceKind, number>;
+/** Immutable authored resource quantities such as costs, drops, and harvests. */
+export type ReadonlyResourceBag = Readonly<ResourceBag>;
 
 export interface Vector2 {
   readonly x: number;
@@ -38,7 +37,15 @@ export interface DestinationCommand {
   readonly at: number;
 }
 
-export type EnemyKind = "scout" | "brute" | "spitter" | "elite" | "boss";
+export const enemyKinds = Object.freeze([
+  "scout",
+  "brute",
+  "spitter",
+  "elite",
+  "boss",
+] as const);
+
+export type EnemyKind = (typeof enemyKinds)[number];
 
 export interface EnemyState {
   readonly id: string;
@@ -69,8 +76,15 @@ export interface FloorDropState {
   readonly position: Vector2;
 }
 
-export type BuildingKind =
-  "Campfire" | "Workshop" | "Farm" | "Storage" | "Healer";
+export const buildingKinds = Object.freeze([
+  "Campfire",
+  "Workshop",
+  "Farm",
+  "Storage",
+  "Healer",
+] as const);
+
+export type BuildingKind = (typeof buildingKinds)[number];
 
 export interface BuildingState {
   readonly id: string;
@@ -79,7 +93,7 @@ export interface BuildingState {
   readonly level: 1 | 2 | 3;
 }
 
-export const upgradeIds = [
+export const upgradeIds = Object.freeze([
   "sharpened-blade",
   "quick-hands",
   "iron-skin",
@@ -90,7 +104,7 @@ export const upgradeIds = [
   "trailblazer",
   "fortified-heart",
   "keen-focus",
-] as const;
+] as const);
 
 export type UpgradeId = (typeof upgradeIds)[number];
 
@@ -141,12 +155,6 @@ export interface ChunkRecipe {
   readonly spawns: readonly ChunkSpawn[];
 }
 
-export interface PlacementResult {
-  readonly ok: boolean;
-  readonly reason: string;
-  readonly building?: BuildingState;
-}
-
 export interface CombatStats {
   readonly attackDamage: number;
   readonly attackIntervalSeconds: number;
@@ -155,34 +163,11 @@ export interface CombatStats {
   readonly chainTargets: number;
 }
 
-export interface GameSnapshot {
-  readonly world: WorldIdentity;
-  readonly player: PlayerState;
-  readonly resources: ResourceBag;
-  readonly materialCapacity: number;
-  readonly buildRadius: number;
-  readonly deathResourceLossRate: number;
-  readonly combatStats: CombatStats;
-  readonly enemies: readonly EnemyState[];
-  readonly projectiles: readonly ProjectileState[];
-  readonly floorDrops: readonly FloorDropState[];
-  readonly buildings: readonly BuildingState[];
-  readonly visibleBuildings: readonly BuildingState[];
-  readonly visibleChunks: readonly ChunkRecipe[];
-  readonly moving: boolean;
-  readonly inputSource: InputSource;
-  readonly destination: Vector2 | null;
-  readonly combatStatus: string;
-  readonly effects: readonly string[];
-  readonly defeatedBossIds: readonly string[];
-  readonly upgrades: readonly UpgradeId[];
-  readonly pendingUpgradeChoices: readonly UpgradeId[];
-  readonly canSave: boolean;
-  readonly savePointLabel: string | null;
-  readonly message: string;
-}
-
-export interface SaveDocument {
+/**
+ * Current in-memory state used to hydrate a GameSession. The frozen released
+ * schema-2 wire DTO lives independently in persistence/saveV2.ts.
+ */
+export interface CurrentSave {
   readonly schemaVersion: 2;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
@@ -196,8 +181,11 @@ export interface SaveDocument {
   readonly savePointPosition: Vector2;
 }
 
+/** Compatibility alias for callers that still use the historical name. */
+export type SaveDocument = CurrentSave;
+
 export interface ValidCampfireSaveRequest {
-  readonly document: SaveDocument;
+  readonly document: CurrentSave;
   readonly savePointLabel: string;
 }
 

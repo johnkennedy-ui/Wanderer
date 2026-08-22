@@ -1,10 +1,12 @@
+import { upgradeIds } from "../domain/types";
 import type {
   BuildingKind,
   EnemyKind,
-  ResourceBag,
   ResourceKind,
+  ReadonlyResourceBag,
   UpgradeId,
 } from "../domain/types";
+import { deepFreeze } from "./deepFreeze";
 
 export interface ResourceDefinition {
   readonly label: string;
@@ -19,37 +21,37 @@ export interface EnemyDefinition {
   readonly moveSpeed: number;
   readonly attackEverySeconds: number;
   readonly respawnSeconds: number | null;
-  readonly drops: ResourceBag;
+  readonly drops: ReadonlyResourceBag;
 }
 
 export interface BuildingDefinition {
   readonly label: string;
-  readonly baseCost: ResourceBag;
+  readonly baseCost: ReadonlyResourceBag;
   readonly description: string;
   readonly levelEffects: readonly [string, string, string];
 }
 
-export interface UpgradeModifier {
-  readonly attackDamageAdd?: number;
-  readonly attackIntervalMultiplier?: number;
-  readonly attackRangeMultiplier?: number;
-  readonly moveSpeedMultiplier?: number;
-  readonly maxHealthAdd?: number;
-  readonly chainTargets?: number;
-  readonly chainDamageMultiplier?: number;
-  readonly hitHeal?: number;
-}
+export type UpgradeEffect =
+  | { readonly kind: "attack-damage"; readonly amount: number }
+  | { readonly kind: "attack-interval"; readonly multiplier: number }
+  | { readonly kind: "attack-range"; readonly multiplier: number }
+  | { readonly kind: "move-speed"; readonly multiplier: number }
+  | { readonly kind: "maximum-health"; readonly amount: number }
+  | {
+      readonly kind: "chain-strike";
+      readonly targetCount: number;
+      readonly damageMultiplier: number;
+    }
+  | { readonly kind: "hit-heal"; readonly amount: number };
 
 export interface UpgradeDefinition {
   readonly id: UpgradeId;
   readonly label: string;
   readonly description: string;
-  readonly modifier: UpgradeModifier;
+  readonly effect: UpgradeEffect;
 }
 
-export const resourceDefinitions: Readonly<
-  Record<ResourceKind, ResourceDefinition>
-> = Object.freeze({
+const authoredResourceDefinitions = {
   wood: {
     label: "Wood",
     storageLimited: true,
@@ -81,9 +83,11 @@ export const resourceDefinitions: Readonly<
       "Boss progression currency; saved but exempt from Storage capacity.",
     groundDropColor: 0xffd54f,
   },
-});
+} satisfies Record<ResourceKind, ResourceDefinition>;
 
-export const gameplayTuning = Object.freeze({
+export const resourceDefinitions = deepFreeze(authoredResourceDefinitions);
+
+const authoredGameplayTuning = {
   deathResourceLossRate: 0.25,
   baseMaterialCapacity: 120,
   storageCapacityBonusByLevel: [60, 140, 240] as const,
@@ -94,7 +98,7 @@ export const gameplayTuning = Object.freeze({
     { wood: 2, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
     { wood: 4, stone: 2, scrap: 1, essence: 0, bossCore: 0 },
     { wood: 6, stone: 3, scrap: 2, essence: 1, bossCore: 0 },
-  ] as const satisfies readonly ResourceBag[],
+  ] as const satisfies readonly ReadonlyResourceBag[],
   baseCampfireHealingPerSecond: 2,
   healerHealingBonusByLevel: [1, 3, 6] as const,
   buildingRefundRate: 0.5,
@@ -107,55 +111,56 @@ export const gameplayTuning = Object.freeze({
   baseMoveSpeed: 3,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
-});
+};
 
-export const enemyDefinitions: Readonly<Record<EnemyKind, EnemyDefinition>> =
-  Object.freeze({
-    scout: {
-      maxHp: 24,
-      damage: 3,
-      moveSpeed: 3.2,
-      attackEverySeconds: 1.2,
-      respawnSeconds: 12,
-      drops: { wood: 5, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
-    },
-    brute: {
-      maxHp: 38,
-      damage: 5,
-      moveSpeed: 1.35,
-      attackEverySeconds: 1.5,
-      respawnSeconds: 14,
-      drops: { wood: 1, stone: 5, scrap: 2, essence: 0, bossCore: 0 },
-    },
-    spitter: {
-      maxHp: 28,
-      damage: 4,
-      moveSpeed: 1.75,
-      attackEverySeconds: 1.1,
-      respawnSeconds: 13,
-      drops: { wood: 2, stone: 1, scrap: 4, essence: 0, bossCore: 0 },
-    },
-    elite: {
-      maxHp: 56,
-      damage: 7,
-      moveSpeed: 1.5,
-      attackEverySeconds: 1.4,
-      respawnSeconds: 20,
-      drops: { wood: 7, stone: 7, scrap: 6, essence: 2, bossCore: 0 },
-    },
-    boss: {
-      maxHp: 72,
-      damage: 9,
-      moveSpeed: 1.25,
-      attackEverySeconds: 1.3,
-      respawnSeconds: null,
-      drops: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 1 },
-    },
-  });
+export const gameplayTuning = deepFreeze(authoredGameplayTuning);
 
-export const buildingDefinitions: Readonly<
-  Record<BuildingKind, BuildingDefinition>
-> = Object.freeze({
+const authoredEnemyDefinitions = {
+  scout: {
+    maxHp: 24,
+    damage: 3,
+    moveSpeed: 3.2,
+    attackEverySeconds: 1.2,
+    respawnSeconds: 12,
+    drops: { wood: 5, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
+  },
+  brute: {
+    maxHp: 38,
+    damage: 5,
+    moveSpeed: 1.35,
+    attackEverySeconds: 1.5,
+    respawnSeconds: 14,
+    drops: { wood: 1, stone: 5, scrap: 2, essence: 0, bossCore: 0 },
+  },
+  spitter: {
+    maxHp: 28,
+    damage: 4,
+    moveSpeed: 1.75,
+    attackEverySeconds: 1.1,
+    respawnSeconds: 13,
+    drops: { wood: 2, stone: 1, scrap: 4, essence: 0, bossCore: 0 },
+  },
+  elite: {
+    maxHp: 56,
+    damage: 7,
+    moveSpeed: 1.5,
+    attackEverySeconds: 1.4,
+    respawnSeconds: 20,
+    drops: { wood: 7, stone: 7, scrap: 6, essence: 2, bossCore: 0 },
+  },
+  boss: {
+    maxHp: 72,
+    damage: 9,
+    moveSpeed: 1.25,
+    attackEverySeconds: 1.3,
+    respawnSeconds: null,
+    drops: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 1 },
+  },
+} satisfies Record<EnemyKind, EnemyDefinition>;
+
+export const enemyDefinitions = deepFreeze(authoredEnemyDefinitions);
+
+const authoredBuildingDefinitions = {
   Campfire: {
     label: "Campfire",
     baseCost: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
@@ -207,73 +212,89 @@ export const buildingDefinitions: Readonly<
       "L3: +6 health/s near a campfire.",
     ],
   },
-});
+} satisfies Record<BuildingKind, BuildingDefinition>;
 
-export const upgradeDefinitions: readonly UpgradeDefinition[] = Object.freeze([
-  {
+export const buildingDefinitions = deepFreeze(authoredBuildingDefinitions);
+
+type UpgradeDefinitionCatalogue = {
+  readonly [Id in UpgradeId]: UpgradeDefinition & { readonly id: Id };
+};
+
+const authoredUpgradeDefinitionsById = {
+  "sharpened-blade": {
     id: "sharpened-blade",
     label: "Sharpened Blade",
     description: "+7 basic attack damage.",
-    modifier: { attackDamageAdd: 7 },
+    effect: { kind: "attack-damage", amount: 7 },
   },
-  {
+  "quick-hands": {
     id: "quick-hands",
     label: "Quick Hands",
     description: "Attack 25% faster (attack interval ×0.75).",
-    modifier: { attackIntervalMultiplier: 0.75 },
+    effect: { kind: "attack-interval", multiplier: 0.75 },
   },
-  {
+  "iron-skin": {
     id: "iron-skin",
     label: "Iron Skin",
     description: "+25 maximum health and heal 25 immediately.",
-    modifier: { maxHealthAdd: 25 },
+    effect: { kind: "maximum-health", amount: 25 },
   },
-  {
+  "ember-aura": {
     id: "ember-aura",
     label: "Ember Aura",
     description: "+3 basic attack damage.",
-    modifier: { attackDamageAdd: 3 },
+    effect: { kind: "attack-damage", amount: 3 },
   },
-  {
+  "long-reach": {
     id: "long-reach",
     label: "Long Reach",
     description: "35% more basic-attack range.",
-    modifier: { attackRangeMultiplier: 1.35 },
+    effect: { kind: "attack-range", multiplier: 1.35 },
   },
-  {
+  "chain-strike": {
     id: "chain-strike",
     label: "Chain Strike",
     description:
       "Each basic hit also strikes one other nearby target for 50% damage.",
-    modifier: { chainTargets: 1, chainDamageMultiplier: 0.5 },
+    effect: {
+      kind: "chain-strike",
+      targetCount: 1,
+      damageMultiplier: 0.5,
+    },
   },
-  {
+  "invigorating-edge": {
     id: "invigorating-edge",
     label: "Invigorating Edge",
     description: "Restore 1 health for every basic hit that lands.",
-    modifier: { hitHeal: 1 },
+    effect: { kind: "hit-heal", amount: 1 },
   },
-  {
+  trailblazer: {
     id: "trailblazer",
     label: "Trailblazer",
     description: "15% faster movement.",
-    modifier: { moveSpeedMultiplier: 1.15 },
+    effect: { kind: "move-speed", multiplier: 1.15 },
   },
-  {
+  "fortified-heart": {
     id: "fortified-heart",
     label: "Fortified Heart",
     description: "+15 maximum health and heal 15 immediately.",
-    modifier: { maxHealthAdd: 15 },
+    effect: { kind: "maximum-health", amount: 15 },
   },
-  {
+  "keen-focus": {
     id: "keen-focus",
     label: "Keen Focus",
     description: "15% faster basic attacks (attack interval ×0.85).",
-    modifier: { attackIntervalMultiplier: 0.85 },
+    effect: { kind: "attack-interval", multiplier: 0.85 },
   },
-]);
+} satisfies UpgradeDefinitionCatalogue;
 
-export const upgradeDefinitionFor = (
-  id: UpgradeId,
-): UpgradeDefinition | undefined =>
-  upgradeDefinitions.find((upgrade) => upgrade.id === id);
+export const upgradeDefinitionsById = deepFreeze(
+  authoredUpgradeDefinitionsById,
+);
+
+export const upgradeDefinitions = deepFreeze(
+  upgradeIds.map((id) => upgradeDefinitionsById[id]),
+);
+
+export const upgradeDefinitionFor = (id: UpgradeId): UpgradeDefinition =>
+  upgradeDefinitionsById[id];

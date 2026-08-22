@@ -57,9 +57,11 @@ input source != gameplay command
   must not call those APIs directly.
 - Rendering, DOM, chunk visuals, UI, and pooled meshes are disposable
   projections. They never own player, world, building, combat, or save state.
-- Definitions have stable IDs and are immutable. Runtime buildings use stable
-  GUIDs; persistent procedural objects use deterministic IDs. Never persist
-  render, DOM, or framework instance IDs.
+- Definitions have opaque, append-only IDs and are immutable. Player-built
+  buildings retain the serialized `building:<stable-world-seed-hash>:<session-serial>`
+  form; persistent procedural objects use deterministic IDs. Do not replace
+  either compatible ID strategy with GUIDs. Never persist render, DOM, or
+  framework instance IDs.
 - Deterministic generation receives explicit domain-derived seeds. Do not use
   `Math.random()` or one shared PRNG stream as world authority; named terrain,
   POI, campfire, boss, encounter, and cosmetic streams are required.
@@ -93,3 +95,82 @@ input source != gameplay command
 - Do not publish, push, upload a build, use credentials, contact Google Play,
   install an Android artifact, or change global SDK/toolchain configuration
   without separately verified authority and evidence.
+
+## Compatibility-safe maintenance workflow
+
+`createGameApplication` is the one composition root. It explicitly owns one
+ordinary `GameSession`, which owns all retained gameplay state. Fresh and reset
+state comes from `createFreshSessionState`; saved state is cloned through
+`hydrateSessionState`; `projectCurrentSave` is the narrow copy-out boundary for
+explicit persistence. These are factories and projections, not registries or
+shared state.
+
+`GameNotice` is an instance-owned discriminated outcome. The UI translates its
+`kind` and facts through `noticePresentation.ts`; it must never infer gameplay
+behaviour by matching English display text. New presentation consumers should
+use the narrow `GameUiSnapshot` or `GameRendererSnapshot` projections. The
+legacy `GameSnapshot` aggregate is a transitional read-only facade, never a
+second authority.
+
+Allowed patterns include immutable module constants, deeply frozen authored
+catalogues, immutable generator-dispatch tables, pure functions, explicit
+narrow interfaces, test fixtures/factories, and disposable caches owned by a
+session, renderer, or adapter instance. Prohibited patterns include mutable
+module-level `let`/`var`, exported mutable state bags, module-level runtime
+`Map`/`Set`/arrays, mutable static state, global stores or event buses, service
+locators, generic `Services` bags, dependency containers, automatic feature or
+service registration, reflection-based discovery, and concrete adapter
+reach-through. `ARCHITECTURE.md` defines the exact dependency rules and their
+machine-enforced coverage.
+
+Before a compatibility-sensitive change, identify whether it affects the save
+wire shape, persistent IDs, storage recovery, or deterministic output. Use a
+feature branch; never push directly to `main`; keep each commit bounded to one
+reviewable phase; and run fresh validation after every phase. Do not rewrite
+historical save or world fixtures just to make a changed implementation pass.
+
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
+```bash
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
+```
+
+After that browser prerequisite, the required local release gate is:
+
+```bash
+npm ci
+npm run verify
+npm run test:browser
+VITE_BASE_PATH=/Wanderer/ npm run build
+```
+
+`npm run test:browser` builds `dist/`, serves it with `vite preview`, and
+exercises both `/` and `/Wanderer/`; it is not a Vite development-server test.
+See `TEST_MATRIX.md` for the covered browser scenarios.
+
+### Change classification
+
+| Change                          | Save schema            | Generator version     | Required treatment                                                        |
+| ------------------------------- | ---------------------- | --------------------- | ------------------------------------------------------------------------- |
+| Internal refactor               | No                     | No                    | Existing save and world fixtures remain identical.                        |
+| UI, renderer, or control change | No                     | No                    | Keep adapters non-authoritative and validate built output.                |
+| Display-label change            | No                     | No                    | Keep the persistent ID unchanged.                                         |
+| Add optional content            | Usually no             | Usually no            | Append an ID and provide compatible defaults/definitions.                 |
+| Add required persisted field    | New schema when needed | No                    | Provide a pure, explicit migration.                                       |
+| Change procedural output or IDs | No map migration       | New generator version | Preserve the released implementation and add a new version.               |
+| Rename or remove a persisted ID | Prohibited by default  | Possibly              | Retain an alias/definition or provide an explicit migration.              |
+| Change storage adapter          | No                     | No                    | Preserve load, commit, temporary, primary, and backup recovery semantics. |
+
+### Completion report
+
+Every completed compatibility-sensitive change must report the feature branch,
+baseline and final commit hashes, bounded commits and files changed, commands
+actually run with results, compatibility impact (schema, keys, historical
+saves, generator output, IDs, gameplay, and deployment path), remaining risks,
+and final `git status --short`. Never claim a push, pull request, deployment,
+native verification, or passing command without direct evidence.

@@ -1,6 +1,6 @@
-import { MOVEMENT_THRESHOLD } from "../../domain/GameSession";
+import { MOVEMENT_THRESHOLD } from "../../domain/inputPolicy";
 import type { MoveCommand, Vector2 } from "../../domain/types";
-import type { InputAdapter, MoveSink } from "./keyboardInput";
+import type { InputAdapter, MoveSink } from "./inputContracts";
 
 const STICK_RADIUS = 42;
 const DRIFT_THRESHOLD = MOVEMENT_THRESHOLD;

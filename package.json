@@ -3,14 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
+    "format:check": "prettier --check \"src/**/*.{ts,mjs,css}\" \"*.{ts,json,md}\" \"!FRANK_WANDERER_MAINTAINABILITY_HARDENING.md\" \".github/**/*.{yml,yaml}\" \"Documentation~/*.md\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check:architecture": "node src/tests/architecture-guard.mjs",
     "build": "vite build",
-    "test:browser": "npm run build && playwright test",
-    "format": "prettier --write \"src/**/*.{ts,mjs,css}\" \"*.{ts,json,md}\" \"Documentation~/*.md\"",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "verify": "npm run format:check && npm run typecheck && npm run test && npm run check:architecture && npm run build",
+    "test:browser": "VITE_BASE_PATH=/ npm run build && VITE_BASE_PATH=/ PLAYWRIGHT_BASE_PATH=/ playwright test && VITE_BASE_PATH=/Wanderer/ npm run build && VITE_BASE_PATH=/Wanderer/ PLAYWRIGHT_BASE_PATH=/Wanderer/ playwright test",
+    "format": "prettier --write \"src/**/*.{ts,mjs,css}\" \"*.{ts,json,md}\" \"!FRANK_WANDERER_MAINTAINABILITY_HARDENING.md\" \".github/**/*.{yml,yaml}\" \"Documentation~/*.md\"",
     "android:sync": "npm run build && npx cap sync android"
   },
   "dependencies": {

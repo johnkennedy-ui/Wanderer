@@ -18,19 +18,49 @@ scenario without hidden world RNG.
 
 ## Validation commands
 
+Wanderer requires Node 22 (pinned in [`.nvmrc`](.nvmrc)). Run this complete
+validation sequence before handing off a compatibility-sensitive feature
+branch:
+
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
 ```bash
-npm run format
-npm run typecheck
-npm run test
-npm run check:architecture
-npm run build
-TMPDIR=/tmp/wanderer-playwright-profile \
-  PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium \
-  npm run test:browser
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
 ```
 
-The browser test uses Playwright's isolated temporary profile. `dist/`,
+After that browser prerequisite, run the canonical validation sequence:
+
+```bash
+npm ci
+npm run verify
+npm run test:browser
+VITE_BASE_PATH=/Wanderer/ npm run build
+```
+
+`npm run verify` is the canonical local and CI gate: it format-checks,
+typechecks, unit-tests, checks architecture, and produces the root production
+build. `npm run test:browser` builds `dist/` for both the root and GitHub Pages
+`/Wanderer/` base paths, then uses `vite preview` and Playwright to load each
+path. It does not test the Vite development server. The final explicit Pages
+build protects the deploy base-path contract independently. `dist/`,
 `node_modules/`, Playwright output, and generated native wrappers are ignored.
+
+The GitHub Actions workflow runs the verification and built-output browser
+gates for pull requests and pushes to `main`. Its Pages build job depends on
+that successful verification and checks out `github.sha`, so deployment
+artefacts come from the validated commit. This describes the workflow policy;
+it is not evidence that a deployment has occurred.
+
+Use a feature branch, make reviewable bounded commits, and do not push directly
+to `main`. See `AGENTS.md` for the compatibility workflow and required
+completion report, `ARCHITECTURE.md` for dependency boundaries, `SAVE_FORMAT.md`
+for the frozen schema-2 wire contract, and `WORLD_GENERATION.md` for released
+generator compatibility.
 
 ## Implemented slice
 

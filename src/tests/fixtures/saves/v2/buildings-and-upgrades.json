@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "world": {
+    "seed": "v2-settlement",
+    "generatorVersion": "wanderer-web-v1"
+  },
+  "player": {
+    "position": { "x": 0, "y": 0 },
+    "hp": 125,
+    "maxHp": 125
+  },
+  "resources": {
+    "wood": 180,
+    "stone": 160,
+    "scrap": 70,
+    "essence": 35,
+    "bossCore": 2
+  },
+  "buildings": [
+    {
+      "id": "building:fixture:0001",
+      "kind": "Workshop",
+      "position": { "x": 2, "y": 1 },
+      "level": 2
+    },
+    {
+      "id": "building:fixture:0002",
+      "kind": "Storage",
+      "position": { "x": -2, "y": 1 },
+      "level": 3
+    },
+    {
+      "id": "building:fixture:0003",
+      "kind": "Farm",
+      "position": { "x": 0, "y": -2 },
+      "level": 1
+    }
+  ],
+  "defeatedBossIds": ["boss:ember-wyrm"],
+  "upgrades": [
+    "iron-skin",
+    "ember-aura",
+    "long-reach",
+    "fortified-heart"
+  ],
+  "nextBuildingSerial": 4,
+  "committedAt": 1700000000456,
+  "savePointId": "campfire:home",
+  "savePointPosition": { "x": 0, "y": 0 }
+}

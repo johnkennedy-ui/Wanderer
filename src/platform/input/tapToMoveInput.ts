@@ -1,12 +1,10 @@
-import type { DestinationCommand, Vector2 } from "../../domain/types";
-
-export interface TapToMoveInput {
-  dispose(): void;
-}
-
-export type DestinationSink = (command: DestinationCommand) => void;
+import type { Vector2 } from "../../domain/types";
+import type { DestinationSink, InputAdapter } from "./inputContracts";
 
 const MAX_TAP_TRAVEL_PIXELS = 12;
+
+/** Backwards-compatible name for the narrow disposable tap input adapter. */
+export type TapToMoveInput = InputAdapter;
 
 /** Translates enabled primary canvas taps into explicit domain destination commands. */
 export const createTapToMoveInput = (

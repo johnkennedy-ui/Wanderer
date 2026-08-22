@@ -8,6 +8,16 @@ import {
   GameSession,
   selectBossUpgradeChoices,
 } from "../../domain/GameSession";
+import { toSaveV2Document } from "../../domain/persistence/currentSave";
+import {
+  createFreshSessionState,
+  hydrateSessionState,
+} from "../../domain/session/sessionState";
+import { projectCurrentSave } from "../../domain/session/saveProjection";
+import {
+  UnsupportedWorldGeneratorVersionError,
+  WANDERER_WEB_V1,
+} from "../../domain/world";
 import { resourceKinds } from "../../domain/types";
 import type { SaveDocument } from "../../domain/types";
 import {
@@ -62,6 +72,219 @@ const placeAndUpgradeTo = (
 };
 
 describe("GameSession", () => {
+  it("constructs, hydrates, resets, and projects complete instance-owned lifecycle state", () => {
+    const fresh = createFreshSessionState();
+    expect(fresh).toMatchObject({
+      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V1 },
+      player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+      resources: {
+        wood: 120,
+        stone: 120,
+        scrap: 120,
+        essence: 20,
+        bossCore: 0,
+      },
+      buildings: [],
+      projectiles: [],
+      floorDrops: [],
+      nextBuildingSerial: 1,
+      nextProjectileSerial: 1,
+      nextFloorDropSerial: 1,
+      destination: null,
+      elapsed: 0,
+      attackElapsed: 0,
+      farmHarvestElapsed: 0,
+      notice: { kind: "session.ready" },
+      combatStatus: "Stationary: seeking a target",
+    });
+    expect(fresh.enemies).toEqual(new Map());
+    expect(fresh.defeatedBossIds).toEqual(new Set());
+    expect(fresh.upgrades).toEqual(new Set());
+    expect(fresh.pendingUpgradeChoices).toEqual([]);
+
+    const saved: SaveDocument = {
+      ...savedAtHome(),
+      player: { position: { x: 4, y: -2 }, hp: 71, maxHp: 130 },
+      resources: { wood: 90, stone: 80, scrap: 70, essence: 60, bossCore: 1 },
+      buildings: [
+        {
+          id: "building:fixture:0007",
+          kind: "Workshop",
+          position: { x: 1, y: 1 },
+          level: 2,
+        },
+      ],
+      defeatedBossIds: ["boss:fixture"],
+      upgrades: ["quick-hands"],
+      nextBuildingSerial: 8,
+      savePointId: "campfire:fixture",
+      savePointPosition: { x: 1, y: 1 },
+    };
+    const hydrated = hydrateSessionState(saved);
+    saved.resources.wood = 1;
+    (saved.buildings[0]?.position as { x: number }).x = 99;
+    expect(hydrated.resources.wood).toBe(90);
+    expect(hydrated.buildings[0]?.position).toEqual({ x: 1, y: 1 });
+    expect(hydrated).toMatchObject({
+      nextBuildingSerial: 8,
+      nextProjectileSerial: 1,
+      nextFloorDropSerial: 1,
+      destination: null,
+      elapsed: 0,
+      attackElapsed: 0,
+      farmHarvestElapsed: 0,
+      notice: { kind: "session.ready" },
+      combatStatus: "Stationary: seeking a target",
+    });
+    expect(hydrated.enemies).toEqual(new Map());
+    expect(hydrated.projectiles).toEqual([]);
+    expect(hydrated.floorDrops).toEqual([]);
+
+    const projected = projectCurrentSave(
+      hydrated,
+      99,
+      hydrated.committedSavePoint,
+    );
+    hydrated.resources.wood = 2;
+    (hydrated.buildings[0]?.position as { x: number }).x = 5;
+    expect(projected.resources.wood).toBe(90);
+    expect(projected.buildings[0]?.position).toEqual({ x: 1, y: 1 });
+    expect(projected).toEqual(toSaveV2Document(projected));
+    expect(JSON.stringify(projected)).toBe(
+      JSON.stringify(toSaveV2Document(projected)),
+    );
+
+    const session = new GameSession({ saved });
+    session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });
+    session.tick(0.1);
+    session.resetWorld(" reset-fixture ");
+    const reset = session.snapshot();
+    expect(reset.world.seed).toBe("reset-fixture");
+    expect(reset.player).toEqual({
+      position: { x: 0, y: 0 },
+      hp: 100,
+      maxHp: 100,
+    });
+    expect(reset.resources).toEqual({
+      wood: 120,
+      stone: 120,
+      scrap: 120,
+      essence: 20,
+      bossCore: 0,
+    });
+    expect(reset.buildings).toEqual([]);
+    expect(reset.projectiles).toEqual([]);
+    expect(reset.floorDrops).toEqual([]);
+    expect(reset.upgrades).toEqual([]);
+    expect(reset.pendingUpgradeChoices).toEqual([]);
+    expect(reset.destination).toBeNull();
+    const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
+    expect(placed.building?.id).toMatch(/:0001$/);
+  });
+
+  it("copies caller-owned world identity for fresh and saved sessions", () => {
+    const suppliedWorld = {
+      seed: "caller-owned-world",
+      generatorVersion: "wanderer-web-v1",
+    };
+    const fresh = new GameSession({ world: suppliedWorld });
+    suppliedWorld.seed = "mutated-after-construction";
+    expect(fresh.snapshot().world).toEqual({
+      seed: "caller-owned-world",
+      generatorVersion: "wanderer-web-v1",
+    });
+
+    const savedWorld = {
+      seed: "caller-owned-save-world",
+      generatorVersion: "wanderer-web-v1",
+    };
+    const saved: SaveDocument = { ...savedAtHome(), world: savedWorld };
+    const hydrated = new GameSession({ saved });
+    savedWorld.generatorVersion = "mutated-after-hydration";
+    expect(hydrated.snapshot().world).toEqual({
+      seed: "caller-owned-save-world",
+      generatorVersion: "wanderer-web-v1",
+    });
+  });
+
+  it("uses typed outcomes and gives UI and renderer narrow projections", () => {
+    const session = new GameSession();
+    const fresh = session.snapshot();
+    expect(fresh.notice).toEqual({ kind: "session.ready" });
+    expect(fresh.ui.notice).toEqual({ kind: "session.ready" });
+    expect(fresh.ui).not.toHaveProperty("visibleChunks");
+    expect(fresh.renderer).not.toHaveProperty("resources");
+
+    expect(session.placeBuilding("Workshop", { x: 48.1, y: 48.1 })).toEqual({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
+    expect(session.snapshot().ui.notice).toEqual({
+      kind: "building.rejected",
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
+
+    const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
+    if (!placed.ok) throw new Error("Workshop should be placed");
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.placed",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+    });
+
+    const upgraded = session.upgradeBuilding(placed.building.id);
+    if (!upgraded.ok) throw new Error("Workshop should be upgraded");
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.upgraded",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+      level: 2,
+    });
+
+    expect(session.demolishBuilding(placed.building.id).ok).toBe(true);
+    expect(session.snapshot().notice).toMatchObject({
+      kind: "building.demolished",
+      buildingId: placed.building.id,
+      buildingKind: "Workshop",
+      refundRate: gameplayTuning.buildingRefundRate,
+    });
+
+    session.setDestination({
+      destination: { x: Number.NaN, y: 0 },
+      source: "tap-to-move",
+      at: 1,
+    });
+    expect(session.snapshot().notice).toEqual({
+      kind: "tap-to-move.rejected.invalid-destination",
+    });
+
+    const remote = new GameSession({
+      saved: {
+        ...savedAtHome(),
+        player: { position: { x: 80, y: 80 }, hp: 100, maxHp: 100 },
+      },
+    });
+    expect(remote.createValidCampfireSaveRequest(2)).toBeNull();
+    expect(remote.snapshot().notice).toEqual({
+      kind: "save.rejected.not-near-campfire",
+    });
+  });
+
+  it("hydrates recorded v1 worlds and rejects an unavailable recorded generator", () => {
+    const saved = savedAtHome();
+    expect(new GameSession({ saved }).snapshot().world.generatorVersion).toBe(
+      WANDERER_WEB_V1,
+    );
+
+    const unsupported = {
+      ...saved,
+      world: { ...saved.world, generatorVersion: "wanderer-web-v2" },
+    };
+    expect(() => new GameSession({ saved: unsupported })).toThrow(
+      UnsupportedWorldGeneratorVersionError,
+    );
+  });
+
   it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {
     const session = new GameSession();
     session.move({ intent: { x: 0.07, y: 0 }, source: "virtual-stick", at: 1 });
@@ -298,6 +521,11 @@ describe("GameSession", () => {
     );
     const afterDefeat = session.snapshot();
     const drops = afterDefeat.floorDrops;
+    expect(afterDefeat.notice).toEqual({
+      kind: "enemy.defeated",
+      enemyKind: "scout",
+      respawns: true,
+    });
     expect(drops).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ resource: "wood", amount: 5 }),
@@ -373,14 +601,16 @@ describe("GameSession", () => {
     if (campfire.building === undefined)
       throw new Error("Campfire was not built");
 
-    expect(session.placeBuilding("Workshop", { x: 8, y: 10 }).reason).toBe(
-      "outside the 6m campfire settlement radius",
-    );
+    expect(session.placeBuilding("Workshop", { x: 8, y: 10 })).toMatchObject({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 6 },
+    });
     expect(session.upgradeBuilding(campfire.building.id).ok).toBe(true);
     expect(session.placeBuilding("Workshop", { x: 8, y: 10 }).ok).toBe(true);
-    expect(session.placeBuilding("Healer", { x: 8, y: 13 }).reason).toBe(
-      "outside the 9m campfire settlement radius",
-    );
+    expect(session.placeBuilding("Healer", { x: 8, y: 13 })).toMatchObject({
+      ok: false,
+      rejection: { kind: "outside-settlement-radius", radius: 9 },
+    });
     expect(session.upgradeBuilding(campfire.building.id).ok).toBe(true);
     expect(session.placeBuilding("Healer", { x: 8, y: 13 }).ok).toBe(true);
     expect(session.snapshot().buildRadius).toBe(
@@ -540,6 +770,56 @@ describe("GameSession", () => {
     expect(session.snapshot().effects.join(" ")).toContain("Chain Strike");
   });
 
+  it("preserves tagged upgrade damage, timing, range, movement, and hit-healing semantics", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        upgrades: [
+          "sharpened-blade",
+          "quick-hands",
+          "ember-aura",
+          "long-reach",
+          "chain-strike",
+          "trailblazer",
+          "keen-focus",
+        ],
+      },
+    });
+
+    const stats = session.snapshot().combatStats;
+    expect(stats.attackDamage).toBe(22);
+    expect(stats.attackRange).toBeCloseTo(4.32, 8);
+    expect(stats.moveSpeed).toBeCloseTo(3.45, 8);
+    expect(stats.chainTargets).toBe(1);
+    expect(stats.attackIntervalSeconds).toBeCloseTo(0.31875, 8);
+
+    const withoutHitHealing = new GameSession({
+      saved: { ...base, player: { ...base.player, hp: 80 } },
+    });
+    const withHitHealing = new GameSession({
+      saved: {
+        ...base,
+        player: { ...base.player, hp: 80 },
+        upgrades: ["invigorating-edge"],
+      },
+    });
+    advance(
+      withoutHitHealing,
+      gameplayTuning.baseAttackIntervalSeconds +
+        gameplayTuning.basicProjectileTravelSeconds,
+    );
+    advance(
+      withHitHealing,
+      gameplayTuning.baseAttackIntervalSeconds +
+        gameplayTuning.basicProjectileTravelSeconds,
+    );
+    expect(withHitHealing.snapshot().player.hp).toBeCloseTo(
+      withoutHitHealing.snapshot().player.hp + 1,
+      8,
+    );
+  });
+
   it("keeps Boss Core and upgrades runtime-only until a later manual campfire commit", () => {
     const baseline = savedAtHome();
     const session = new GameSession({ saved: baseline });
@@ -561,25 +841,40 @@ describe("GameSession", () => {
     advance(session, 1);
     expect(session.snapshot().resources.bossCore).toBe(1);
     expect(choices).toHaveLength(3);
-    expect(session.chooseUpgrade(choices[0])).toBe(true);
+    expect(choices).toContain("iron-skin");
+    const playerBeforeUpgrade = session.snapshot().player;
+    expect(session.chooseUpgrade("iron-skin")).toBe(true);
+    expect(session.snapshot().player.maxHp).toBe(
+      playerBeforeUpgrade.maxHp + 25,
+    );
+    expect(session.snapshot().player.hp).toBe(
+      Math.min(playerBeforeUpgrade.maxHp + 25, playerBeforeUpgrade.hp + 25),
+    );
 
     const unsavedReload = new GameSession({ saved: baseline });
     expect(unsavedReload.snapshot().resources.bossCore).toBe(0);
     expect(unsavedReload.snapshot().upgrades).toEqual([]);
 
-    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 3 });
-    advance(session, 1);
-    session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 4 });
+    session.setDestination({
+      destination: { x: 0, y: 0 },
+      source: "tap-to-move",
+      at: 3,
+    });
+    advance(session, 3);
     const request = session.createValidCampfireSaveRequest(99);
     expect(request).not.toBeNull();
     const storage = createBrowserSaveStorage(new MemoryStore());
     expect(storage.commit(request!.document).ok).toBe(true);
     session.recordSaveCommitted(request!.document);
+    expect(session.snapshot().notice).toEqual({
+      kind: "save.committed",
+      savePointId: request!.document.savePointId,
+    });
     const savedReload = new GameSession({
       saved: storage.load().document ?? undefined,
     });
     expect(savedReload.snapshot().resources.bossCore).toBe(1);
-    expect(savedReload.snapshot().upgrades).toContain(choices[0]);
+    expect(savedReload.snapshot().upgrades).toContain("iron-skin");
   });
 
   it("respawns at the committed save-point position, applies the configured 25% loss, and never commits on death", () => {
@@ -610,7 +905,11 @@ describe("GameSession", () => {
       essence: 75,
       bossCore: 6,
     });
-    expect(session.snapshot().message).toContain("25% of carried resources");
+    expect(session.snapshot().notice).toEqual({
+      kind: "player.died",
+      savePointLabel: "committed campfire",
+      resourceLossRate: 0.25,
+    });
     expect(storage.load().document).toEqual(committed);
   });
 });
