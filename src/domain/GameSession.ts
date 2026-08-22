@@ -4,7 +4,6 @@ import {
   gameplayTuning,
   resourceDefinitions,
   upgradeDefinitionFor,
-  upgradeDefinitions,
   type UpgradeEffect,
 } from "../data/definitions";
 import {
@@ -77,9 +76,12 @@ import {
   findNearbyCampfire,
   settlementBuildRadius,
 } from "./session/settlementPolicy";
+import { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
 /** Compatibility export for callers that have not yet moved to inputPolicy. */
 export { MOVEMENT_THRESHOLD } from "./inputPolicy";
+/** Compatibility export for callers that have not yet moved to bossUpgradeChoices. */
+export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
 interface SessionOptions {
   readonly world?: WorldIdentity;
@@ -99,25 +101,6 @@ const hashText = (text: string): number => {
     hash = Math.imul(hash, 16_777_619);
   }
   return hash >>> 0;
-};
-
-/**
- * Returns exactly three deterministic, distinct, currently unowned choices.
- * It deliberately offers no fallback when fewer than three upgrades remain.
- */
-export const selectBossUpgradeChoices = (
-  seed: string,
-  owned: Iterable<UpgradeId>,
-): UpgradeId[] => {
-  const ownedIds = new Set(owned);
-  const available = upgradeDefinitions
-    .map((upgrade) => upgrade.id)
-    .filter((id) => !ownedIds.has(id));
-  if (available.length < 3) return [];
-  const start = hashText(`${seed}|boss:ember-wyrm`) % available.length;
-  return [0, 1, 2].map(
-    (offset) => available[(start + offset) % available.length],
-  );
 };
 
 /**

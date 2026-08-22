@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { selectBossUpgradeChoices } from "../../domain/session/bossUpgradeChoices";
 import type { SaveDocument } from "../../domain/types";
 import { createBrowserSaveStorage } from "../../platform/storage/browserSaveStorage";
 import { advance, MemoryStore, savedAtHome } from "./session-test-helpers";
+
+const frozenDefaultBossChoiceTrio = [
+  "quick-hands",
+  "iron-skin",
+  "ember-aura",
+] as const;
 
 describe("GameSession progression", () => {
   it("keeps Boss Core and upgrades runtime-only until a later manual campfire commit", () => {
@@ -13,12 +20,25 @@ describe("GameSession progression", () => {
     advance(session, 1);
     session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
     advance(session, 4.2 + gameplayTuning.basicProjectileTravelSeconds);
-    const choices = session.snapshot().pendingUpgradeChoices;
-    const bossDrop = session
-      .snapshot()
-      .floorDrops.find((drop) => drop.resource === "bossCore");
+    const afterBossDefeat = session.snapshot();
+    const choices = afterBossDefeat.pendingUpgradeChoices;
+    const bossDrop = afterBossDefeat.floorDrops.find(
+      (drop) => drop.resource === "bossCore",
+    );
     if (bossDrop === undefined) throw new Error("boss should drop a Boss Core");
-    expect(session.snapshot().resources.bossCore).toBe(0);
+    expect(afterBossDefeat.resources.bossCore).toBe(0);
+    expect(afterBossDefeat.defeatedBossIds).toHaveLength(1);
+    expect(afterBossDefeat.notice).toEqual({
+      kind: "boss.defeated",
+      hasUpgradeChoices: true,
+    });
+    expect(choices).toEqual(frozenDefaultBossChoiceTrio);
+    expect(
+      selectBossUpgradeChoices(
+        afterBossDefeat.world.seed,
+        afterBossDefeat.upgrades,
+      ),
+    ).toEqual(frozenDefaultBossChoiceTrio);
     session.setDestination({
       destination: bossDrop.position,
       source: "tap-to-move",

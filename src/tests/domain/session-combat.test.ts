@@ -8,8 +8,15 @@ import {
   GameSession,
   selectBossUpgradeChoices,
 } from "../../domain/GameSession";
+import { selectBossUpgradeChoices as selectPureBossUpgradeChoices } from "../../domain/session/bossUpgradeChoices";
 import { resourceKinds } from "../../domain/types";
 import { advance, savedAtHome } from "./session-test-helpers";
+
+const frozenReviewChoiceTrio = [
+  "chain-strike",
+  "invigorating-edge",
+  "trailblazer",
+] as const;
 
 describe("GameSession combat", () => {
   it("projects a live target position while a transient projectile is in flight", () => {
@@ -172,10 +179,23 @@ describe("GameSession combat", () => {
 
   it("offers only distinct unowned trios and makes Chain Strike change hit resolution", () => {
     expect(upgradeDefinitions).toHaveLength(10);
-    expect(selectBossUpgradeChoices("review-seed", [])).toHaveLength(3);
-    expect(new Set(selectBossUpgradeChoices("review-seed", [])).size).toBe(3);
+    const owned = ["sharpened-blade", "quick-hands"] as const;
+    const legacyChoices = selectBossUpgradeChoices("review-seed", owned);
+    const pureChoices = selectPureBossUpgradeChoices("review-seed", owned);
+    expect(legacyChoices).toEqual(frozenReviewChoiceTrio);
+    expect(pureChoices).toEqual(frozenReviewChoiceTrio);
+    expect(legacyChoices).not.toBe(pureChoices);
+    expect(new Set(pureChoices).size).toBe(3);
+
+    legacyChoices.pop();
+    expect(selectBossUpgradeChoices("review-seed", owned)).toEqual(
+      frozenReviewChoiceTrio,
+    );
+    expect(selectPureBossUpgradeChoices("review-seed", owned)).toEqual(
+      frozenReviewChoiceTrio,
+    );
     expect(
-      selectBossUpgradeChoices(
+      selectPureBossUpgradeChoices(
         "review-seed",
         upgradeDefinitions.slice(0, 8).map((upgrade) => upgrade.id),
       ),
