@@ -1,6 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+const previewPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
+const previewUrl = new URL(previewPath, "http://127.0.0.1:4173").toString();
 
 export default defineConfig({
   testDir: "./src/tests/browser",
@@ -8,7 +10,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: previewUrl,
     headless: true,
     viewport: { width: 1280, height: 800 },
     trace: "retain-on-failure",
@@ -38,8 +40,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173",
-    url: "http://127.0.0.1:4173",
+    command: "npm run preview",
+    url: previewUrl,
     reuseExistingServer: false,
     timeout: 30_000,
   },

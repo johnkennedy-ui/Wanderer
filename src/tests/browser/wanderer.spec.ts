@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
+
 test("initial browser load exposes a known seed, WebGL world, and visible touch stick", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   await expect(page.getByTestId("world-canvas")).toBeVisible();
   await expect(page.getByTestId("world-player-hp")).toHaveText("100 / 100 HP");
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
@@ -30,7 +32,7 @@ test("initial browser load exposes a known seed, WebGL world, and visible touch 
 test("enabled primary canvas taps travel to a destination", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const canvas = page.getByTestId("world-canvas");
   const position = page.getByTestId("position");
   const toggle = page.getByTestId("tap-to-move-toggle");
@@ -56,7 +58,7 @@ test("enabled primary canvas taps travel to a destination", async ({
 test("completed lethal projectiles leave visible renderer-owned floor drops without an implicit save", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const canvas = page.getByTestId("world-canvas");
   await expect(canvas).toHaveAttribute("data-floor-drop-count", /[1-9]/, {
     timeout: 4_000,
@@ -70,7 +72,7 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
 test("status and world-control panels independently hide and reopen while play stays visible", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const statusPanel = page.getByTestId("status-panel");
   const worldControlsPanel = page.getByTestId("world-controls-panel");
   const statusToggle = page.getByTestId("toggle-status-panel");
@@ -101,7 +103,7 @@ test("status and world-control panels independently hide and reopen while play s
 test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   await page.getByTestId("build-Storage").click();
   await expect(page.getByTestId("resources")).toContainText(
     "capacity 180 each",
@@ -114,7 +116,7 @@ test("Storage exposes an enforced common-material capacity while Boss Core is ex
 test("keyboard movement and touch-stick movement share the stationary auto-attack gate", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const combat = page.getByTestId("combat-status");
   await page.keyboard.down("d");
   await page.waitForTimeout(180);
@@ -152,7 +154,7 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
 test("virtual-stick short drag, cancellation, capture loss, and blur safely clear movement", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const combat = page.getByTestId("combat-status");
   const stick = page.getByTestId("virtual-stick");
   const box = await stick.boundingBox();
@@ -205,7 +207,7 @@ test("virtual-stick short drag, cancellation, capture loss, and blur safely clea
 test("visible campfire save commits and later unsaved movement rolls back on reload", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   await page.getByTestId("save-button").click();
   await expect(page.getByTestId("save-message")).toContainText(
     "Saved explicitly",
@@ -229,7 +231,7 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 test("invalid normal-building placement rejects without adding a record", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const resources = page.getByTestId("resources");
   await page.keyboard.down("d");
   await expect(page.getByTestId("combat-status")).toContainText("suppressed");
@@ -248,7 +250,7 @@ test("invalid normal-building placement rejects without adding a record", async 
 test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(applicationPath);
   const saveMessage = page.getByTestId("save-message");
   const position = page.getByTestId("position");
   const combat = page.getByTestId("combat-status");

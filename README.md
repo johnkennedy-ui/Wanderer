@@ -18,18 +18,22 @@ scenario without hidden world RNG.
 
 ## Validation commands
 
+Wanderer requires Node 22 (pinned in [`.nvmrc`](.nvmrc)). Run this complete
+validation sequence before committing or opening a pull request:
+
 ```bash
-npm run format
-npm run typecheck
-npm run test
-npm run check:architecture
-npm run build
+npm ci
+npm run verify
 TMPDIR=/tmp/wanderer-playwright-profile \
   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium \
   npm run test:browser
 ```
 
-The browser test uses Playwright's isolated temporary profile. `dist/`,
+`npm run verify` is the canonical local and CI gate: it format-checks,
+typechecks, unit-tests, checks architecture, and produces the root production
+build. `npm run test:browser` builds `dist/` for both the root and GitHub Pages
+`/Wanderer/` base paths, then uses `vite preview` and Playwright to load each
+path. The browser test uses Playwright's isolated temporary profile. `dist/`,
 `node_modules/`, Playwright output, and generated native wrappers are ignored.
 
 ## Implemented slice
