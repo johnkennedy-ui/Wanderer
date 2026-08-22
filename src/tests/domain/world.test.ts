@@ -1,9 +1,60 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { dangerForChunkCoordinate, generateChunk } from "../../domain/world";
+import {
+  dangerForChunkCoordinate,
+  generateChunk,
+  UnsupportedWorldGeneratorVersionError,
+  WANDERER_WEB_V1,
+} from "../../domain/world";
 
 const world = { seed: "review-seed", generatorVersion: "wanderer-web-v1" };
 
+const goldenFixtureNames = [
+  "home-0-0",
+  "frontier-2--1",
+  "negative--4-3",
+  "distant-8-7",
+] as const;
+
+interface WorldGoldenFixture {
+  readonly sourceCommit: string;
+  readonly generatorVersion: string;
+  readonly world: { readonly seed: string; readonly generatorVersion: string };
+  readonly coordinate: { readonly x: number; readonly y: number };
+  readonly recipeSha256: string;
+}
+
+const goldenFixture = (
+  name: (typeof goldenFixtureNames)[number],
+): WorldGoldenFixture =>
+  JSON.parse(
+    readFileSync(
+      new URL(`../fixtures/world/v1/${name}.json`, import.meta.url),
+      "utf8",
+    ),
+  ) as WorldGoldenFixture;
+
+const recipeSha256 = (recipe: unknown): string =>
+  createHash("sha256").update(JSON.stringify(recipe)).digest("hex");
+
 describe("deterministic chunk generation", () => {
+  it.each(goldenFixtureNames)(
+    "matches the frozen released-v1 %s golden hash without replacing the coordinate reference",
+    (name) => {
+      const fixture = goldenFixture(name);
+      const coordinate = { ...fixture.coordinate };
+      const recipe = generateChunk(fixture.world, coordinate);
+
+      expect(fixture.sourceCommit).toBe(
+        "30fd4845ae716599b214573e5663d8437abc4ed3",
+      );
+      expect(fixture.generatorVersion).toBe(WANDERER_WEB_V1);
+      expect(recipe.coordinate).toBe(coordinate);
+      expect(recipeSha256(recipe)).toBe(fixture.recipeSha256);
+    },
+  );
+
   it("uses world identity, chunk coordinate, and named domains independently of request order", () => {
     const first = generateChunk(world, { x: 2, y: -1 });
     generateChunk(world, { x: -4, y: 9 });
@@ -84,5 +135,23 @@ describe("deterministic chunk generation", () => {
     expect(
       far.spawns.every((spawn) => spawn.danger.tier === farDanger.tier),
     ).toBe(true);
+  });
+
+  it("rejects unknown and prototype-named versions without falling back to v1", () => {
+    for (const generatorVersion of ["wanderer-web-v2", "toString"]) {
+      try {
+        generateChunk(
+          { seed: "unsupported-generator", generatorVersion },
+          { x: 0, y: 0 },
+        );
+        throw new Error("unsupported generator should throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnsupportedWorldGeneratorVersionError);
+        expect(error).toMatchObject({
+          code: "unsupported-world-generator-version",
+          generatorVersion,
+        });
+      }
+    }
   });
 });

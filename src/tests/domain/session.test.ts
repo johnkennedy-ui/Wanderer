@@ -8,6 +8,10 @@ import {
   GameSession,
   selectBossUpgradeChoices,
 } from "../../domain/GameSession";
+import {
+  UnsupportedWorldGeneratorVersionError,
+  WANDERER_WEB_V1,
+} from "../../domain/world";
 import { resourceKinds } from "../../domain/types";
 import type { SaveDocument } from "../../domain/types";
 import {
@@ -85,6 +89,21 @@ describe("GameSession", () => {
       seed: "caller-owned-save-world",
       generatorVersion: "wanderer-web-v1",
     });
+  });
+
+  it("hydrates recorded v1 worlds and rejects an unavailable recorded generator", () => {
+    const saved = savedAtHome();
+    expect(new GameSession({ saved }).snapshot().world.generatorVersion).toBe(
+      WANDERER_WEB_V1,
+    );
+
+    const unsupported = {
+      ...saved,
+      world: { ...saved.world, generatorVersion: "wanderer-web-v2" },
+    };
+    expect(() => new GameSession({ saved: unsupported })).toThrow(
+      UnsupportedWorldGeneratorVersionError,
+    );
   });
 
   it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {

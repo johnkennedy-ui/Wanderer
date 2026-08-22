@@ -1,0 +1,10 @@
+{
+  "sourceCommit": "30fd4845ae716599b214573e5663d8437abc4ed3",
+  "generatorVersion": "wanderer-web-v1",
+  "world": {
+    "seed": "wanderer-known-seed",
+    "generatorVersion": "wanderer-web-v1"
+  },
+  "coordinate": { "x": 0, "y": 0 },
+  "recipeSha256": "d68388072392ca7699ba8f74afbf83c8aa8a480ab69ff30e7b82942b2f655f77"
+}
