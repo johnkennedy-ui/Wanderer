@@ -5,6 +5,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,6 +38,18 @@ const temporaryMission = () => {
       lastFailureCommand: null,
     })}\n`,
   );
+  return cwd;
+};
+
+const temporaryGitRepository = () => {
+  const cwd = temporaryMission();
+  mkdirSync(join(cwd, "scripts", "agent"), { recursive: true });
+  writeFileSync(
+    join(cwd, "scripts", "agent", "tracked-tool.mjs"),
+    "export const tracked = true;\n",
+  );
+  execFileSync("git", ["init", "--quiet"], { cwd });
+  execFileSync("git", ["add", "scripts/agent/tracked-tool.mjs"], { cwd });
   return cwd;
 };
 
@@ -85,9 +98,8 @@ describe("changed-file check selection", () => {
     expect(selectFocusedChecks([".github/workflows/ci.yml"]).mode).toBe("full");
   });
 
-  it("permits newly created source files but excludes approved untracked specifications from formatting", () => {
-    const cwd = temporaryMission();
-    mkdirSync(join(cwd, "scripts", "agent"), { recursive: true });
+  it("selects only repository-contained tracked files and excludes approved specifications", () => {
+    const cwd = temporaryGitRepository();
     writeFileSync(
       join(cwd, "scripts", "agent", "new-tool.mjs"),
       "export const tool = true;\n",
@@ -96,10 +108,16 @@ describe("changed-file check selection", () => {
 
     expect(
       selectTrackedFormattingFiles(cwd, [
+        "scripts/agent/tracked-tool.mjs",
         "scripts/agent/new-tool.mjs",
         "FRANK_USER_SPEC.md",
       ]),
-    ).toEqual(["scripts/agent/new-tool.mjs"]);
+    ).toEqual(["scripts/agent/tracked-tool.mjs"]);
+    expect(() =>
+      selectTrackedFormattingFiles(cwd, [
+        "scripts/agent/../../../../outside.mjs",
+      ]),
+    ).toThrow("Output paths must stay inside the repository.");
   });
 });
 

@@ -1,12 +1,13 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import {
   AgentError,
   gitOutput,
   isApprovedSpecification,
   normaliseRepositoryPath,
+  resolveWithinRepository,
 } from "./common.mjs";
 import { isFormattingEligiblePath } from "./checks.mjs";
 
@@ -34,16 +35,45 @@ const parseArguments = (argv) => {
   return { action, files: argv.slice(2).map(normaliseRepositoryPath) };
 };
 
+const isCanonicalRepositoryPath = (path) =>
+  path !== "" && path !== ".." && !path.startsWith("../");
+
+const selectCanonicalTrackedFile = (cwd, trackedFiles, requestedPath) => {
+  const normalizedPath = normaliseRepositoryPath(requestedPath);
+  if (
+    isApprovedSpecification(normalizedPath) ||
+    !isFormattingEligiblePath(normalizedPath)
+  )
+    return null;
+
+  const repositoryRoot = realpathSync(cwd);
+  const requestedLocation = resolveWithinRepository(
+    repositoryRoot,
+    normalizedPath,
+  );
+  if (!existsSync(requestedLocation)) return null;
+
+  const canonicalRelativePath = normaliseRepositoryPath(
+    relative(repositoryRoot, realpathSync(requestedLocation)),
+  );
+  if (!isCanonicalRepositoryPath(canonicalRelativePath))
+    throw new AgentError(
+      "Formatting paths must resolve inside the repository.",
+      "PATH_OUTSIDE_REPOSITORY",
+    );
+  return trackedFiles.has(canonicalRelativePath) ? canonicalRelativePath : null;
+};
+
 export const selectTrackedFormattingFiles = (cwd, requestedFiles = null) => {
-  const existsInsideRepository = (path) =>
-    !path.startsWith("../") &&
-    !path.startsWith("/") &&
-    !isApprovedSpecification(path) &&
-    isFormattingEligiblePath(path) &&
-    existsSync(join(cwd, path));
-  if (requestedFiles !== null)
-    return requestedFiles.filter(existsInsideRepository);
-  return trackedFormattingFiles(cwd).filter(existsInsideRepository);
+  const trackedFiles = new Set(trackedFormattingFiles(cwd));
+  const candidates = requestedFiles ?? [...trackedFiles];
+  return [
+    ...new Set(
+      candidates
+        .map((path) => selectCanonicalTrackedFile(cwd, trackedFiles, path))
+        .filter(Boolean),
+    ),
+  ].sort();
 };
 
 export const runFormat = ({ cwd = process.cwd(), action, files = null }) => {
