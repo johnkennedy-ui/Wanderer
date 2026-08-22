@@ -52,6 +52,13 @@ import {
   hydrateSessionState,
 } from "./session/sessionState";
 import {
+  advanceProjectileFlight,
+  enemyPursuitPosition,
+  liveTargetsInRange,
+  projectileDraftFor,
+  projectileLaunchDecision,
+} from "./session/combatPolicy";
+import {
   addResourceBags,
   canAffordResources,
   clampResourcesToCapacity,
@@ -477,33 +484,45 @@ export class GameSession {
 
   private updateAutoCombat(delta: number): void {
     const stats = combatStatsFor(this.buildings, this.upgrades);
-    const targets = this.targetsInRange(stats.attackRange);
-    const target = targets[0];
-    if (target === undefined) {
+    const targets = liveTargetsInRange({
+      playerPosition: this.player.position,
+      targets: this.enemies.values(),
+      range: stats.attackRange,
+    });
+    const decision = projectileLaunchDecision({
+      targets,
+      attackElapsed: this.attackElapsed,
+      delta,
+      attackIntervalSeconds: stats.attackIntervalSeconds,
+    });
+    if (decision.kind === "no-target") {
       this.combatStatus = "Stationary: seeking a target";
-      this.attackElapsed = 0;
+      this.attackElapsed = decision.attackElapsed;
       return;
     }
-    this.attackElapsed += delta;
-    this.combatStatus = `Auto-attacking ${target.kind} (${Math.ceil(target.hp)}/${target.maxHp})`;
-    if (this.attackElapsed < stats.attackIntervalSeconds) return;
-    this.attackElapsed = 0;
+    this.attackElapsed = decision.attackElapsed;
+    this.combatStatus = `Auto-attacking ${decision.target.kind} (${Math.ceil(decision.target.hp)}/${decision.target.maxHp})`;
+    if (decision.kind === "waiting") return;
 
     const projectileEffects = projectileUpgradeEffectsFor(this.upgrades);
+    const draft = projectileDraftFor({
+      playerPosition: this.player.position,
+      target: decision.target,
+      targets,
+      attackDamage: stats.attackDamage,
+      chainTargets: stats.chainTargets,
+      chainDamageMultiplier: projectileEffects.chainDamageMultiplier,
+      hitHeal: projectileEffects.hitHeal,
+    });
     this.projectiles.push({
       id: "projectile:" + this.nextProjectileSerial.toString().padStart(4, "0"),
-      origin: copyVector(this.player.position),
-      targetId: target.id,
-      targetPosition: copyVector(target.position),
-      damage: stats.attackDamage,
-      chainTargetIds:
-        stats.chainTargets > 0 && projectileEffects.chainDamageMultiplier > 0
-          ? targets
-              .slice(1, 1 + stats.chainTargets)
-              .map((secondary) => secondary.id)
-          : [],
-      chainDamage: stats.attackDamage * projectileEffects.chainDamageMultiplier,
-      hitHeal: projectileEffects.hitHeal,
+      origin: draft.origin,
+      targetId: draft.targetId,
+      targetPosition: draft.targetPosition,
+      damage: draft.damage,
+      chainTargetIds: draft.chainTargetIds,
+      chainDamage: draft.chainDamage,
+      hitHeal: draft.hitHeal,
       elapsed: 0,
     });
     this.nextProjectileSerial += 1;
@@ -512,9 +531,13 @@ export class GameSession {
   private updateProjectiles(delta: number): void {
     const completed: RuntimeProjectile[] = [];
     this.projectiles = this.projectiles.filter((projectile) => {
-      projectile.elapsed += delta;
-      if (projectile.elapsed < gameplayTuning.basicProjectileTravelSeconds)
-        return true;
+      const flight = advanceProjectileFlight({
+        elapsed: projectile.elapsed,
+        delta,
+        travelSeconds: gameplayTuning.basicProjectileTravelSeconds,
+      });
+      projectile.elapsed = flight.elapsed;
+      if (!flight.completed) return true;
       completed.push(projectile);
       return false;
     });
@@ -547,21 +570,6 @@ export class GameSession {
     enemy.hp -= amount;
     if (enemy.hp <= 0) this.defeatEnemy(enemy);
     return true;
-  }
-
-  private targetsInRange(range: number): RuntimeEnemy[] {
-    return [...this.enemies.values()]
-      .filter(
-        (enemy) =>
-          !enemy.defeated &&
-          distance(this.player.position, enemy.position) <= range,
-      )
-      .sort((left, right) => {
-        const difference =
-          distance(this.player.position, left.position) -
-          distance(this.player.position, right.position);
-        return difference === 0 ? left.id.localeCompare(right.id) : difference;
-      });
   }
 
   private updateEnemyRespawns(): void {
@@ -611,34 +619,13 @@ export class GameSession {
   private updateEnemyPursuit(delta: number): void {
     for (const enemy of this.enemies.values()) {
       if (enemy.defeated) continue;
-      const separation = {
-        x: this.player.position.x - enemy.position.x,
-        y: this.player.position.y - enemy.position.y,
-      };
-      const playerDistance = magnitude(separation);
-      const remainingDistance =
-        playerDistance - gameplayTuning.enemyAttackStandoff;
-      if (remainingDistance <= 0) continue;
-
-      const travel = Math.min(enemy.moveSpeed * delta, remainingDistance);
-      const nextPosition = add(
-        enemy.position,
-        scale(normalize(separation), travel),
-      );
-      enemy.position =
-        distance(nextPosition, this.player.position) <
-        gameplayTuning.enemyAttackStandoff
-          ? add(
-              this.player.position,
-              scale(
-                normalize({
-                  x: enemy.position.x - this.player.position.x,
-                  y: enemy.position.y - this.player.position.y,
-                }),
-                gameplayTuning.enemyAttackStandoff,
-              ),
-            )
-          : nextPosition;
+      enemy.position = enemyPursuitPosition({
+        enemyPosition: enemy.position,
+        playerPosition: this.player.position,
+        moveSpeed: enemy.moveSpeed,
+        delta,
+        attackStandoff: gameplayTuning.enemyAttackStandoff,
+      });
     }
   }
 
