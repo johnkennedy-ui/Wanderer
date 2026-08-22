@@ -1,1 +1,3 @@
-export const adapter = "platform";
+import { otherAdapter } from "./otherAdapter";
+
+export const adapter = otherAdapter;

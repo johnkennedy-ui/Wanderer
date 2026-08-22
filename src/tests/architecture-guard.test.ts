@@ -57,6 +57,10 @@ describe("TypeScript architecture guard", () => {
       /src\/platform\/illegalGameSession\.ts:\d+:\d+ \[ARCH001\]/,
     );
     expect(result.stderr).toMatch(
+      /src\/platform\/adapter\.ts:\d+:\d+ \[ARCH004\]/,
+    );
+    expect(result.stderr).toContain("UPPERCASE_MUTABLE");
+    expect(result.stderr).toMatch(
       /src\/domain\/cycle[AB]\.ts:\d+:\d+ \[ARCH009\]/,
     );
   });

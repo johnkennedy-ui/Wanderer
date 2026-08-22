@@ -1,5 +1,6 @@
 export let mutableModuleState = 0;
 export const mutableObject = { active: false };
+export const UPPERCASE_MUTABLE = { active: false };
 
 const sessionCache = new Map<string, number>();
 

@@ -169,12 +169,29 @@ const isLikelySingletonInitializer = (initializer) => {
   );
 };
 
+const hasConstAssertion = (expression) => {
+  let current = expression;
+  while (
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isParenthesizedExpression(current)
+  ) {
+    if (
+      ts.isAsExpression(current) &&
+      ts.isTypeReferenceNode(current.type) &&
+      current.type.typeName.getText() === "const"
+    )
+      return true;
+    current = current.expression;
+  }
+  return false;
+};
+
 const isMutableExportedLiteral = (declaration) => {
   if (declaration.initializer === undefined) return false;
   if (isFrozenInitializer(declaration.initializer)) return false;
+  if (hasConstAssertion(declaration.initializer)) return false;
   if (declaration.name.kind !== ts.SyntaxKind.Identifier) return false;
-  if (declaration.name.text === declaration.name.text.toUpperCase())
-    return false;
   const initializer = unwrapExpression(declaration.initializer);
   return (
     ts.isArrayLiteralExpression(initializer) ||
@@ -197,6 +214,15 @@ const isConcreteInputAdapter = (sourceRoot, fileName) => {
     basename(path) !== "inputContracts.ts"
   );
 };
+
+const isSharedPlatformModule = (sourceRoot, fileName) =>
+  /(?:contracts?|types?|helpers?|utils?|policy)\.ts$/i.test(
+    basename(relativePath(sourceRoot, fileName)),
+  );
+
+const isConcretePlatformAdapter = (sourceRoot, fileName) =>
+  relativePath(sourceRoot, fileName).startsWith("platform/") &&
+  !isSharedPlatformModule(sourceRoot, fileName);
 
 const isApprovedStorageAdapter = (sourceRoot, fileName) =>
   relativePath(sourceRoot, fileName).startsWith("platform/storage/");
@@ -346,15 +372,15 @@ export const inspectArchitecture = ({
           `${sourceLayer} must not import ${targetLayer}`,
         );
       if (
-        isConcreteInputAdapter(canonicalSourceRoot, sourceFile.fileName) &&
+        isConcretePlatformAdapter(canonicalSourceRoot, sourceFile.fileName) &&
         target !== canonicalPath(sourceFile.fileName) &&
-        isConcreteInputAdapter(canonicalSourceRoot, target)
+        isConcretePlatformAdapter(canonicalSourceRoot, target)
       )
         addFailure(
           ARCHITECTURE_RULES.CONCRETE_INPUT_ADAPTER_IMPORT,
           sourceFile,
           moduleSpecifier,
-          "input adapters must share only inputContracts, never concrete sibling adapters",
+          "platform adapters must share narrow contract/helper modules, never concrete sibling adapters",
         );
       if (
         target === gameSessionPath &&
@@ -421,7 +447,9 @@ export const inspectArchitecture = ({
             ARCHITECTURE_RULES.MUTABLE_MODULE_STATE,
             sourceFile,
             declaration.name,
-            "module-level mutable state must be owned by an explicit instance",
+            mutableBinding
+              ? "module-level mutable state must be owned by an explicit instance"
+              : `exported mutable literal ${declaration.name.getText(sourceFile)} must be frozen`,
           );
         if (isLikelySingletonInitializer(declaration.initializer))
           addFailure(

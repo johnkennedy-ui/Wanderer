@@ -3,6 +3,9 @@ import type { DestinationSink, InputAdapter } from "./inputContracts";
 
 const MAX_TAP_TRAVEL_PIXELS = 12;
 
+/** Backwards-compatible name for the narrow disposable tap input adapter. */
+export type TapToMoveInput = InputAdapter;
+
 /** Translates enabled primary canvas taps into explicit domain destination commands. */
 export const createTapToMoveInput = (
   canvas: HTMLCanvasElement,
@@ -12,7 +15,7 @@ export const createTapToMoveInput = (
   ) => Vector2 | null,
   isEnabled: () => boolean,
   sink: DestinationSink,
-): InputAdapter => {
+): TapToMoveInput => {
   let pendingTap:
     | {
         readonly pointerId: number;

@@ -25,16 +25,17 @@ object held by `createGameApplication`. It is never a singleton, static
 | `src/domain/`   | domain modules and immutable `src/data/` definitions    | app, platform, UI, DOM, browser storage, Three.js, Capacitor, `Math.random()` |
 | `src/data/`     | domain type contracts and data helpers                  | app, platform, UI, runtime/session state                                      |
 | `src/app/`      | domain, data, platform adapters, UI adapters            | generic container, registry, or hidden authority                              |
-| `src/platform/` | narrow domain/data contracts and platform-local helpers | app ownership, UI ownership, concrete sibling input adapters                  |
+| `src/platform/` | narrow domain/data contracts and platform-local helpers | app ownership, UI ownership, concrete sibling platform adapters               |
 | `src/ui/`       | narrow domain/data snapshots and explicit intents       | world, player, save, or renderer authority                                    |
 | `src/main.ts`   | the application root and presentation stylesheet        | direct session construction                                                   |
 
 The apparent domain/data two-way type relationship is intentional: data uses
 stable domain identifiers for exhaustiveness, while the domain reads immutable
 authored tuning. Neither pure area may import an adapter. Platform input
-adapters share `src/platform/input/inputContracts.ts`; they never import each
-other for types. Movement thresholding and intent normalisation live in the
-pure `src/domain/inputPolicy.ts`, so adapters never import `GameSession`.
+adapters share `src/platform/input/inputContracts.ts`; platform adapters use
+narrow contract/helper modules rather than importing concrete platform peers.
+Movement thresholding and intent normalisation live in the pure
+`src/domain/inputPolicy.ts`, so input adapters never import `GameSession`.
 
 ## Ownership and persistence
 
@@ -69,7 +70,7 @@ reports stable rule IDs with `file:line:column` locations.
 | `ARCH001` | `new GameSession()` only in `src/app/createGameApplication.ts` (tests are excluded) |
 | `ARCH002` | production value imports of `GameSession` only in that composition root             |
 | `ARCH003` | domain/data cannot import app, platform, or UI                                      |
-| `ARCH004` | concrete input adapters cannot import concrete sibling adapters                     |
+| `ARCH004` | concrete platform adapters cannot import concrete sibling platform adapters         |
 | `ARCH005` | domain/data cannot use browser APIs, Three, Capacitor, or `Math.random()`           |
 | `ARCH006` | no mutable module-level state or mutable exported state bags                        |
 | `ARCH007` | no module-level or static singleton instances                                       |
