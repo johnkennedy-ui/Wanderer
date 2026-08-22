@@ -4,7 +4,6 @@ import {
   gameplayTuning,
   resourceDefinitions,
   upgradeDefinitionFor,
-  type UpgradeEffect,
 } from "../data/definitions";
 import {
   add,
@@ -25,7 +24,6 @@ import type {
 import type {
   BuildingKind,
   BuildingState,
-  CombatStats,
   DestinationCommand,
   EnemyKind,
   EnemyState,
@@ -77,6 +75,12 @@ import {
   settlementBuildRadius,
 } from "./session/settlementPolicy";
 import { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
+import {
+  applyUpgradeEffectToPlayer,
+  combatStatsFor,
+  describeProgressionEffects,
+  projectileUpgradeEffectsFor,
+} from "./session/progressionRules";
 
 /** Compatibility export for callers that have not yet moved to inputPolicy. */
 export { MOVEMENT_THRESHOLD } from "./inputPolicy";
@@ -89,10 +93,6 @@ interface SessionOptions {
 }
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
-
-const exhaustUpgradeEffect = (effect: never): never => {
-  throw new Error(`Unhandled upgrade effect: ${JSON.stringify(effect)}`);
-};
 
 const hashText = (text: string): number => {
   let hash = 2_166_136_261;
@@ -203,7 +203,10 @@ export class GameSession {
         this.player.position = roundVector(
           add(
             this.player.position,
-            scale(this.input.intent, this.combatStats().moveSpeed * delta),
+            scale(
+              this.input.intent,
+              combatStatsFor(this.buildings, this.upgrades).moveSpeed * delta,
+            ),
           ),
         );
       this.combatStatus = "Moving: basic auto-attack suppressed";
@@ -340,7 +343,7 @@ export class GameSession {
     }
     this.upgrades.add(id);
     const upgrade = upgradeDefinitionFor(id);
-    this.applyUpgradeEffect(upgrade.effect);
+    this.player = applyUpgradeEffectToPlayer(this.player, upgrade.effect);
     this.pendingUpgradeChoices = [];
     this.notice = { kind: "upgrade.applied", upgradeId: id };
     return true;
@@ -409,8 +412,8 @@ export class GameSession {
     const savePoint = this.nearbyCampfire();
     const materialCapacity = materialCapacityFor(this.buildings);
     const buildRadius = this.currentSettlementBuildRadius();
-    const combatStats = this.combatStats();
-    const effects = this.describeEffects();
+    const combatStats = combatStatsFor(this.buildings, this.upgrades);
+    const effects = describeProgressionEffects(this.buildings, this.upgrades);
     const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
     const canSave = savePoint !== null;
     const savePointLabel = savePoint?.label ?? null;
@@ -473,7 +476,7 @@ export class GameSession {
   }
 
   private updateAutoCombat(delta: number): void {
-    const stats = this.combatStats();
+    const stats = combatStatsFor(this.buildings, this.upgrades);
     const targets = this.targetsInRange(stats.attackRange);
     const target = targets[0];
     if (target === undefined) {
@@ -486,7 +489,7 @@ export class GameSession {
     if (this.attackElapsed < stats.attackIntervalSeconds) return;
     this.attackElapsed = 0;
 
-    const projectileEffects = this.projectileUpgradeEffects();
+    const projectileEffects = projectileUpgradeEffectsFor(this.upgrades);
     this.projectiles.push({
       id: "projectile:" + this.nextProjectileSerial.toString().padStart(4, "0"),
       origin: copyVector(this.player.position),
@@ -584,7 +587,8 @@ export class GameSession {
       y: this.destination.y - this.player.position.y,
     };
     const remainingDistance = magnitude(offset);
-    const maximumTravel = this.combatStats().moveSpeed * delta;
+    const maximumTravel =
+      combatStatsFor(this.buildings, this.upgrades).moveSpeed * delta;
     if (
       remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
       maximumTravel >= remainingDistance
@@ -874,122 +878,6 @@ export class GameSession {
       this.settlementCampfiresAround(this.player.position),
       gameplayTuning.campfireBuildRadiusByLevel,
     );
-  }
-
-  private combatStats(): CombatStats {
-    let attackDamage =
-      gameplayTuning.baseAttackDamage +
-      this.buildings
-        .filter((building) => building.kind === "Workshop")
-        .reduce(
-          (total, building) =>
-            total +
-            gameplayTuning.workshopDamageBonusByLevel[building.level - 1],
-          0,
-        );
-    let attackIntervalSeconds = gameplayTuning.baseAttackIntervalSeconds;
-    let attackRange = gameplayTuning.baseAttackRange;
-    let moveSpeed = gameplayTuning.baseMoveSpeed;
-    let chainTargets = 0;
-
-    for (const id of this.upgrades) {
-      const effect = upgradeDefinitionFor(id).effect;
-      switch (effect.kind) {
-        case "attack-damage":
-          attackDamage += effect.amount;
-          break;
-        case "attack-interval":
-          attackIntervalSeconds *= effect.multiplier;
-          break;
-        case "attack-range":
-          attackRange *= effect.multiplier;
-          break;
-        case "move-speed":
-          moveSpeed *= effect.multiplier;
-          break;
-        case "chain-strike":
-          chainTargets += effect.targetCount;
-          break;
-        case "maximum-health":
-        case "hit-heal":
-          break;
-        default:
-          exhaustUpgradeEffect(effect);
-      }
-    }
-    return {
-      attackDamage,
-      attackIntervalSeconds,
-      attackRange,
-      moveSpeed,
-      chainTargets,
-    };
-  }
-
-  private projectileUpgradeEffects(): {
-    readonly chainDamageMultiplier: number;
-    readonly hitHeal: number;
-  } {
-    let chainDamageMultiplier = 0;
-    let hitHeal = 0;
-    for (const id of this.upgrades) {
-      const effect = upgradeDefinitionFor(id).effect;
-      switch (effect.kind) {
-        case "chain-strike":
-          chainDamageMultiplier += effect.damageMultiplier;
-          break;
-        case "hit-heal":
-          hitHeal += effect.amount;
-          break;
-        case "attack-damage":
-        case "attack-interval":
-        case "attack-range":
-        case "move-speed":
-        case "maximum-health":
-          break;
-        default:
-          exhaustUpgradeEffect(effect);
-      }
-    }
-    return { chainDamageMultiplier, hitHeal };
-  }
-
-  private applyUpgradeEffect(effect: UpgradeEffect): void {
-    switch (effect.kind) {
-      case "maximum-health":
-        this.player.maxHp += effect.amount;
-        this.player.hp = Math.min(
-          this.player.maxHp,
-          this.player.hp + effect.amount,
-        );
-        return;
-      case "attack-damage":
-      case "attack-interval":
-      case "attack-range":
-      case "move-speed":
-      case "chain-strike":
-      case "hit-heal":
-        return;
-      default:
-        return exhaustUpgradeEffect(effect);
-    }
-  }
-
-  private describeEffects(): string[] {
-    const effects = [
-      `Storage: ${materialCapacityFor(this.buildings)} each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.`,
-      `Hearth Ward: ${gameplayTuning.baseCampfireHealingPerSecond} health/s while stationary near a campfire.`,
-      `Death: ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% carried-resource loss; no death save.`,
-    ];
-    for (const building of this.buildings)
-      effects.push(
-        `${buildingDefinitions[building.kind].label} L${building.level}: ${buildingDefinitions[building.kind].levelEffects[building.level - 1]}`,
-      );
-    for (const id of this.upgrades) {
-      const upgrade = upgradeDefinitionFor(id);
-      effects.push(`${upgrade.label}: ${upgrade.description}`);
-    }
-    return effects;
   }
 
   private rejectPlacement(rejection: PlacementRejection): PlacementResult {
