@@ -62,6 +62,31 @@ const placeAndUpgradeTo = (
 };
 
 describe("GameSession", () => {
+  it("copies caller-owned world identity for fresh and saved sessions", () => {
+    const suppliedWorld = {
+      seed: "caller-owned-world",
+      generatorVersion: "wanderer-web-v1",
+    };
+    const fresh = new GameSession({ world: suppliedWorld });
+    suppliedWorld.seed = "mutated-after-construction";
+    expect(fresh.snapshot().world).toEqual({
+      seed: "caller-owned-world",
+      generatorVersion: "wanderer-web-v1",
+    });
+
+    const savedWorld = {
+      seed: "caller-owned-save-world",
+      generatorVersion: "wanderer-web-v1",
+    };
+    const saved: SaveDocument = { ...savedAtHome(), world: savedWorld };
+    const hydrated = new GameSession({ saved });
+    savedWorld.generatorVersion = "mutated-after-hydration";
+    expect(hydrated.snapshot().world).toEqual({
+      seed: "caller-owned-save-world",
+      generatorVersion: "wanderer-web-v1",
+    });
+  });
+
   it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {
     const session = new GameSession();
     session.move({ intent: { x: 0.07, y: 0 }, source: "virtual-stick", at: 1 });

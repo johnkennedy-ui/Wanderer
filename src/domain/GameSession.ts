@@ -14,6 +14,7 @@ import {
   roundVector,
   scale,
 } from "./math";
+import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import { commonResourceKinds, emptyResources, resourceKinds } from "./types";
 import type {
   BuildingKind,
@@ -29,6 +30,7 @@ import type {
   PlacementResult,
   ProjectileState,
   ResourceBag,
+  ReadonlyResourceBag,
   SaveDocument,
   UpgradeId,
   ValidCampfireSaveRequest,
@@ -42,13 +44,13 @@ import {
   visibleChunkCoordinates,
 } from "./world";
 
-const DEFAULT_WORLD: WorldIdentity = {
+/** Compatibility export for callers that have not yet moved to inputPolicy. */
+export { MOVEMENT_THRESHOLD } from "./inputPolicy";
+
+const DEFAULT_WORLD: WorldIdentity = Object.freeze({
   seed: "wanderer-known-seed",
   generatorVersion: "wanderer-web-v1",
-};
-/** Shared by command handling and the virtual-stick adapter. */
-export const MOVEMENT_THRESHOLD = 0.08;
-
+});
 interface RuntimeEnemy {
   id: string;
   kind: EnemyKind;
@@ -90,8 +92,12 @@ interface SettlementCampfire {
   readonly level: 1 | 2 | 3;
 }
 
-const cloneResources = (resources: ResourceBag): ResourceBag => ({
+const cloneResources = (resources: ReadonlyResourceBag): ResourceBag => ({
   ...resources,
+});
+const copyWorldIdentity = (world: WorldIdentity): WorldIdentity => ({
+  seed: world.seed,
+  generatorVersion: world.generatorVersion,
 });
 const copyVector = (position: Vector2): Vector2 => ({
   x: position.x,
@@ -99,12 +105,6 @@ const copyVector = (position: Vector2): Vector2 => ({
 });
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
-
-const boundedMoveIntent = (intent: Vector2): Vector2 => {
-  if (!isFinitePosition(intent)) return { x: 0, y: 0 };
-  const length = magnitude(intent);
-  return length > 1 ? scale(intent, 1 / length) : copyVector(intent);
-};
 
 const hashText = (text: string): number => {
   let hash = 2_166_136_261;
@@ -115,21 +115,27 @@ const hashText = (text: string): number => {
   return hash >>> 0;
 };
 
-const amountForLevel = (resources: ResourceBag, level: number): ResourceBag => {
+const amountForLevel = (
+  resources: ReadonlyResourceBag,
+  level: number,
+): ResourceBag => {
   const scaled = emptyResources();
   for (const kind of resourceKinds) scaled[kind] = resources[kind] * level;
   return scaled;
 };
 
-const addResources = (left: ResourceBag, right: ResourceBag): ResourceBag => {
+const addResources = (
+  left: ReadonlyResourceBag,
+  right: ReadonlyResourceBag,
+): ResourceBag => {
   const total = emptyResources();
   for (const kind of resourceKinds) total[kind] = left[kind] + right[kind];
   return total;
 };
 
 const subtractResources = (
-  left: ResourceBag,
-  right: ResourceBag,
+  left: ReadonlyResourceBag,
+  right: ReadonlyResourceBag,
 ): ResourceBag => {
   const total = emptyResources();
   for (const kind of resourceKinds) total[kind] = left[kind] - right[kind];
@@ -137,7 +143,7 @@ const subtractResources = (
 };
 
 const scaleResources = (
-  resources: ResourceBag,
+  resources: ReadonlyResourceBag,
   multiplier: number,
 ): ResourceBag => {
   const scaled = emptyResources();
@@ -146,8 +152,10 @@ const scaleResources = (
   return scaled;
 };
 
-const canAfford = (have: ResourceBag, cost: ResourceBag): boolean =>
-  resourceKinds.every((kind) => have[kind] >= cost[kind]);
+const canAfford = (
+  have: ReadonlyResourceBag,
+  cost: ReadonlyResourceBag,
+): boolean => resourceKinds.every((kind) => have[kind] >= cost[kind]);
 
 /**
  * Returns exactly three deterministic, distinct, currently unowned choices.
@@ -203,7 +211,9 @@ export class GameSession {
 
   constructor(options: SessionOptions = {}) {
     const saved = options.saved;
-    this.world = saved?.world ?? options.world ?? DEFAULT_WORLD;
+    this.world = copyWorldIdentity(
+      saved?.world ?? options.world ?? DEFAULT_WORLD,
+    );
     this.player = saved
       ? {
           position: copyVector(saved.player.position),
@@ -243,7 +253,7 @@ export class GameSession {
   move(command: MoveCommand): void {
     this.destination = null;
     this.input = {
-      intent: boundedMoveIntent(command.intent),
+      intent: normalizeMovementIntent(command.intent),
       source: command.source,
       at: command.at,
     };
@@ -267,8 +277,7 @@ export class GameSession {
     this.elapsed += delta;
     this.updateProjectiles(delta);
     const destinationMoving = this.moveTowardDestination(delta);
-    const movement = magnitude(this.input.intent);
-    const moving = destinationMoving || movement >= MOVEMENT_THRESHOLD;
+    const moving = destinationMoving || isMeaningfulMovement(this.input.intent);
 
     if (moving) {
       if (!destinationMoving)
@@ -488,8 +497,7 @@ export class GameSession {
       position: copyVector(building.position),
     }));
     const moving =
-      this.destination !== null ||
-      magnitude(this.input.intent) >= MOVEMENT_THRESHOLD;
+      this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
     return {
       world: { ...this.world },
@@ -826,7 +834,7 @@ export class GameSession {
 
   private createFloorDrops(
     enemy: RuntimeEnemy,
-    resources: ResourceBag,
+    resources: ReadonlyResourceBag,
   ): FloorDropState[] {
     const droppedResources = resourceKinds.filter(
       (resource) => resources[resource] > 0,
@@ -1011,11 +1019,13 @@ export class GameSession {
     );
   }
 
-  private collectResources(delta: ResourceBag): ResourceBag {
+  private collectResources(delta: ReadonlyResourceBag): ResourceBag {
     return this.clampResourcesToCapacity(addResources(this.resources, delta));
   }
 
-  private clampResourcesToCapacity(resources: ResourceBag): ResourceBag {
+  private clampResourcesToCapacity(
+    resources: ReadonlyResourceBag,
+  ): ResourceBag {
     const clamped = cloneResources(resources);
     const capacity = this.materialCapacity();
     for (const kind of commonResourceKinds)

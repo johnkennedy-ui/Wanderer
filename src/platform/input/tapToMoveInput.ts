@@ -1,10 +1,5 @@
-import type { DestinationCommand, Vector2 } from "../../domain/types";
-
-export interface TapToMoveInput {
-  dispose(): void;
-}
-
-export type DestinationSink = (command: DestinationCommand) => void;
+import type { Vector2 } from "../../domain/types";
+import type { DestinationSink, InputAdapter } from "./inputContracts";
 
 const MAX_TAP_TRAVEL_PIXELS = 12;
 
@@ -17,7 +12,7 @@ export const createTapToMoveInput = (
   ) => Vector2 | null,
   isEnabled: () => boolean,
   sink: DestinationSink,
-): TapToMoveInput => {
+): InputAdapter => {
   let pendingTap:
     | {
         readonly pointerId: number;

@@ -1,21 +1,20 @@
-export const resourceKinds = [
+export const resourceKinds = Object.freeze([
   "wood",
   "stone",
   "scrap",
   "essence",
   "bossCore",
-] as const;
+] as const);
 
 export type ResourceKind = (typeof resourceKinds)[number];
 export type CommonResourceKind = Exclude<ResourceKind, "bossCore">;
-export const commonResourceKinds: readonly CommonResourceKind[] = [
-  "wood",
-  "stone",
-  "scrap",
-  "essence",
-];
+export const commonResourceKinds: readonly CommonResourceKind[] = Object.freeze(
+  ["wood", "stone", "scrap", "essence"] as const,
+);
 
 export type ResourceBag = Record<ResourceKind, number>;
+/** Immutable authored resource quantities such as costs, drops, and harvests. */
+export type ReadonlyResourceBag = Readonly<ResourceBag>;
 
 export interface Vector2 {
   readonly x: number;
@@ -79,7 +78,7 @@ export interface BuildingState {
   readonly level: 1 | 2 | 3;
 }
 
-export const upgradeIds = [
+export const upgradeIds = Object.freeze([
   "sharpened-blade",
   "quick-hands",
   "iron-skin",
@@ -90,7 +89,7 @@ export const upgradeIds = [
   "trailblazer",
   "fortified-heart",
   "keen-focus",
-] as const;
+] as const);
 
 export type UpgradeId = (typeof upgradeIds)[number];
 

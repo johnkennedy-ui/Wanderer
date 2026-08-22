@@ -1,6 +1,5 @@
 import type { InputSource, MoveCommand, Vector2 } from "../../domain/types";
-
-export type MoveSink = (command: MoveCommand) => void;
+import type { InputAdapter, MoveSink } from "./inputContracts";
 
 const DIRECTION_BY_KEY: Readonly<Record<string, Vector2>> = {
   w: { x: 0, y: 1 },
@@ -12,10 +11,6 @@ const DIRECTION_BY_KEY: Readonly<Record<string, Vector2>> = {
   d: { x: 1, y: 0 },
   arrowright: { x: 1, y: 0 },
 };
-
-export interface InputAdapter {
-  dispose(): void;
-}
 
 const command = (intent: Vector2, source: InputSource): MoveCommand => ({
   intent,
