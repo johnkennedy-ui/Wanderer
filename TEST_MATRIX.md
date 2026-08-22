@@ -11,8 +11,19 @@
 | WEB-BUILD-006   | Vite                                | root production browser bundle, including the canonical verification build                                                                                                   | `npm run verify`                             |
 | WEB-BUILD-007   | Vite                                | GitHub Pages `/Wanderer/` production bundle is built and preview-tested                                                                                                      | `npm run test:browser`; explicit Pages build |
 
-Run the required validation sequence before handing off a compatibility-sensitive
-feature branch:
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
+```bash
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
+```
+
+After that browser prerequisite, run the required validation sequence before
+handing off a compatibility-sensitive feature branch:
 
 ```bash
 npm ci

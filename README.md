@@ -22,6 +22,19 @@ Wanderer requires Node 22 (pinned in [`.nvmrc`](.nvmrc)). Run this complete
 validation sequence before handing off a compatibility-sensitive feature
 branch:
 
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
+```bash
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
+```
+
+After that browser prerequisite, run the canonical validation sequence:
+
 ```bash
 npm ci
 npm run verify

@@ -129,7 +129,18 @@ feature branch; never push directly to `main`; keep each commit bounded to one
 reviewable phase; and run fresh validation after every phase. Do not rewrite
 historical save or world fixtures just to make a changed implementation pass.
 
-The required local release gate is:
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
+```bash
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
+```
+
+After that browser prerequisite, the required local release gate is:
 
 ```bash
 npm ci

@@ -141,7 +141,19 @@ Tests are excluded from the production import scan so they can create local
 fixtures and explicit test sessions; this is not permission for production
 code to create a second composition root.
 
-Run the full local gate before handing a candidate off:
+Before the first browser run on a machine, install Playwright Chromium after an
+initial dependency install. `npm ci` does not download the browser binary:
+
+```bash
+# Once per machine (after npm ci)
+npx playwright install chromium
+
+# Supported Linux environments that also need system libraries may use:
+npx playwright install --with-deps chromium
+```
+
+After that browser prerequisite, run the full local gate before handing a
+candidate off:
 
 ```bash
 npm ci
