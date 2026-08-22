@@ -16,7 +16,7 @@ import {
   scale,
 } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
-import { commonResourceKinds, emptyResources, resourceKinds } from "./types";
+import { emptyResources, resourceKinds } from "./types";
 import type {
   GameNotice,
   GameSnapshot,
@@ -54,6 +54,16 @@ import {
   DEFAULT_WORLD,
   hydrateSessionState,
 } from "./session/sessionState";
+import {
+  addResourceBags,
+  canAffordResources,
+  clampResourcesToCapacity,
+  collectResourcesWithinCapacity,
+  materialCapacityFor,
+  resourcesForLevel,
+  scaleResourceBag,
+  subtractResourceBags,
+} from "./session/economy";
 import type {
   RuntimeEnemy,
   RuntimeProjectile,
@@ -85,48 +95,6 @@ const hashText = (text: string): number => {
   }
   return hash >>> 0;
 };
-
-const amountForLevel = (
-  resources: ReadonlyResourceBag,
-  level: number,
-): ResourceBag => {
-  const scaled = emptyResources();
-  for (const kind of resourceKinds) scaled[kind] = resources[kind] * level;
-  return scaled;
-};
-
-const addResources = (
-  left: ReadonlyResourceBag,
-  right: ReadonlyResourceBag,
-): ResourceBag => {
-  const total = emptyResources();
-  for (const kind of resourceKinds) total[kind] = left[kind] + right[kind];
-  return total;
-};
-
-const subtractResources = (
-  left: ReadonlyResourceBag,
-  right: ReadonlyResourceBag,
-): ResourceBag => {
-  const total = emptyResources();
-  for (const kind of resourceKinds) total[kind] = left[kind] - right[kind];
-  return total;
-};
-
-const scaleResources = (
-  resources: ReadonlyResourceBag,
-  multiplier: number,
-): ResourceBag => {
-  const scaled = emptyResources();
-  for (const kind of resourceKinds)
-    scaled[kind] = Math.floor(resources[kind] * multiplier);
-  return scaled;
-};
-
-const canAfford = (
-  have: ReadonlyResourceBag,
-  cost: ReadonlyResourceBag,
-): boolean => resourceKinds.every((kind) => have[kind] >= cost[kind]);
 
 /**
  * Returns exactly three deterministic, distinct, currently unowned choices.
@@ -181,7 +149,10 @@ export class GameSession {
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
         : hydrateSessionState(options.saved),
     );
-    this.resources = this.clampResourcesToCapacity(this.resources);
+    this.resources = clampResourcesToCapacity(
+      this.resources,
+      materialCapacityFor(this.buildings),
+    );
     this.ensureNeighborhoodEnemies();
   }
 
@@ -266,8 +237,8 @@ export class GameSession {
   placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
     const validation = this.validateBuildingPosition(kind, position);
     if (validation !== null) return this.rejectPlacement(validation);
-    const cost = amountForLevel(buildingDefinitions[kind].baseCost, 1);
-    if (!canAfford(this.resources, cost))
+    const cost = resourcesForLevel(buildingDefinitions[kind].baseCost, 1);
+    if (!canAffordResources(this.resources, cost))
       return this.rejectPlacement({ kind: "insufficient-resources" });
 
     const building: BuildingState = {
@@ -277,7 +248,7 @@ export class GameSession {
       level: 1,
     };
     this.nextBuildingSerial += 1;
-    this.resources = subtractResources(this.resources, cost);
+    this.resources = subtractResourceBags(this.resources, cost);
     this.buildings = [...this.buildings, building];
     this.notice = {
       kind: "building.placed",
@@ -316,19 +287,22 @@ export class GameSession {
     if (building.level === 3)
       return this.rejectPlacement({ kind: "already-level-3" });
     const nextLevel = (building.level + 1) as 2 | 3;
-    const cost = amountForLevel(
+    const cost = resourcesForLevel(
       buildingDefinitions[building.kind].baseCost,
       nextLevel,
     );
-    if (!canAfford(this.resources, cost))
+    if (!canAffordResources(this.resources, cost))
       return this.rejectPlacement({ kind: "insufficient-resources" });
 
     const upgraded: BuildingState = { ...building, level: nextLevel };
-    this.resources = subtractResources(this.resources, cost);
+    this.resources = subtractResourceBags(this.resources, cost);
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? upgraded : candidate,
     );
-    this.resources = this.clampResourcesToCapacity(this.resources);
+    this.resources = clampResourcesToCapacity(
+      this.resources,
+      materialCapacityFor(this.buildings),
+    );
     this.notice = {
       kind: "building.upgraded",
       buildingId: upgraded.id,
@@ -345,15 +319,19 @@ export class GameSession {
     const cumulativeCost = [1, 2, 3]
       .filter((level) => level <= building.level)
       .map((level) =>
-        amountForLevel(buildingDefinitions[building.kind].baseCost, level),
+        resourcesForLevel(buildingDefinitions[building.kind].baseCost, level),
       )
-      .reduce(addResources, emptyResources());
-    const refund = scaleResources(
+      .reduce(addResourceBags, emptyResources());
+    const refund = scaleResourceBag(
       cumulativeCost,
       gameplayTuning.buildingRefundRate,
     );
     this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
-    this.resources = this.collectResources(refund);
+    this.resources = collectResourcesWithinCapacity(
+      this.resources,
+      refund,
+      materialCapacityFor(this.buildings),
+    );
     this.notice = {
       kind: "building.demolished",
       buildingId: building.id,
@@ -441,7 +419,7 @@ export class GameSession {
     const moving =
       this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
-    const materialCapacity = this.materialCapacity();
+    const materialCapacity = materialCapacityFor(this.buildings);
     const buildRadius = this.currentSettlementBuildRadius();
     const combatStats = this.combatStats();
     const effects = this.describeEffects();
@@ -692,11 +670,11 @@ export class GameSession {
   }
 
   private handleDeath(): void {
-    const carriedLoss = scaleResources(
+    const carriedLoss = scaleResourceBag(
       this.resources,
       gameplayTuning.deathResourceLossRate,
     );
-    this.resources = subtractResources(this.resources, carriedLoss);
+    this.resources = subtractResourceBags(this.resources, carriedLoss);
     this.player.position = copyVector(this.committedSavePoint.position);
     this.player.hp = this.player.maxHp;
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
@@ -716,7 +694,7 @@ export class GameSession {
       ...this.floorDrops,
       ...this.createFloorDrops(
         enemy,
-        scaleResources(definition.drops, enemy.dropMultiplier),
+        scaleResourceBag(definition.drops, enemy.dropMultiplier),
       ),
     ];
     enemy.defeated = true;
@@ -771,6 +749,7 @@ export class GameSession {
     if (this.floorDrops.length === 0) return;
     const remaining: FloorDropState[] = [];
     let collectedAny = false;
+    const materialCapacity = materialCapacityFor(this.buildings);
     for (const drop of this.floorDrops) {
       if (
         distance(this.player.position, drop.position) >
@@ -781,7 +760,7 @@ export class GameSession {
       }
       const capacityRemaining = resourceDefinitions[drop.resource]
         .storageLimited
-        ? Math.max(0, this.materialCapacity() - this.resources[drop.resource])
+        ? Math.max(0, materialCapacity - this.resources[drop.resource])
         : Number.POSITIVE_INFINITY;
       const collectedAmount = Math.min(drop.amount, capacityRemaining);
       if (collectedAmount <= 0) {
@@ -790,7 +769,7 @@ export class GameSession {
       }
       const resources = cloneResources(this.resources);
       resources[drop.resource] += collectedAmount;
-      this.resources = this.clampResourcesToCapacity(resources);
+      this.resources = clampResourcesToCapacity(resources, materialCapacity);
       collectedAny = true;
       if (collectedAmount < drop.amount)
         remaining.push({ ...drop, amount: drop.amount - collectedAmount });
@@ -829,8 +808,12 @@ export class GameSession {
     this.farmHarvestElapsed = 0;
     const harvest = farms
       .map((farm) => gameplayTuning.farmHarvestByLevel[farm.level - 1])
-      .reduce(addResources, emptyResources());
-    this.resources = this.collectResources(harvest);
+      .reduce(addResourceBags, emptyResources());
+    this.resources = collectResourcesWithinCapacity(
+      this.resources,
+      harvest,
+      materialCapacityFor(this.buildings),
+    );
     this.notice = { kind: "farm.harvested" };
   }
 
@@ -909,36 +892,6 @@ export class GameSession {
       gameplayTuning.campfireBuildRadiusByLevel[0],
       ...campfires.map((campfire) => this.campfireBuildRadius(campfire.level)),
     );
-  }
-
-  private materialCapacity(): number {
-    return (
-      gameplayTuning.baseMaterialCapacity +
-      this.buildings
-        .filter((building) => building.kind === "Storage")
-        .reduce(
-          (total, building) =>
-            total +
-            gameplayTuning.storageCapacityBonusByLevel[building.level - 1],
-          0,
-        )
-    );
-  }
-
-  private collectResources(delta: ReadonlyResourceBag): ResourceBag {
-    return this.clampResourcesToCapacity(addResources(this.resources, delta));
-  }
-
-  private clampResourcesToCapacity(
-    resources: ReadonlyResourceBag,
-  ): ResourceBag {
-    const clamped = cloneResources(resources);
-    const capacity = this.materialCapacity();
-    for (const kind of commonResourceKinds)
-      if (resourceDefinitions[kind].storageLimited)
-        clamped[kind] = Math.min(capacity, Math.max(0, clamped[kind]));
-    clamped.bossCore = Math.max(0, clamped.bossCore);
-    return clamped;
   }
 
   private combatStats(): CombatStats {
@@ -1042,7 +995,7 @@ export class GameSession {
 
   private describeEffects(): string[] {
     const effects = [
-      `Storage: ${this.materialCapacity()} each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.`,
+      `Storage: ${materialCapacityFor(this.buildings)} each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.`,
       `Hearth Ward: ${gameplayTuning.baseCampfireHealingPerSecond} health/s while stationary near a campfire.`,
       `Death: ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% carried-resource loss; no death save.`,
     ];
