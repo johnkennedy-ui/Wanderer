@@ -59,6 +59,12 @@ import {
   projectileLaunchDecision,
 } from "./session/combatPolicy";
 import {
+  enemyAttackResolutionFor,
+  enemyRespawnResolutionFor,
+  floorDropDraftFor,
+  projectileImpactResolutionFor,
+} from "./session/combatResolutionPolicy";
+import {
   addResourceBags,
   canAffordResources,
   clampResourcesToCapacity,
@@ -545,46 +551,41 @@ export class GameSession {
   }
 
   private resolveProjectileHit(projectile: RuntimeProjectile): void {
-    const primary = this.enemies.get(projectile.targetId);
-    let landedHits =
-      primary !== undefined && this.resolveBasicHit(primary, projectile.damage)
-        ? 1
-        : 0;
-    for (const targetId of projectile.chainTargetIds) {
-      const secondary = this.enemies.get(targetId);
-      if (
-        secondary !== undefined &&
-        this.resolveBasicHit(secondary, projectile.chainDamage)
-      )
-        landedHits += 1;
+    const resolution = projectileImpactResolutionFor({
+      targets: this.enemies,
+      primaryTargetId: projectile.targetId,
+      primaryDamage: projectile.damage,
+      chainTargetIds: projectile.chainTargetIds,
+      chainDamage: projectile.chainDamage,
+    });
+    for (const impact of resolution.impacts) {
+      const enemy = this.enemies.get(impact.targetId);
+      if (enemy === undefined || enemy.defeated) continue;
+      enemy.hp = impact.nextHp;
+      if (impact.lethal) this.defeatEnemy(enemy);
     }
-    if (landedHits > 0 && projectile.hitHeal > 0)
+    if (resolution.landedHitCount > 0 && projectile.hitHeal > 0)
       this.player.hp = Math.min(
         this.player.maxHp,
-        this.player.hp + landedHits * projectile.hitHeal,
+        this.player.hp + resolution.landedHitCount * projectile.hitHeal,
       );
-  }
-
-  private resolveBasicHit(enemy: RuntimeEnemy, amount: number): boolean {
-    if (enemy.defeated) return false;
-    enemy.hp -= amount;
-    if (enemy.hp <= 0) this.defeatEnemy(enemy);
-    return true;
   }
 
   private updateEnemyRespawns(): void {
     for (const enemy of this.enemies.values()) {
-      if (
-        !enemy.defeated ||
-        enemy.respawnAt === null ||
-        this.elapsed < enemy.respawnAt
-      )
-        continue;
-      enemy.defeated = false;
-      enemy.hp = enemy.maxHp;
-      enemy.position = copyVector(enemy.spawnPosition);
-      enemy.respawnAt = null;
-      enemy.attackElapsed = 0;
+      const resolution = enemyRespawnResolutionFor({
+        defeated: enemy.defeated,
+        respawnAt: enemy.respawnAt,
+        elapsed: this.elapsed,
+        maxHp: enemy.maxHp,
+        spawnPosition: enemy.spawnPosition,
+      });
+      if (resolution.kind !== "ready") continue;
+      enemy.defeated = resolution.defeated;
+      enemy.hp = resolution.hp;
+      enemy.position = resolution.position;
+      enemy.respawnAt = resolution.respawnAt;
+      enemy.attackElapsed = resolution.attackElapsed;
     }
   }
 
@@ -631,17 +632,22 @@ export class GameSession {
 
   private updateEnemyAttacks(delta: number): void {
     for (const enemy of this.enemies.values()) {
-      if (
-        enemy.defeated ||
-        distance(this.player.position, enemy.position) >
-          gameplayTuning.enemyAttackStandoff
-      )
-        continue;
-      enemy.attackElapsed += delta;
-      if (enemy.attackElapsed < enemy.attackEverySeconds) continue;
-      enemy.attackElapsed = 0;
-      this.player.hp -= enemy.damage;
-      if (this.player.hp <= 0) {
+      const resolution = enemyAttackResolutionFor({
+        defeated: enemy.defeated,
+        inAttackRange:
+          distance(this.player.position, enemy.position) <=
+          gameplayTuning.enemyAttackStandoff,
+        attackElapsed: enemy.attackElapsed,
+        attackEverySeconds: enemy.attackEverySeconds,
+        damage: enemy.damage,
+        playerHp: this.player.hp,
+        delta,
+      });
+      if (resolution.kind === "inactive") continue;
+      enemy.attackElapsed = resolution.attackElapsed;
+      if (resolution.kind === "waiting") continue;
+      this.player.hp = resolution.nextPlayerHp;
+      if (resolution.playerDefeated) {
         this.handleDeath();
         return;
       }
@@ -700,27 +706,16 @@ export class GameSession {
   private createFloorDrops(
     enemy: RuntimeEnemy,
     resources: ReadonlyResourceBag,
-  ): FloorDropState[] {
-    const droppedResources = resourceKinds.filter(
-      (resource) => resources[resource] > 0,
-    );
+  ): readonly FloorDropState[] {
     const serial = this.nextFloorDropSerial;
     this.nextFloorDropSerial += 1;
-    const startAngle = ((hashText(enemy.id) % 360) * Math.PI) / 180;
-    return droppedResources.map((resource, index) => {
-      const angle =
-        startAngle + (index * Math.PI * 2) / droppedResources.length;
-      return {
-        id: `drop:${enemy.id}:${serial}:${resource}`,
-        resource,
-        amount: resources[resource],
-        position: roundVector(
-          add(enemy.position, {
-            x: Math.cos(angle) * gameplayTuning.floorDropOffsetDistance,
-            y: Math.sin(angle) * gameplayTuning.floorDropOffsetDistance,
-          }),
-        ),
-      };
+    return floorDropDraftFor({
+      enemyId: enemy.id,
+      enemyPosition: enemy.position,
+      serial,
+      resources,
+      resourceOrder: resourceKinds,
+      rules: { offsetDistance: gameplayTuning.floorDropOffsetDistance },
     });
   }
 

@@ -177,6 +177,52 @@ describe("GameSession combat", () => {
     expect(request?.document).not.toHaveProperty("floorDrops");
   });
 
+  it("keeps normal respawn timing and deterministic floor-drop details public", () => {
+    const session = new GameSession();
+    advance(session, 1.4);
+    const defeatedScout = session
+      .snapshot()
+      .enemies.find((enemy) => enemy.id === "enemy:starter-scout");
+    expect(defeatedScout).toBeUndefined();
+    expect(
+      session
+        .snapshot()
+        .floorDrops.filter((drop) =>
+          drop.id.startsWith("drop:enemy:starter-scout:"),
+        ),
+    ).toEqual([
+      {
+        id: "drop:enemy:starter-scout:1:wood",
+        resource: "wood",
+        amount: 5,
+        position: { x: 2.2, y: -0.14 },
+      },
+      {
+        id: "drop:enemy:starter-scout:1:stone",
+        resource: "stone",
+        amount: 1,
+        position: { x: 1.4, y: 0.14 },
+      },
+    ]);
+
+    advance(session, enemyDefinitions.scout.respawnSeconds! - 0.2);
+    expect(
+      session
+        .snapshot()
+        .enemies.find((enemy) => enemy.id === "enemy:starter-scout"),
+    ).toBeUndefined();
+    advance(session, 0.2);
+    expect(
+      session
+        .snapshot()
+        .enemies.find((enemy) => enemy.id === "enemy:starter-scout"),
+    ).toMatchObject({
+      defeated: false,
+      hp: enemyDefinitions.scout.maxHp,
+      position: { x: 2.4, y: 0 },
+    });
+  });
+
   it("offers only distinct unowned trios and makes Chain Strike change hit resolution", () => {
     expect(upgradeDefinitions).toHaveLength(10);
     const owned = ["sharpened-blade", "quick-hands"] as const;
