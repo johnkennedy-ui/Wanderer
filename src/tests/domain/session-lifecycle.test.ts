@@ -101,26 +101,27 @@ describe("GameSession lifecycle", () => {
     session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });
     session.tick(0.1);
     session.resetWorld(" reset-fixture ");
-    const reset = session.snapshot();
-    expect(reset.world.seed).toBe("reset-fixture");
-    expect(reset.player).toEqual({
+    const reset = session.presentation();
+    expect(reset.ui.world.seed).toBe("reset-fixture");
+    expect(reset.ui.player).toEqual({
       position: { x: 0, y: 0 },
       hp: 100,
       maxHp: 100,
     });
-    expect(reset.resources).toEqual({
+    expect(reset.ui.resources).toEqual({
       wood: 120,
       stone: 120,
       scrap: 120,
       essence: 20,
       bossCore: 0,
     });
-    expect(reset.buildings).toEqual([]);
-    expect(reset.projectiles).toEqual([]);
-    expect(reset.floorDrops).toEqual([]);
-    expect(reset.upgrades).toEqual([]);
-    expect(reset.pendingUpgradeChoices).toEqual([]);
-    expect(reset.destination).toBeNull();
+    expect(reset.ui.buildings).toEqual([]);
+    expect(reset.renderer.projectiles).toEqual([]);
+    expect(reset.renderer.floorDrops).toEqual([]);
+    expect(reset.ui.pendingUpgradeChoices).toEqual([]);
+    const resetSave = session.createValidCampfireSaveRequest(2);
+    if (resetSave === null) throw new Error("reset home should be saveable");
+    expect(resetSave.document.upgrades).toEqual([]);
     const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
     expect(placed.building?.id).toMatch(/:0001$/);
   });
@@ -132,7 +133,7 @@ describe("GameSession lifecycle", () => {
     };
     const fresh = new GameSession({ world: suppliedWorld });
     suppliedWorld.seed = "mutated-after-construction";
-    expect(fresh.snapshot().world).toEqual({
+    expect(fresh.presentation().ui.world).toEqual({
       seed: "caller-owned-world",
       generatorVersion: "wanderer-web-v1",
     });
@@ -144,13 +145,13 @@ describe("GameSession lifecycle", () => {
     const saved: SaveDocument = { ...savedAtHome(), world: savedWorld };
     const hydrated = new GameSession({ saved });
     savedWorld.generatorVersion = "mutated-after-hydration";
-    expect(hydrated.snapshot().world).toEqual({
+    expect(hydrated.presentation().ui.world).toEqual({
       seed: "caller-owned-save-world",
       generatorVersion: "wanderer-web-v1",
     });
   });
 
-  it("keeps legacy aggregate, UI, and renderer snapshots aligned without exposing session state", () => {
+  it("keeps one UI/renderer presentation aligned without exposing session state", () => {
     const session = new GameSession();
     const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
     if (!placed.ok) throw new Error("Workshop should be placed");
@@ -159,48 +160,38 @@ describe("GameSession lifecycle", () => {
       rejection: { kind: "outside-settlement-radius", radius: 6 },
     });
 
-    const snapshot = session.snapshot();
-    expect(snapshot.ui.world).toBe(snapshot.world);
-    expect(snapshot.ui.player).toBe(snapshot.player);
-    expect(snapshot.ui.resources).toBe(snapshot.resources);
-    expect(snapshot.ui.buildings).toBe(snapshot.buildings);
-    expect(snapshot.ui.effects).toBe(snapshot.effects);
-    expect(snapshot.ui.pendingUpgradeChoices).toBe(
-      snapshot.pendingUpgradeChoices,
+    const presentation = session.presentation();
+    expect(Object.keys(presentation).sort()).toEqual(["renderer", "ui"]);
+    expect(presentation.renderer.player).toBe(presentation.ui.player);
+    expect(presentation.renderer.visibleBuildings).toEqual(
+      presentation.ui.buildings,
     );
-    expect(snapshot.ui.notice).toBe(snapshot.notice);
-    expect(snapshot.renderer.player).toBe(snapshot.player);
-    expect(snapshot.renderer.enemies).toBe(snapshot.enemies);
-    expect(snapshot.renderer.projectiles).toBe(snapshot.projectiles);
-    expect(snapshot.renderer.floorDrops).toBe(snapshot.floorDrops);
-    expect(snapshot.renderer.visibleBuildings).toBe(snapshot.visibleBuildings);
-    expect(snapshot.renderer.visibleChunks).toBe(snapshot.visibleChunks);
 
-    const rejection = snapshot.notice;
+    const rejection = presentation.ui.notice;
     if (rejection.kind !== "building.rejected")
       throw new Error("fixture should expose a typed building rejection");
     const placementRejection = rejection.rejection;
     if (placementRejection.kind !== "outside-settlement-radius")
       throw new Error("fixture should expose a radius rejection");
     const expected = {
-      worldSeed: snapshot.world.seed,
-      playerPosition: { ...snapshot.player.position },
-      wood: snapshot.resources.wood,
-      buildingPosition: { ...snapshot.buildings[0]!.position },
+      worldSeed: presentation.ui.world.seed,
+      playerPosition: { ...presentation.ui.player.position },
+      wood: presentation.ui.resources.wood,
+      buildingPosition: { ...presentation.ui.buildings[0]!.position },
       rejectionRadius: placementRejection.radius,
     };
-    (snapshot.world as { seed: string }).seed = "mutated-snapshot";
-    (snapshot.player.position as { x: number }).x = 99;
-    (snapshot.resources as { wood: number }).wood = 0;
-    (snapshot.buildings[0]!.position as { x: number }).x = 99;
+    (presentation.ui.world as { seed: string }).seed = "mutated-presentation";
+    (presentation.ui.player.position as { x: number }).x = 99;
+    (presentation.ui.resources as { wood: number }).wood = 0;
+    (presentation.ui.buildings[0]!.position as { x: number }).x = 99;
     (placementRejection as { radius: number }).radius = 0;
 
-    const later = session.snapshot();
-    expect(later.world.seed).toBe(expected.worldSeed);
-    expect(later.player.position).toEqual(expected.playerPosition);
-    expect(later.resources.wood).toBe(expected.wood);
-    expect(later.buildings[0]!.position).toEqual(expected.buildingPosition);
-    expect(later.notice).toEqual({
+    const later = session.presentation();
+    expect(later.ui.world.seed).toBe(expected.worldSeed);
+    expect(later.ui.player.position).toEqual(expected.playerPosition);
+    expect(later.ui.resources.wood).toBe(expected.wood);
+    expect(later.ui.buildings[0]!.position).toEqual(expected.buildingPosition);
+    expect(later.ui.notice).toEqual({
       kind: "building.rejected",
       rejection: {
         kind: "outside-settlement-radius",
@@ -211,8 +202,7 @@ describe("GameSession lifecycle", () => {
 
   it("uses typed outcomes and gives UI and renderer narrow projections", () => {
     const session = new GameSession();
-    const fresh = session.snapshot();
-    expect(fresh.notice).toEqual({ kind: "session.ready" });
+    const fresh = session.presentation();
     expect(fresh.ui.notice).toEqual({ kind: "session.ready" });
     expect(fresh.ui).not.toHaveProperty("visibleChunks");
     expect(fresh.renderer).not.toHaveProperty("resources");
@@ -221,14 +211,14 @@ describe("GameSession lifecycle", () => {
       ok: false,
       rejection: { kind: "outside-settlement-radius", radius: 6 },
     });
-    expect(session.snapshot().ui.notice).toEqual({
+    expect(session.presentation().ui.notice).toEqual({
       kind: "building.rejected",
       rejection: { kind: "outside-settlement-radius", radius: 6 },
     });
 
     const placed = session.placeBuilding("Workshop", { x: 1, y: 1 });
     if (!placed.ok) throw new Error("Workshop should be placed");
-    expect(session.snapshot().notice).toMatchObject({
+    expect(session.presentation().ui.notice).toMatchObject({
       kind: "building.placed",
       buildingId: placed.building.id,
       buildingKind: "Workshop",
@@ -236,7 +226,7 @@ describe("GameSession lifecycle", () => {
 
     const upgraded = session.upgradeBuilding(placed.building.id);
     if (!upgraded.ok) throw new Error("Workshop should be upgraded");
-    expect(session.snapshot().notice).toMatchObject({
+    expect(session.presentation().ui.notice).toMatchObject({
       kind: "building.upgraded",
       buildingId: placed.building.id,
       buildingKind: "Workshop",
@@ -244,7 +234,7 @@ describe("GameSession lifecycle", () => {
     });
 
     expect(session.demolishBuilding(placed.building.id).ok).toBe(true);
-    expect(session.snapshot().notice).toMatchObject({
+    expect(session.presentation().ui.notice).toMatchObject({
       kind: "building.demolished",
       buildingId: placed.building.id,
       buildingKind: "Workshop",
@@ -256,7 +246,7 @@ describe("GameSession lifecycle", () => {
       source: "tap-to-move",
       at: 1,
     });
-    expect(session.snapshot().notice).toEqual({
+    expect(session.presentation().ui.notice).toEqual({
       kind: "tap-to-move.rejected.invalid-destination",
     });
 
@@ -267,16 +257,16 @@ describe("GameSession lifecycle", () => {
       },
     });
     expect(remote.createValidCampfireSaveRequest(2)).toBeNull();
-    expect(remote.snapshot().notice).toEqual({
+    expect(remote.presentation().ui.notice).toEqual({
       kind: "save.rejected.not-near-campfire",
     });
   });
 
   it("hydrates recorded v1 worlds and rejects an unavailable recorded generator", () => {
     const saved = savedAtHome();
-    expect(new GameSession({ saved }).snapshot().world.generatorVersion).toBe(
-      WANDERER_WEB_V1,
-    );
+    expect(
+      new GameSession({ saved }).presentation().ui.world.generatorVersion,
+    ).toBe(WANDERER_WEB_V1);
 
     const unsupported = {
       ...saved,

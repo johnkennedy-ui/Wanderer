@@ -16,8 +16,8 @@ import {
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import { emptyResources, resourceKinds } from "./types";
 import type {
+  GamePresentation,
   GameNotice,
-  GameSnapshot,
   PlacementRejection,
   PlacementResult,
 } from "./notices";
@@ -84,7 +84,7 @@ import {
   missingVisibleRuntimeEnemyDraftsFor,
   visibleChunksFor,
 } from "./session/worldRuntime";
-import { projectGameSnapshot } from "./session/readModels";
+import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import {
   findCampfireCoveringPosition,
@@ -99,8 +99,6 @@ import {
   projectileUpgradeEffectsFor,
 } from "./session/progressionRules";
 
-/** Compatibility export for callers that have not yet moved to inputPolicy. */
-export { MOVEMENT_THRESHOLD } from "./inputPolicy";
 /** Compatibility export for callers that have not yet moved to bossUpgradeChoices. */
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -123,7 +121,7 @@ const hashText = (text: string): number => {
 /**
  * The sole mutable gameplay authority. It knows no browser, renderer, storage,
  * event listener, or Capacitor API; callers issue explicit commands and read
- * immutable-shaped snapshots.
+ * immutable-shaped presentation results.
  */
 export class GameSession {
   private world!: WorldIdentity;
@@ -420,38 +418,29 @@ export class GameSession {
     };
   }
 
-  snapshot(): GameSnapshot {
+  presentation(): GamePresentation {
     const visibleChunks = visibleChunksFor(this.world, this.player.position);
-    const moving =
-      this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
     const materialCapacity = materialCapacityFor(this.buildings);
     const buildRadius = this.currentSettlementBuildRadius();
-    const combatStats = combatStatsFor(this.buildings, this.upgrades);
     const effects = describeProgressionEffects(this.buildings, this.upgrades);
     const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
     const canSave = savePoint !== null;
     const savePointLabel = savePoint?.label ?? null;
-    return projectGameSnapshot({
+    return projectGamePresentation({
       world: this.world,
       player: this.player,
       resources: this.resources,
       materialCapacity,
       buildRadius,
-      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
-      combatStats,
       enemies: this.enemies,
       projectiles: this.projectiles,
       floorDrops: this.floorDrops,
       buildings: this.buildings,
       visibleChunks,
-      moving,
       inputSource: this.input.source,
-      destination: this.destination,
       combatStatus: this.combatStatus,
       effects,
-      defeatedBossIds: this.defeatedBossIds,
-      upgrades: this.upgrades,
       pendingUpgradeChoices,
       canSave,
       savePointLabel,

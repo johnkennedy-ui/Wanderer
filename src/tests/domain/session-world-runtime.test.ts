@@ -124,27 +124,27 @@ describe("session world runtime coordination", () => {
     ]);
   });
 
-  it("keeps visible IDs unique and a moved runtime enemy intact across repeated snapshot and tick setup", () => {
+  it("keeps visible IDs unique and a moved runtime enemy intact across repeated presentation and tick setup", () => {
     const session = new GameSession();
     const beforeMove = session
-      .snapshot()
-      .enemies.find((enemy) => enemy.id === "enemy:starter-scout");
+      .presentation()
+      .renderer.enemies.find((enemy) => enemy.id === "enemy:starter-scout");
     if (beforeMove === undefined)
       throw new Error("starter scout should be active in the home window");
 
     session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 1 });
     session.tick(0.1);
     const moved = session
-      .snapshot()
-      .enemies.find((enemy) => enemy.id === beforeMove.id);
+      .presentation()
+      .renderer.enemies.find((enemy) => enemy.id === beforeMove.id);
     if (moved === undefined)
       throw new Error("moved starter scout should remain visible");
     expect(moved.position).not.toEqual(beforeMove.position);
 
-    session.snapshot();
-    session.snapshot();
+    session.presentation();
+    session.presentation();
     session.tick(0);
-    const afterRepeatedSetup = session.snapshot();
+    const afterRepeatedSetup = session.presentation().renderer;
     const retainedScout = afterRepeatedSetup.enemies.find(
       (enemy) => enemy.id === beforeMove.id,
     );

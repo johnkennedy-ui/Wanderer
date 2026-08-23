@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { combatStatsFor } from "../../domain/session/progressionRules";
 import {
   advance,
   placeAndUpgradeTo,
@@ -27,7 +28,7 @@ describe("GameSession settlement", () => {
     });
     expect(session.upgradeBuilding(campfire.building.id).ok).toBe(true);
     expect(session.placeBuilding("Healer", { x: 8, y: 13 }).ok).toBe(true);
-    expect(session.snapshot().buildRadius).toBe(
+    expect(session.presentation().ui.buildRadius).toBe(
       gameplayTuning.campfireBuildRadiusByLevel[2],
     );
   });
@@ -40,7 +41,13 @@ describe("GameSession settlement", () => {
     ] as const) {
       const session = new GameSession();
       placeAndUpgradeTo(session, "Workshop", level);
-      expect(session.snapshot().combatStats.attackDamage).toBe(damage);
+      const request = session.createValidCampfireSaveRequest(level);
+      if (request === null)
+        throw new Error("home workshop should create a save document");
+      expect(
+        combatStatsFor(request.document.buildings, request.document.upgrades)
+          .attackDamage,
+      ).toBe(damage);
     }
 
     for (const [level, capacity] of [
@@ -50,7 +57,7 @@ describe("GameSession settlement", () => {
     ] as const) {
       const session = new GameSession();
       placeAndUpgradeTo(session, "Storage", level);
-      expect(session.snapshot().materialCapacity).toBe(capacity);
+      expect(session.presentation().ui.materialCapacity).toBe(capacity);
     }
 
     for (const [level, harvest] of [
@@ -67,9 +74,9 @@ describe("GameSession settlement", () => {
         },
       });
       placeAndUpgradeTo(session, "Farm", level);
-      const before = session.snapshot().resources;
+      const before = session.presentation().ui.resources;
       advance(session, gameplayTuning.farmHarvestEverySeconds);
-      const after = session.snapshot().resources;
+      const after = session.presentation().ui.resources;
       expect(after.wood - before.wood).toBe(harvest.wood);
       expect(after.stone - before.stone).toBe(harvest.stone);
       expect(after.scrap - before.scrap).toBe(harvest.scrap);
@@ -90,7 +97,10 @@ describe("GameSession settlement", () => {
       });
       placeAndUpgradeTo(session, "Healer", level);
       advance(session, 1);
-      expect(session.snapshot().player.hp).toBeCloseTo(50 + expectedHealing, 6);
+      expect(session.presentation().ui.player.hp).toBeCloseTo(
+        50 + expectedHealing,
+        6,
+      );
     }
   });
 
@@ -123,14 +133,14 @@ describe("GameSession settlement", () => {
       },
     });
     advance(session, gameplayTuning.farmHarvestEverySeconds);
-    expect(session.snapshot().resources).toEqual({
+    expect(session.presentation().ui.resources).toEqual({
       wood: 180,
       stone: 180,
       scrap: 180,
       essence: 180,
       bossCore: 4,
     });
-    expect(session.snapshot().effects.join(" ")).toContain(
+    expect(session.presentation().ui.effects.join(" ")).toContain(
       "Boss Core is exempt",
     );
   });

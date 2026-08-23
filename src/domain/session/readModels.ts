@@ -1,9 +1,8 @@
 import { copyGameNotice } from "../notices";
-import type { GameNotice, GameSnapshot } from "../notices";
+import type { GameNotice, GamePresentation } from "../notices";
 import type {
   BuildingState,
   ChunkRecipe,
-  CombatStats,
   EnemyKind,
   FloorDropState,
   InputSource,
@@ -38,8 +37,8 @@ export interface ReadModelProjectileInput {
   readonly elapsed: number;
 }
 
-/** Explicit, narrow facts from which the legacy aggregate read model is built. */
-export interface ReadModelProjectionInput {
+/** Explicit facts from which the two narrow presentation views are built. */
+export interface PresentationProjectionInput {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ReadonlyResourceBag;
@@ -50,15 +49,9 @@ export interface ReadModelProjectionInput {
   readonly visibleChunks: readonly ChunkRecipe[];
   readonly materialCapacity: number;
   readonly buildRadius: number;
-  readonly deathResourceLossRate: number;
-  readonly combatStats: CombatStats;
-  readonly moving: boolean;
   readonly inputSource: InputSource;
-  readonly destination: Vector2 | null;
   readonly combatStatus: string;
   readonly effects: readonly string[];
-  readonly defeatedBossIds: Iterable<string>;
-  readonly upgrades: Iterable<UpgradeId>;
   readonly pendingUpgradeChoices: readonly UpgradeId[];
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
@@ -67,13 +60,13 @@ export interface ReadModelProjectionInput {
 }
 
 /**
- * Builds the current public GameSnapshot without observing or mutating a
+ * Builds one current presentation result without observing or mutating a
  * GameSession. The caller owns gameplay-derived values and visible chunks;
- * this builder only copies and composes their read-model representation.
+ * this builder only copies and composes their narrow read-model views.
  */
-export const projectGameSnapshot = (
-  input: ReadModelProjectionInput,
-): GameSnapshot => {
+export const projectGamePresentation = (
+  input: PresentationProjectionInput,
+): GamePresentation => {
   const visibleChunkKeys = new Set(
     input.visibleChunks.map((chunk) => chunk.key),
   );
@@ -156,33 +149,5 @@ export const projectGameSnapshot = (
     visibleBuildings,
     visibleChunks: input.visibleChunks,
   };
-  return {
-    ui,
-    renderer,
-    world,
-    player,
-    resources,
-    materialCapacity: input.materialCapacity,
-    buildRadius: input.buildRadius,
-    deathResourceLossRate: input.deathResourceLossRate,
-    combatStats: input.combatStats,
-    enemies,
-    projectiles,
-    floorDrops,
-    buildings,
-    visibleBuildings,
-    visibleChunks: input.visibleChunks,
-    moving: input.moving,
-    inputSource: input.inputSource,
-    destination:
-      input.destination === null ? null : copyVector(input.destination),
-    combatStatus: input.combatStatus,
-    effects: input.effects,
-    defeatedBossIds: [...input.defeatedBossIds].sort(),
-    upgrades: [...input.upgrades].sort(),
-    pendingUpgradeChoices: input.pendingUpgradeChoices,
-    canSave: input.canSave,
-    savePointLabel: input.savePointLabel,
-    notice,
-  };
+  return { ui, renderer };
 };
