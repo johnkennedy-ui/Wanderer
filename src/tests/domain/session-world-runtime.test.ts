@@ -1,0 +1,159 @@
+import { describe, expect, it } from "vitest";
+import { enemyDefinitions } from "../../data/definitions";
+import { GameSession } from "../../domain/GameSession";
+import {
+  missingVisibleRuntimeEnemyDraftsFor,
+  visibleChunksFor,
+} from "../../domain/session/worldRuntime";
+import type { RuntimeEnemy } from "../../domain/session/sessionState";
+import { generateChunk, visibleChunkCoordinates } from "../../domain/world";
+
+const world = {
+  seed: "world-runtime-review-seed",
+  generatorVersion: "wanderer-web-v1",
+};
+
+describe("session world runtime coordination", () => {
+  it("materializes the current generator's ordered 3x3 chunks for a non-home window", () => {
+    const playerPosition = { x: 47.9, y: -17.2 };
+    const expectedCoordinates = visibleChunkCoordinates(playerPosition);
+    const expectedChunks = expectedCoordinates.map((coordinate) =>
+      generateChunk(world, coordinate),
+    );
+
+    const visibleChunks = visibleChunksFor(world, playerPosition);
+
+    expect(visibleChunks).toHaveLength(9);
+    expect(visibleChunks.map((chunk) => chunk.coordinate)).toEqual(
+      expectedCoordinates,
+    );
+    expect(visibleChunks.map((chunk) => chunk.key)).toEqual(
+      expectedChunks.map((chunk) => chunk.key),
+    );
+    expect(visibleChunks).toEqual(expectedChunks);
+  });
+
+  it("returns missing runtime drafts with every current field while preserving existing IDs and suppressing only defeated bosses", () => {
+    const visibleChunks = visibleChunksFor(world, { x: 0, y: 0 });
+    const homeSpawns = visibleChunks.flatMap((chunk) => chunk.spawns);
+    const existingSpawn = homeSpawns.find(
+      (spawn) => spawn.id === "enemy:starter-elite",
+    );
+    const scoutSpawn = homeSpawns.find(
+      (spawn) => spawn.id === "enemy:starter-scout",
+    );
+    const bossSpawn = homeSpawns.find(
+      (spawn) => spawn.id === "boss:ember-wyrm",
+    );
+    if (
+      existingSpawn === undefined ||
+      scoutSpawn === undefined ||
+      bossSpawn === undefined
+    )
+      throw new Error("home window should contain the released starter spawns");
+
+    const existingEnemy: RuntimeEnemy = {
+      id: existingSpawn.id,
+      kind: existingSpawn.kind,
+      position: { x: 99, y: -99 },
+      spawnPosition: { x: 2.5, y: -3 },
+      hp: 1,
+      maxHp: 56,
+      damage: 7,
+      dangerTier: 0,
+      dropMultiplier: 1,
+      moveSpeed: 1.5,
+      attackEverySeconds: 1.4,
+      respawnAt: 42,
+      defeated: false,
+      attackElapsed: 0.7,
+    };
+    const existingEnemies = new Map([[existingEnemy.id, existingEnemy]]);
+    const defeatedBossIds = new Set([bossSpawn.id, scoutSpawn.id]);
+
+    const drafts = missingVisibleRuntimeEnemyDraftsFor({
+      visibleChunks,
+      existingEnemies,
+      defeatedBossIds,
+    });
+    const scoutDraft = drafts.find((draft) => draft.id === scoutSpawn.id);
+
+    expect(existingEnemies.get(existingEnemy.id)).toBe(existingEnemy);
+    expect(drafts.map((draft) => draft.id)).not.toContain(existingEnemy.id);
+    expect(drafts.map((draft) => draft.id)).not.toContain(bossSpawn.id);
+    expect(scoutDraft).toEqual({
+      id: scoutSpawn.id,
+      kind: scoutSpawn.kind,
+      position: { ...scoutSpawn.position },
+      spawnPosition: { ...scoutSpawn.position },
+      hp: Math.ceil(
+        enemyDefinitions.scout.maxHp * scoutSpawn.danger.healthMultiplier,
+      ),
+      maxHp: Math.ceil(
+        enemyDefinitions.scout.maxHp * scoutSpawn.danger.healthMultiplier,
+      ),
+      damage: Math.max(
+        1,
+        Math.ceil(
+          enemyDefinitions.scout.damage * scoutSpawn.danger.damageMultiplier,
+        ),
+      ),
+      dangerTier: scoutSpawn.danger.tier,
+      dropMultiplier: scoutSpawn.danger.dropMultiplier,
+      moveSpeed: enemyDefinitions.scout.moveSpeed,
+      attackEverySeconds: enemyDefinitions.scout.attackEverySeconds,
+      respawnAt: null,
+      defeated: false,
+      attackElapsed: 0,
+    });
+    expect(Object.keys(scoutDraft ?? {}).sort()).toEqual([
+      "attackElapsed",
+      "attackEverySeconds",
+      "damage",
+      "dangerTier",
+      "defeated",
+      "dropMultiplier",
+      "hp",
+      "id",
+      "kind",
+      "maxHp",
+      "moveSpeed",
+      "position",
+      "respawnAt",
+      "spawnPosition",
+    ]);
+  });
+
+  it("keeps visible IDs unique and a moved runtime enemy intact across repeated snapshot and tick setup", () => {
+    const session = new GameSession();
+    const beforeMove = session
+      .snapshot()
+      .enemies.find((enemy) => enemy.id === "enemy:starter-scout");
+    if (beforeMove === undefined)
+      throw new Error("starter scout should be active in the home window");
+
+    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 1 });
+    session.tick(0.1);
+    const moved = session
+      .snapshot()
+      .enemies.find((enemy) => enemy.id === beforeMove.id);
+    if (moved === undefined)
+      throw new Error("moved starter scout should remain visible");
+    expect(moved.position).not.toEqual(beforeMove.position);
+
+    session.snapshot();
+    session.snapshot();
+    session.tick(0);
+    const afterRepeatedSetup = session.snapshot();
+    const retainedScout = afterRepeatedSetup.enemies.find(
+      (enemy) => enemy.id === beforeMove.id,
+    );
+    if (retainedScout === undefined)
+      throw new Error("moved starter scout should remain active after setup");
+
+    expect(retainedScout.position).toEqual(moved.position);
+    expect(afterRepeatedSetup.enemies.map((enemy) => enemy.id)).toHaveLength(
+      new Set(afterRepeatedSetup.enemies.map((enemy) => enemy.id)).size,
+    );
+  });
+});

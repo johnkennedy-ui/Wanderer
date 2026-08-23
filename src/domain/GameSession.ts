@@ -80,6 +80,10 @@ import type {
   SessionState,
   SettlementCampfire,
 } from "./session/sessionState";
+import {
+  missingVisibleRuntimeEnemyDraftsFor,
+  visibleChunksFor,
+} from "./session/worldRuntime";
 import { projectGameSnapshot } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import {
@@ -417,9 +421,7 @@ export class GameSession {
   }
 
   snapshot(): GameSnapshot {
-    const visibleChunks = visibleChunkCoordinates(this.player.position).map(
-      (coordinate) => generateChunk(this.world, coordinate),
-    );
+    const visibleChunks = visibleChunksFor(this.world, this.player.position);
     const moving =
       this.destination !== null || isMeaningfulMovement(this.input.intent);
     const savePoint = this.nearbyCampfire();
@@ -459,33 +461,13 @@ export class GameSession {
   }
 
   private ensureNeighborhoodEnemies(): void {
-    for (const coordinate of visibleChunkCoordinates(this.player.position)) {
-      for (const spawn of generateChunk(this.world, coordinate).spawns) {
-        if (spawn.kind === "boss" && this.defeatedBossIds.has(spawn.id))
-          continue;
-        if (this.enemies.has(spawn.id)) continue;
-        const definition = enemyDefinitions[spawn.kind];
-        this.enemies.set(spawn.id, {
-          id: spawn.id,
-          kind: spawn.kind,
-          position: copyVector(spawn.position),
-          spawnPosition: copyVector(spawn.position),
-          hp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
-          maxHp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
-          damage: Math.max(
-            1,
-            Math.ceil(definition.damage * spawn.danger.damageMultiplier),
-          ),
-          dangerTier: spawn.danger.tier,
-          dropMultiplier: spawn.danger.dropMultiplier,
-          moveSpeed: definition.moveSpeed,
-          attackEverySeconds: definition.attackEverySeconds,
-          respawnAt: null,
-          defeated: false,
-          attackElapsed: 0,
-        });
-      }
-    }
+    const visibleChunks = visibleChunksFor(this.world, this.player.position);
+    const drafts = missingVisibleRuntimeEnemyDraftsFor({
+      visibleChunks,
+      existingEnemies: this.enemies,
+      defeatedBossIds: this.defeatedBossIds,
+    });
+    for (const draft of drafts) this.enemies.set(draft.id, draft);
   }
 
   private updateAutoCombat(delta: number): void {
