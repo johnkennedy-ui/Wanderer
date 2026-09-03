@@ -1,18 +1,6 @@
-import {
-  enemyDefinitions,
-  gameplayTuning,
-  upgradeDefinitionFor,
-} from "../data/definitions";
-import {
-  add,
-  distance,
-  magnitude,
-  normalize,
-  roundVector,
-  scale,
-} from "./math";
+import { gameplayTuning, upgradeDefinitionFor } from "../data/definitions";
+import { add, magnitude, normalize, roundVector, scale } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
-import { resourceKinds } from "./types";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
@@ -20,7 +8,6 @@ import type {
   FloorDropState,
   MoveCommand,
   ResourceBag,
-  ReadonlyResourceBag,
   CurrentSave,
   UpgradeId,
   ValidCampfireSaveRequest,
@@ -36,18 +23,10 @@ import {
 } from "./session/sessionState";
 import { floorDropCollectionPolicy } from "./session/floorDropCollectionPolicy";
 import {
-  advanceProjectileFlight,
-  enemyPursuitPosition,
-  liveTargetsInRange,
-  projectileDraftFor,
-  projectileLaunchDecision,
-} from "./session/combatPolicy";
-import {
-  enemyAttackResolutionFor,
-  enemyRespawnResolutionFor,
-  floorDropDraftFor,
-  projectileImpactResolutionFor,
-} from "./session/combatResolutionPolicy";
+  advanceAutoCombatPhase,
+  advanceEnemyCombatPhase,
+  advanceProjectileCombatPhase,
+} from "./session/combatTickRuntime";
 import type {
   RuntimeEnemy,
   RuntimeProjectile,
@@ -67,15 +46,11 @@ import {
 import {
   clampResourcesToCapacity,
   materialCapacityFor,
-  scaleResourceBag,
-  subtractResourceBags,
 } from "./session/economy";
-import { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 import {
   applyUpgradeEffectToPlayer,
   combatStatsFor,
   describeProgressionEffects,
-  projectileUpgradeEffectsFor,
 } from "./session/progressionRules";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
@@ -191,9 +166,7 @@ export class GameSession {
     }
 
     this.collectNearbyFloorDrops();
-    this.updateEnemyPursuit(delta);
-    this.updateEnemyRespawns();
-    this.updateEnemyAttacks(delta);
+    this.updateEnemyCombat(delta);
     this.ensureNeighborhoodEnemies();
     this.clampPlayerState();
   }
@@ -348,103 +321,46 @@ export class GameSession {
     for (const draft of drafts) this.enemies.set(draft.id, draft);
   }
   private updateAutoCombat(delta: number): void {
-    const stats = combatStatsFor(this.settlement.buildingState, this.upgrades);
-    const targets = liveTargetsInRange({
-      playerPosition: this.player.position,
-      targets: this.enemies.values(),
-      range: stats.attackRange,
-    });
-    const decision = projectileLaunchDecision({
-      targets,
-      attackElapsed: this.attackElapsed,
+    const result = advanceAutoCombatPhase({
       delta,
-      attackIntervalSeconds: stats.attackIntervalSeconds,
-    });
-    if (decision.kind === "no-target") {
-      this.combatStatus = "Stationary: seeking a target";
-      this.attackElapsed = decision.attackElapsed;
-      return;
-    }
-    this.attackElapsed = decision.attackElapsed;
-    this.combatStatus = `Auto-attacking ${decision.target.kind} (${Math.ceil(
-      decision.target.hp,
-    )}/${decision.target.maxHp})`;
-    if (decision.kind === "waiting") return;
-
-    const projectileEffects = projectileUpgradeEffectsFor(this.upgrades);
-    const draft = projectileDraftFor({
       playerPosition: this.player.position,
-      target: decision.target,
-      targets,
-      attackDamage: stats.attackDamage,
-      chainTargets: stats.chainTargets,
-      chainDamageMultiplier: projectileEffects.chainDamageMultiplier,
-      hitHeal: projectileEffects.hitHeal,
+      enemies: this.enemies,
+      buildings: this.settlement.buildingState,
+      upgrades: this.upgrades,
+      projectiles: this.projectiles,
+      attackElapsed: this.attackElapsed,
+      nextProjectileSerial: this.nextProjectileSerial,
     });
-    this.projectiles.push({
-      id: "projectile:" + this.nextProjectileSerial.toString().padStart(4, "0"),
-      origin: draft.origin,
-      targetId: draft.targetId,
-      targetPosition: draft.targetPosition,
-      damage: draft.damage,
-      chainTargetIds: draft.chainTargetIds,
-      chainDamage: draft.chainDamage,
-      hitHeal: draft.hitHeal,
-      elapsed: 0,
-    });
-    this.nextProjectileSerial += 1;
+    this.projectiles = result.projectiles;
+    this.attackElapsed = result.attackElapsed;
+    this.nextProjectileSerial = result.nextProjectileSerial;
+    this.combatStatus = result.combatStatus;
   }
   private updateProjectiles(delta: number): void {
-    const completed: RuntimeProjectile[] = [];
-    this.projectiles = this.projectiles.filter((projectile) => {
-      const flight = advanceProjectileFlight({
-        elapsed: projectile.elapsed,
-        delta,
-        travelSeconds: gameplayTuning.basicProjectileTravelSeconds,
-      });
-      projectile.elapsed = flight.elapsed;
-      if (!flight.completed) return true;
-      completed.push(projectile);
-      return false;
+    const result = advanceProjectileCombatPhase({
+      delta,
+      elapsed: this.elapsed,
+      playerHp: this.player.hp,
+      playerMaxHp: this.player.maxHp,
+      enemies: this.enemies,
+      projectiles: this.projectiles,
+      floorDrops: this.floorDrops,
+      defeatedBossIds: this.defeatedBossIds,
+      pendingUpgradeChoices: this.pendingUpgradeChoices,
+      nextFloorDropSerial: this.nextFloorDropSerial,
+      worldSeed: this.world.seed,
+      upgrades: this.upgrades,
+      projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
+      floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
     });
-    for (const projectile of completed) this.resolveProjectileHit(projectile);
-  }
-  private resolveProjectileHit(projectile: RuntimeProjectile): void {
-    const resolution = projectileImpactResolutionFor({
-      targets: this.enemies,
-      primaryTargetId: projectile.targetId,
-      primaryDamage: projectile.damage,
-      chainTargetIds: projectile.chainTargetIds,
-      chainDamage: projectile.chainDamage,
-    });
-    for (const impact of resolution.impacts) {
-      const enemy = this.enemies.get(impact.targetId);
-      if (enemy === undefined || enemy.defeated) continue;
-      enemy.hp = impact.nextHp;
-      if (impact.lethal) this.defeatEnemy(enemy);
-    }
-    if (resolution.landedHitCount > 0 && projectile.hitHeal > 0)
-      this.player.hp = Math.min(
-        this.player.maxHp,
-        this.player.hp + resolution.landedHitCount * projectile.hitHeal,
-      );
-  }
-  private updateEnemyRespawns(): void {
-    for (const enemy of this.enemies.values()) {
-      const resolution = enemyRespawnResolutionFor({
-        defeated: enemy.defeated,
-        respawnAt: enemy.respawnAt,
-        elapsed: this.elapsed,
-        maxHp: enemy.maxHp,
-        spawnPosition: enemy.spawnPosition,
-      });
-      if (resolution.kind !== "ready") continue;
-      enemy.defeated = resolution.defeated;
-      enemy.hp = resolution.hp;
-      enemy.position = resolution.position;
-      enemy.respawnAt = resolution.respawnAt;
-      enemy.attackElapsed = resolution.attackElapsed;
-    }
+    this.player.hp = result.playerHp;
+    this.enemies = result.enemies;
+    this.projectiles = result.projectiles;
+    this.floorDrops = result.floorDrops;
+    this.defeatedBossIds = result.defeatedBossIds;
+    this.pendingUpgradeChoices = result.pendingUpgradeChoices;
+    this.nextFloorDropSerial = result.nextFloorDropSerial;
+    if (result.notice !== null) this.notice = result.notice;
   }
   private moveTowardDestination(delta: number): boolean {
     if (this.destination === null) return false;
@@ -474,102 +390,28 @@ export class GameSession {
     );
     return true;
   }
-  private updateEnemyPursuit(delta: number): void {
-    for (const enemy of this.enemies.values()) {
-      if (enemy.defeated) continue;
-      enemy.position = enemyPursuitPosition({
-        enemyPosition: enemy.position,
-        playerPosition: this.player.position,
-        moveSpeed: enemy.moveSpeed,
-        delta,
-        attackStandoff: gameplayTuning.enemyAttackStandoff,
-      });
-    }
-  }
-  private updateEnemyAttacks(delta: number): void {
-    for (const enemy of this.enemies.values()) {
-      const resolution = enemyAttackResolutionFor({
-        defeated: enemy.defeated,
-        inAttackRange:
-          distance(this.player.position, enemy.position) <=
-          gameplayTuning.enemyAttackStandoff,
-        attackElapsed: enemy.attackElapsed,
-        attackEverySeconds: enemy.attackEverySeconds,
-        damage: enemy.damage,
-        playerHp: this.player.hp,
-        delta,
-      });
-      if (resolution.kind === "inactive") continue;
-      enemy.attackElapsed = resolution.attackElapsed;
-      if (resolution.kind === "waiting") continue;
-      this.player.hp = resolution.nextPlayerHp;
-      if (resolution.playerDefeated) {
-        this.handleDeath();
-        return;
-      }
-    }
-  }
-  private handleDeath(): void {
-    const carriedLoss = scaleResourceBag(
-      this.resources,
-      gameplayTuning.deathResourceLossRate,
-    );
-    this.resources = subtractResourceBags(this.resources, carriedLoss);
-    this.player.position = copyVector(this.committedSavePoint.position);
-    this.player.hp = this.player.maxHp;
-    this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
-    this.destination = null;
-    this.attackElapsed = 0;
-    this.settlement.resetHarvest();
-    this.notice = {
-      kind: "player.died",
-      savePointLabel: this.committedSavePoint.label,
-      resourceLossRate: gameplayTuning.deathResourceLossRate,
-    };
-  }
-  private defeatEnemy(enemy: RuntimeEnemy): void {
-    const definition = enemyDefinitions[enemy.kind];
-    this.floorDrops = [
-      ...this.floorDrops,
-      ...this.createFloorDrops(
-        enemy,
-        scaleResourceBag(definition.drops, enemy.dropMultiplier),
-      ),
-    ];
-    enemy.defeated = true;
-    if (enemy.kind === "boss") {
-      this.defeatedBossIds.add(enemy.id);
-      this.pendingUpgradeChoices = selectBossUpgradeChoices(
-        this.world.seed,
-        this.upgrades,
-      );
-      this.notice = {
-        kind: "boss.defeated",
-        hasUpgradeChoices: this.pendingUpgradeChoices.length === 3,
-      };
-    } else {
-      enemy.respawnAt = this.elapsed + (definition.respawnSeconds ?? 0);
-      this.notice = {
-        kind: "enemy.defeated",
-        enemyKind: enemy.kind,
-        respawns: true,
-      };
-    }
-  }
-  private createFloorDrops(
-    enemy: RuntimeEnemy,
-    resources: ReadonlyResourceBag,
-  ): readonly FloorDropState[] {
-    const serial = this.nextFloorDropSerial;
-    this.nextFloorDropSerial += 1;
-    return floorDropDraftFor({
-      enemyId: enemy.id,
-      enemyPosition: enemy.position,
-      serial,
-      resources,
-      resourceOrder: resourceKinds,
-      rules: { offsetDistance: gameplayTuning.floorDropOffsetDistance },
+  private updateEnemyCombat(delta: number): void {
+    const result = advanceEnemyCombatPhase({
+      delta,
+      elapsed: this.elapsed,
+      player: this.player,
+      resources: this.resources,
+      enemies: this.enemies,
+      committedSavePoint: this.committedSavePoint,
+      input: this.input,
+      destination: this.destination,
+      attackElapsed: this.attackElapsed,
+      enemyAttackStandoff: gameplayTuning.enemyAttackStandoff,
+      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
     });
+    this.player = result.player;
+    this.resources = result.resources;
+    this.enemies = result.enemies;
+    this.input = result.input;
+    this.destination = result.destination;
+    this.attackElapsed = result.attackElapsed;
+    if (result.notice !== null) this.notice = result.notice;
+    if (result.resetHarvest) this.settlement.resetHarvest();
   }
   private collectNearbyFloorDrops(): void {
     if (this.floorDrops.length === 0) return;
