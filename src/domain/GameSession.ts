@@ -64,16 +64,6 @@ import {
   floorDropDraftFor,
   projectileImpactResolutionFor,
 } from "./session/combatResolutionPolicy";
-import {
-  addResourceBags,
-  canAffordResources,
-  clampResourcesToCapacity,
-  collectResourcesWithinCapacity,
-  materialCapacityFor,
-  resourcesForLevel,
-  scaleResourceBag,
-  subtractResourceBags,
-} from "./session/economy";
 import type {
   RuntimeEnemy,
   RuntimeProjectile,
@@ -86,11 +76,13 @@ import {
 } from "./session/worldRuntime";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
+import { SettlementRuntime } from "./session/settlementRuntime";
 import {
-  findCampfireCoveringPosition,
-  findNearbyCampfire,
-  settlementBuildRadius,
-} from "./session/settlementPolicy";
+  clampResourcesToCapacity,
+  materialCapacityFor,
+  scaleResourceBag,
+  subtractResourceBags,
+} from "./session/economy";
 import { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 import {
   applyUpgradeEffectToPlayer,
@@ -108,16 +100,6 @@ interface SessionOptions {
 }
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
-
-const hashText = (text: string): number => {
-  let hash = 2_166_136_261;
-  for (const character of text) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return hash >>> 0;
-};
-
 /**
  * The sole mutable gameplay authority. It knows no browser, renderer, storage,
  * event listener, or Capacitor API; callers issue explicit commands and read
@@ -127,14 +109,13 @@ export class GameSession {
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
-  private buildings!: BuildingState[];
+  private settlement!: SettlementRuntime;
   private enemies!: Map<string, RuntimeEnemy>;
   private projectiles!: RuntimeProjectile[];
   private floorDrops!: FloorDropState[];
   private defeatedBossIds!: Set<string>;
   private upgrades!: Set<UpgradeId>;
   private pendingUpgradeChoices!: UpgradeId[];
-  private nextBuildingSerial!: number;
   private nextProjectileSerial!: number;
   private nextFloorDropSerial!: number;
   private committedSavePoint!: SettlementCampfire;
@@ -142,10 +123,8 @@ export class GameSession {
   private destination!: Vector2 | null;
   private elapsed!: number;
   private attackElapsed!: number;
-  private farmHarvestElapsed!: number;
   private notice!: GameNotice;
   private combatStatus!: string;
-
   constructor(options: SessionOptions = {}) {
     this.replaceState(
       options.saved === undefined
@@ -154,24 +133,26 @@ export class GameSession {
     );
     this.resources = clampResourcesToCapacity(
       this.resources,
-      materialCapacityFor(this.buildings),
+      materialCapacityFor(this.settlement.buildingState),
     );
     this.ensureNeighborhoodEnemies();
   }
-
   /** The sole lifecycle boundary that replaces instance-owned session state. */
   private replaceState(state: SessionState): void {
     this.world = state.world;
     this.player = state.player;
     this.resources = state.resources;
-    this.buildings = state.buildings;
+    this.settlement = new SettlementRuntime({
+      buildings: state.buildings,
+      nextBuildingSerial: state.nextBuildingSerial,
+      farmHarvestElapsed: state.farmHarvestElapsed,
+    });
     this.enemies = state.enemies;
     this.projectiles = state.projectiles;
     this.floorDrops = state.floorDrops;
     this.defeatedBossIds = state.defeatedBossIds;
     this.upgrades = state.upgrades;
     this.pendingUpgradeChoices = state.pendingUpgradeChoices;
-    this.nextBuildingSerial = state.nextBuildingSerial;
     this.nextProjectileSerial = state.nextProjectileSerial;
     this.nextFloorDropSerial = state.nextFloorDropSerial;
     this.committedSavePoint = state.committedSavePoint;
@@ -179,11 +160,9 @@ export class GameSession {
     this.destination = state.destination;
     this.elapsed = state.elapsed;
     this.attackElapsed = state.attackElapsed;
-    this.farmHarvestElapsed = state.farmHarvestElapsed;
     this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
-
   move(command: MoveCommand): void {
     this.destination = null;
     this.input = {
@@ -192,7 +171,6 @@ export class GameSession {
       at: command.at,
     };
   }
-
   setDestination(command: DestinationCommand): void {
     if (!isFinitePosition(command.destination)) {
       this.notice = { kind: "tap-to-move.rejected.invalid-destination" };
@@ -205,7 +183,6 @@ export class GameSession {
       at: command.at,
     };
   }
-
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
@@ -220,13 +197,14 @@ export class GameSession {
             this.player.position,
             scale(
               this.input.intent,
-              combatStatsFor(this.buildings, this.upgrades).moveSpeed * delta,
+              combatStatsFor(this.settlement.buildingState, this.upgrades)
+                .moveSpeed * delta,
             ),
           ),
         );
       this.combatStatus = "Moving: basic auto-attack suppressed";
       this.attackElapsed = 0;
-      this.farmHarvestElapsed = 0;
+      this.settlement.resetHarvest();
     } else {
       this.applyPassiveEffects(delta);
       this.updateAutoCombat(delta);
@@ -240,113 +218,14 @@ export class GameSession {
     this.clampPlayerState();
   }
 
-  placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
-    const validation = this.validateBuildingPosition(kind, position);
-    if (validation !== null) return this.rejectPlacement(validation);
-    const cost = resourcesForLevel(buildingDefinitions[kind].baseCost, 1);
-    if (!canAffordResources(this.resources, cost))
-      return this.rejectPlacement({ kind: "insufficient-resources" });
-
-    const building: BuildingState = {
-      id: `building:${hashText(this.world.seed).toString(16)}:${this.nextBuildingSerial.toString().padStart(4, "0")}`,
-      kind,
-      position: roundVector(position),
-      level: 1,
-    };
-    this.nextBuildingSerial += 1;
-    this.resources = subtractResourceBags(this.resources, cost);
-    this.buildings = [...this.buildings, building];
-    this.notice = {
-      kind: "building.placed",
-      buildingId: building.id,
-      buildingKind: building.kind,
-    };
-    return { ok: true, outcome: "placed", building };
-  }
-
-  relocateBuilding(id: string, position: Vector2): PlacementResult {
-    const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined)
-      return this.rejectPlacement({ kind: "unknown-building" });
-    const validation = this.validateBuildingPosition(
-      building.kind,
-      position,
-      id,
-    );
-    if (validation !== null) return this.rejectPlacement(validation);
-    const moved = { ...building, position: roundVector(position) };
-    this.buildings = this.buildings.map((candidate) =>
-      candidate.id === id ? moved : candidate,
-    );
-    this.notice = {
-      kind: "building.relocated",
-      buildingId: moved.id,
-      buildingKind: moved.kind,
-    };
-    return { ok: true, outcome: "relocated", building: moved };
-  }
-
-  upgradeBuilding(id: string): PlacementResult {
-    const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined)
-      return this.rejectPlacement({ kind: "unknown-building" });
-    if (building.level === 3)
-      return this.rejectPlacement({ kind: "already-level-3" });
-    const nextLevel = (building.level + 1) as 2 | 3;
-    const cost = resourcesForLevel(
-      buildingDefinitions[building.kind].baseCost,
-      nextLevel,
-    );
-    if (!canAffordResources(this.resources, cost))
-      return this.rejectPlacement({ kind: "insufficient-resources" });
-
-    const upgraded: BuildingState = { ...building, level: nextLevel };
-    this.resources = subtractResourceBags(this.resources, cost);
-    this.buildings = this.buildings.map((candidate) =>
-      candidate.id === id ? upgraded : candidate,
-    );
-    this.resources = clampResourcesToCapacity(
-      this.resources,
-      materialCapacityFor(this.buildings),
-    );
-    this.notice = {
-      kind: "building.upgraded",
-      buildingId: upgraded.id,
-      buildingKind: upgraded.kind,
-      level: nextLevel,
-    };
-    return { ok: true, outcome: "upgraded", building: upgraded };
-  }
-
-  demolishBuilding(id: string): PlacementResult {
-    const building = this.buildings.find((candidate) => candidate.id === id);
-    if (building === undefined)
-      return this.rejectPlacement({ kind: "unknown-building" });
-    const cumulativeCost = [1, 2, 3]
-      .filter((level) => level <= building.level)
-      .map((level) =>
-        resourcesForLevel(buildingDefinitions[building.kind].baseCost, level),
-      )
-      .reduce(addResourceBags, emptyResources());
-    const refund = scaleResourceBag(
-      cumulativeCost,
-      gameplayTuning.buildingRefundRate,
-    );
-    this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
-    this.resources = collectResourcesWithinCapacity(
-      this.resources,
-      refund,
-      materialCapacityFor(this.buildings),
-    );
-    this.notice = {
-      kind: "building.demolished",
-      buildingId: building.id,
-      buildingKind: building.kind,
-      refundRate: gameplayTuning.buildingRefundRate,
-    };
-    return { ok: true, outcome: "demolished", building };
-  }
-
+  // prettier-ignore
+  placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult { const outcome = this.settlement.place(kind, position, this.resources, this.world.seed, this.settlementInputs(position)); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
+  // prettier-ignore
+  relocateBuilding(id: string, position: Vector2): PlacementResult { const outcome = this.settlement.relocate(id, position, this.resources, this.settlementInputs(position)); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
+  // prettier-ignore
+  upgradeBuilding(id: string): PlacementResult { const outcome = this.settlement.upgrade(id, this.resources); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
+  // prettier-ignore
+  demolishBuilding(id: string): PlacementResult { const outcome = this.settlement.demolish(id, this.resources); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
   chooseUpgrade(id: UpgradeId): boolean {
     if (
       this.pendingUpgradeChoices.length !== 3 ||
@@ -393,10 +272,10 @@ export class GameSession {
         world: this.world,
         player: this.player,
         resources: this.resources,
-        buildings: this.buildings,
+        buildings: this.settlement.buildingState,
         defeatedBossIds: this.defeatedBossIds,
         upgrades: this.upgrades,
-        nextBuildingSerial: this.nextBuildingSerial,
+        nextBuildingSerial: this.settlement.serial,
       },
       committedAt,
       savePoint,
@@ -421,9 +300,12 @@ export class GameSession {
   presentation(): GamePresentation {
     const visibleChunks = visibleChunksFor(this.world, this.player.position);
     const savePoint = this.nearbyCampfire();
-    const materialCapacity = materialCapacityFor(this.buildings);
+    const materialCapacity = materialCapacityFor(this.settlement.buildingState);
     const buildRadius = this.currentSettlementBuildRadius();
-    const effects = describeProgressionEffects(this.buildings, this.upgrades);
+    const effects = describeProgressionEffects(
+      this.settlement.buildingState,
+      this.upgrades,
+    );
     const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
     const canSave = savePoint !== null;
     const savePointLabel = savePoint?.label ?? null;
@@ -436,7 +318,7 @@ export class GameSession {
       enemies: this.enemies,
       projectiles: this.projectiles,
       floorDrops: this.floorDrops,
-      buildings: this.buildings,
+      buildings: this.settlement.buildingState,
       visibleChunks,
       inputSource: this.input.source,
       combatStatus: this.combatStatus,
@@ -448,7 +330,6 @@ export class GameSession {
       projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
     });
   }
-
   private ensureNeighborhoodEnemies(): void {
     const visibleChunks = visibleChunksFor(this.world, this.player.position);
     const drafts = missingVisibleRuntimeEnemyDraftsFor({
@@ -458,9 +339,8 @@ export class GameSession {
     });
     for (const draft of drafts) this.enemies.set(draft.id, draft);
   }
-
   private updateAutoCombat(delta: number): void {
-    const stats = combatStatsFor(this.buildings, this.upgrades);
+    const stats = combatStatsFor(this.settlement.buildingState, this.upgrades);
     const targets = liveTargetsInRange({
       playerPosition: this.player.position,
       targets: this.enemies.values(),
@@ -504,7 +384,6 @@ export class GameSession {
     });
     this.nextProjectileSerial += 1;
   }
-
   private updateProjectiles(delta: number): void {
     const completed: RuntimeProjectile[] = [];
     this.projectiles = this.projectiles.filter((projectile) => {
@@ -520,7 +399,6 @@ export class GameSession {
     });
     for (const projectile of completed) this.resolveProjectileHit(projectile);
   }
-
   private resolveProjectileHit(projectile: RuntimeProjectile): void {
     const resolution = projectileImpactResolutionFor({
       targets: this.enemies,
@@ -541,7 +419,6 @@ export class GameSession {
         this.player.hp + resolution.landedHitCount * projectile.hitHeal,
       );
   }
-
   private updateEnemyRespawns(): void {
     for (const enemy of this.enemies.values()) {
       const resolution = enemyRespawnResolutionFor({
@@ -559,7 +436,6 @@ export class GameSession {
       enemy.attackElapsed = resolution.attackElapsed;
     }
   }
-
   private moveTowardDestination(delta: number): boolean {
     if (this.destination === null) return false;
     const offset = {
@@ -568,7 +444,8 @@ export class GameSession {
     };
     const remainingDistance = magnitude(offset);
     const maximumTravel =
-      combatStatsFor(this.buildings, this.upgrades).moveSpeed * delta;
+      combatStatsFor(this.settlement.buildingState, this.upgrades).moveSpeed *
+      delta;
     if (
       remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
       maximumTravel >= remainingDistance
@@ -587,7 +464,6 @@ export class GameSession {
     );
     return true;
   }
-
   private updateEnemyPursuit(delta: number): void {
     for (const enemy of this.enemies.values()) {
       if (enemy.defeated) continue;
@@ -600,7 +476,6 @@ export class GameSession {
       });
     }
   }
-
   private updateEnemyAttacks(delta: number): void {
     for (const enemy of this.enemies.values()) {
       const resolution = enemyAttackResolutionFor({
@@ -624,7 +499,6 @@ export class GameSession {
       }
     }
   }
-
   private handleDeath(): void {
     const carriedLoss = scaleResourceBag(
       this.resources,
@@ -636,14 +510,13 @@ export class GameSession {
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
     this.destination = null;
     this.attackElapsed = 0;
-    this.farmHarvestElapsed = 0;
+    this.settlement.resetHarvest();
     this.notice = {
       kind: "player.died",
       savePointLabel: this.committedSavePoint.label,
       resourceLossRate: gameplayTuning.deathResourceLossRate,
     };
   }
-
   private defeatEnemy(enemy: RuntimeEnemy): void {
     const definition = enemyDefinitions[enemy.kind];
     this.floorDrops = [
@@ -673,7 +546,6 @@ export class GameSession {
       };
     }
   }
-
   private createFloorDrops(
     enemy: RuntimeEnemy,
     resources: ReadonlyResourceBag,
@@ -689,12 +561,11 @@ export class GameSession {
       rules: { offsetDistance: gameplayTuning.floorDropOffsetDistance },
     });
   }
-
   private collectNearbyFloorDrops(): void {
     if (this.floorDrops.length === 0) return;
     const remaining: FloorDropState[] = [];
     let collectedAny = false;
-    const materialCapacity = materialCapacityFor(this.buildings);
+    const materialCapacity = materialCapacityFor(this.settlement.buildingState);
     for (const drop of this.floorDrops) {
       if (
         distance(this.player.position, drop.position) >
@@ -722,83 +593,24 @@ export class GameSession {
     this.floorDrops = remaining;
     if (collectedAny) this.notice = { kind: "drop.collected" };
   }
-
   private applyPassiveEffects(delta: number): void {
-    const nearby = this.nearbyCampfire();
-    if (nearby !== null) {
-      const healing =
-        gameplayTuning.baseCampfireHealingPerSecond +
-        this.buildings
-          .filter((building) => building.kind === "Healer")
-          .reduce(
-            (total, building) =>
-              total +
-              gameplayTuning.healerHealingBonusByLevel[building.level - 1],
-            0,
-          );
-      this.player.hp = Math.min(
-        this.player.maxHp,
-        this.player.hp + delta * healing,
-      );
-    }
-
-    const farms = this.buildings.filter((building) => building.kind === "Farm");
-    if (farms.length === 0) {
-      this.farmHarvestElapsed = 0;
-      return;
-    }
-    this.farmHarvestElapsed += delta;
-    if (this.farmHarvestElapsed < gameplayTuning.farmHarvestEverySeconds)
-      return;
-    this.farmHarvestElapsed = 0;
-    const harvest = farms
-      .map((farm) => gameplayTuning.farmHarvestByLevel[farm.level - 1])
-      .reduce(addResourceBags, emptyResources());
-    this.resources = collectResourcesWithinCapacity(
+    const result = this.settlement.passive(
+      delta,
+      this.player.hp,
+      this.player.maxHp,
       this.resources,
-      harvest,
-      materialCapacityFor(this.buildings),
+      this.nearbyCampfire() !== null,
     );
-    this.notice = { kind: "farm.harvested" };
+    this.player.hp = result.hp;
+    this.resources = result.resources;
+    if (result.harvested) this.notice = { kind: "farm.harvested" };
   }
-
-  private validateBuildingPosition(
-    kind: BuildingKind,
-    position: Vector2,
-    ignoredId?: string,
-  ): PlacementRejection | null {
-    if (!isFinitePosition(position)) return { kind: "invalid-coordinates" };
-    if (this.isTerrainBlocked(position)) return { kind: "blocked-terrain" };
-    if (
-      this.buildings.some(
-        (building) =>
-          building.id !== ignoredId &&
-          distance(building.position, position) < 1.25,
-      )
-    ) {
-      return { kind: "overlaps-existing-building" };
-    }
-    if (kind !== "Campfire") {
-      const campfire = findCampfireCoveringPosition(
-        position,
-        this.settlementCampfiresAround(position),
-        gameplayTuning.campfireBuildRadiusByLevel,
-      );
-      if (campfire === undefined) {
-        const nearestRadius = this.currentSettlementBuildRadius();
-        return { kind: "outside-settlement-radius", radius: nearestRadius };
-      }
-    }
-    return null;
-  }
-
   private isTerrainBlocked(position: Vector2): boolean {
     const coordinate = chunkCoordinateFor(position);
     return generateChunk(this.world, coordinate).obstacles.some(
       (obstacle) => distance(obstacle.position, position) < 0.9,
     );
   }
-
   private settlementCampfiresAround(position: Vector2): SettlementCampfire[] {
     const base = visibleChunkCoordinates(position).flatMap((coordinate) =>
       generateChunk(this.world, coordinate).campfires.map((campfire) => ({
@@ -808,7 +620,7 @@ export class GameSession {
         level: 1 as const,
       })),
     );
-    const playerBuilt = this.buildings
+    const playerBuilt = this.settlement.buildingState
       .filter((building) => building.kind === "Campfire")
       .map((building) => ({
         id: building.id,
@@ -818,26 +630,30 @@ export class GameSession {
       }));
     return [...base, ...playerBuilt];
   }
-
   private nearbyCampfire(): SettlementCampfire | null {
-    return findNearbyCampfire(
+    return this.settlement.nearby(
       this.player.position,
       this.settlementCampfiresAround(this.player.position),
     );
   }
-
   private currentSettlementBuildRadius(): number {
-    return settlementBuildRadius(
+    return this.settlement.buildRadius(
       this.settlementCampfiresAround(this.player.position),
-      gameplayTuning.campfireBuildRadiusByLevel,
     );
   }
-
   private rejectPlacement(rejection: PlacementRejection): PlacementResult {
     this.notice = { kind: "building.rejected", rejection };
     return { ok: false, rejection };
   }
-
+  private settlementInputs(position: Vector2) {
+    return {
+      position,
+      campfires: this.settlementCampfiresAround(position),
+      terrainBlocked: this.isTerrainBlocked(position),
+    };
+  }
+  // prettier-ignore
+  private publishPlacement(result: PlacementResult): void { if (!result.ok) { this.notice = { kind: "building.rejected", rejection: result.rejection }; return; } const b = result.building; if (result.outcome === "placed") this.notice = { kind: "building.placed", buildingId: b.id, buildingKind: b.kind }; else if (result.outcome === "relocated") this.notice = { kind: "building.relocated", buildingId: b.id, buildingKind: b.kind }; else if (result.outcome === "upgraded") this.notice = { kind: "building.upgraded", buildingId: b.id, buildingKind: b.kind, level: b.level as 2 | 3 }; else this.notice = { kind: "building.demolished", buildingId: b.id, buildingKind: b.kind, refundRate: gameplayTuning.buildingRefundRate }; }
   private clampPlayerState(): void {
     this.player.hp = Math.max(0, Math.min(this.player.hp, this.player.maxHp));
   }
