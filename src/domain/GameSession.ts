@@ -1,5 +1,4 @@
 import {
-  buildingDefinitions,
   enemyDefinitions,
   gameplayTuning,
   resourceDefinitions,
@@ -14,21 +13,12 @@ import {
   scale,
 } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
-import { emptyResources, resourceKinds } from "./types";
-import type {
-  GamePresentation,
-  GameNotice,
-  PlacementRejection,
-  PlacementResult,
-} from "./notices";
+import { resourceKinds } from "./types";
+import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
-  BuildingState,
   DestinationCommand,
-  EnemyKind,
-  EnemyState,
   FloorDropState,
-  InputSource,
   MoveCommand,
   ResourceBag,
   ReadonlyResourceBag,
@@ -38,12 +28,7 @@ import type {
   Vector2,
   WorldIdentity,
 } from "./types";
-import {
-  chunkCoordinateFor,
-  chunkKey,
-  generateChunk,
-  visibleChunkCoordinates,
-} from "./world";
+import { chunkKey, visibleChunkCoordinates } from "./world";
 import {
   cloneResources,
   copyVector,
@@ -76,7 +61,10 @@ import {
 } from "./session/worldRuntime";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
-import { SettlementRuntime } from "./session/settlementRuntime";
+import {
+  SettlementRuntime,
+  type SettlementCommandOutcome,
+} from "./session/settlementRuntime";
 import {
   clampResourcesToCapacity,
   materialCapacityFor,
@@ -91,7 +79,6 @@ import {
   projectileUpgradeEffectsFor,
 } from "./session/progressionRules";
 
-/** Compatibility export for callers that have not yet moved to bossUpgradeChoices. */
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
 interface SessionOptions {
@@ -100,11 +87,6 @@ interface SessionOptions {
 }
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
-/**
- * The sole mutable gameplay authority. It knows no browser, renderer, storage,
- * event listener, or Capacitor API; callers issue explicit commands and read
- * immutable-shaped presentation results.
- */
 export class GameSession {
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
@@ -137,7 +119,6 @@ export class GameSession {
     );
     this.ensureNeighborhoodEnemies();
   }
-  /** The sole lifecycle boundary that replaces instance-owned session state. */
   private replaceState(state: SessionState): void {
     this.world = state.world;
     this.player = state.player;
@@ -218,14 +199,37 @@ export class GameSession {
     this.clampPlayerState();
   }
 
-  // prettier-ignore
-  placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult { const outcome = this.settlement.place(kind, position, this.resources, this.world.seed, this.settlementInputs(position)); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
-  // prettier-ignore
-  relocateBuilding(id: string, position: Vector2): PlacementResult { const outcome = this.settlement.relocate(id, position, this.resources, this.settlementInputs(position)); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
-  // prettier-ignore
-  upgradeBuilding(id: string): PlacementResult { const outcome = this.settlement.upgrade(id, this.resources); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
-  // prettier-ignore
-  demolishBuilding(id: string): PlacementResult { const outcome = this.settlement.demolish(id, this.resources); this.resources = outcome.resources; this.publishPlacement(outcome.result); return outcome.result; }
+  placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
+    return this.applySettlementOutcome(
+      this.settlement.place(
+        kind,
+        position,
+        this.resources,
+        this.world.seed,
+        this.settlement.inputsFor(this.world, position),
+      ),
+    );
+  }
+  relocateBuilding(id: string, position: Vector2): PlacementResult {
+    return this.applySettlementOutcome(
+      this.settlement.relocate(
+        id,
+        position,
+        this.resources,
+        this.settlement.inputsFor(this.world, position),
+      ),
+    );
+  }
+  upgradeBuilding(id: string): PlacementResult {
+    return this.applySettlementOutcome(
+      this.settlement.upgrade(id, this.resources),
+    );
+  }
+  demolishBuilding(id: string): PlacementResult {
+    return this.applySettlementOutcome(
+      this.settlement.demolish(id, this.resources),
+    );
+  }
   chooseUpgrade(id: UpgradeId): boolean {
     if (
       this.pendingUpgradeChoices.length !== 3 ||
@@ -262,7 +266,10 @@ export class GameSession {
   createValidCampfireSaveRequest(
     committedAt: number,
   ): ValidCampfireSaveRequest | null {
-    const savePoint = this.nearbyCampfire();
+    const savePoint = this.settlement.nearbyCampfireAt(
+      this.world,
+      this.player.position,
+    );
     if (savePoint === null) {
       this.notice = { kind: "save.rejected.not-near-campfire" };
       return null;
@@ -283,7 +290,6 @@ export class GameSession {
     return { document: save, savePointLabel: savePoint.label };
   }
 
-  /** Called by the composition root only after the storage adapter reports success. */
   recordSaveCommitted(document: CurrentSave): void {
     this.committedSavePoint = {
       id: document.savePointId,
@@ -299,16 +305,19 @@ export class GameSession {
 
   presentation(): GamePresentation {
     const visibleChunks = visibleChunksFor(this.world, this.player.position);
-    const savePoint = this.nearbyCampfire();
+    const savePoint = this.settlement.nearbyCampfireAt(
+      this.world,
+      this.player.position,
+    );
     const materialCapacity = materialCapacityFor(this.settlement.buildingState);
-    const buildRadius = this.currentSettlementBuildRadius();
+    const buildRadius = this.settlement.buildRadiusAt(
+      this.world,
+      this.player.position,
+    );
     const effects = describeProgressionEffects(
       this.settlement.buildingState,
       this.upgrades,
     );
-    const pendingUpgradeChoices = [...this.pendingUpgradeChoices];
-    const canSave = savePoint !== null;
-    const savePointLabel = savePoint?.label ?? null;
     return projectGamePresentation({
       world: this.world,
       player: this.player,
@@ -323,9 +332,9 @@ export class GameSession {
       inputSource: this.input.source,
       combatStatus: this.combatStatus,
       effects,
-      pendingUpgradeChoices,
-      canSave,
-      savePointLabel,
+      pendingUpgradeChoices: [...this.pendingUpgradeChoices],
+      canSave: savePoint !== null,
+      savePointLabel: savePoint?.label ?? null,
       notice: this.notice,
       projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
     });
@@ -358,7 +367,9 @@ export class GameSession {
       return;
     }
     this.attackElapsed = decision.attackElapsed;
-    this.combatStatus = `Auto-attacking ${decision.target.kind} (${Math.ceil(decision.target.hp)}/${decision.target.maxHp})`;
+    this.combatStatus = `Auto-attacking ${decision.target.kind} (${Math.ceil(
+      decision.target.hp,
+    )}/${decision.target.maxHp})`;
     if (decision.kind === "waiting") return;
 
     const projectileEffects = projectileUpgradeEffectsFor(this.upgrades);
@@ -599,61 +610,20 @@ export class GameSession {
       this.player.hp,
       this.player.maxHp,
       this.resources,
-      this.nearbyCampfire() !== null,
+      this.settlement.nearbyCampfireAt(this.world, this.player.position) !==
+        null,
     );
     this.player.hp = result.hp;
     this.resources = result.resources;
     if (result.harvested) this.notice = { kind: "farm.harvested" };
   }
-  private isTerrainBlocked(position: Vector2): boolean {
-    const coordinate = chunkCoordinateFor(position);
-    return generateChunk(this.world, coordinate).obstacles.some(
-      (obstacle) => distance(obstacle.position, position) < 0.9,
-    );
+  private applySettlementOutcome(
+    outcome: SettlementCommandOutcome,
+  ): PlacementResult {
+    this.resources = outcome.resources;
+    this.notice = outcome.noticeDraft;
+    return outcome.result;
   }
-  private settlementCampfiresAround(position: Vector2): SettlementCampfire[] {
-    const base = visibleChunkCoordinates(position).flatMap((coordinate) =>
-      generateChunk(this.world, coordinate).campfires.map((campfire) => ({
-        id: campfire.id,
-        label: campfire.kind === "home" ? "home campfire" : "wild campfire",
-        position: campfire.position,
-        level: 1 as const,
-      })),
-    );
-    const playerBuilt = this.settlement.buildingState
-      .filter((building) => building.kind === "Campfire")
-      .map((building) => ({
-        id: building.id,
-        label: "player campfire",
-        position: building.position,
-        level: building.level,
-      }));
-    return [...base, ...playerBuilt];
-  }
-  private nearbyCampfire(): SettlementCampfire | null {
-    return this.settlement.nearby(
-      this.player.position,
-      this.settlementCampfiresAround(this.player.position),
-    );
-  }
-  private currentSettlementBuildRadius(): number {
-    return this.settlement.buildRadius(
-      this.settlementCampfiresAround(this.player.position),
-    );
-  }
-  private rejectPlacement(rejection: PlacementRejection): PlacementResult {
-    this.notice = { kind: "building.rejected", rejection };
-    return { ok: false, rejection };
-  }
-  private settlementInputs(position: Vector2) {
-    return {
-      position,
-      campfires: this.settlementCampfiresAround(position),
-      terrainBlocked: this.isTerrainBlocked(position),
-    };
-  }
-  // prettier-ignore
-  private publishPlacement(result: PlacementResult): void { if (!result.ok) { this.notice = { kind: "building.rejected", rejection: result.rejection }; return; } const b = result.building; if (result.outcome === "placed") this.notice = { kind: "building.placed", buildingId: b.id, buildingKind: b.kind }; else if (result.outcome === "relocated") this.notice = { kind: "building.relocated", buildingId: b.id, buildingKind: b.kind }; else if (result.outcome === "upgraded") this.notice = { kind: "building.upgraded", buildingId: b.id, buildingKind: b.kind, level: b.level as 2 | 3 }; else this.notice = { kind: "building.demolished", buildingId: b.id, buildingKind: b.kind, refundRate: gameplayTuning.buildingRefundRate }; }
   private clampPlayerState(): void {
     this.player.hp = Math.max(0, Math.min(this.player.hp, this.player.maxHp));
   }

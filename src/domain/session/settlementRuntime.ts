@@ -6,8 +6,18 @@ import type {
   ReadonlyResourceBag,
   ResourceBag,
   Vector2,
+  WorldIdentity,
 } from "../types";
-import type { PlacementRejection, PlacementResult } from "../notices";
+import type {
+  GameNotice,
+  PlacementRejection,
+  PlacementResult,
+} from "../notices";
+import {
+  chunkCoordinateFor,
+  generateChunk,
+  visibleChunkCoordinates,
+} from "../world";
 import { emptyResources } from "../types";
 import type { SettlementCampfire } from "./sessionState";
 import {
@@ -38,6 +48,42 @@ export interface SettlementPassiveResult {
   readonly harvested: boolean;
 }
 
+export interface SettlementCommandOutcome {
+  readonly result: PlacementResult;
+  readonly resources: ResourceBag;
+  readonly noticeDraft: GameNotice;
+}
+
+const placementNoticeFor = (result: PlacementResult): GameNotice => {
+  if (!result.ok)
+    return { kind: "building.rejected", rejection: result.rejection };
+  if (result.outcome === "placed")
+    return {
+      kind: "building.placed",
+      buildingId: result.building.id,
+      buildingKind: result.building.kind,
+    };
+  if (result.outcome === "relocated")
+    return {
+      kind: "building.relocated",
+      buildingId: result.building.id,
+      buildingKind: result.building.kind,
+    };
+  if (result.outcome === "upgraded")
+    return {
+      kind: "building.upgraded",
+      buildingId: result.building.id,
+      buildingKind: result.building.kind,
+      level: result.building.level as 2 | 3,
+    };
+  return {
+    kind: "building.demolished",
+    buildingId: result.building.id,
+    buildingKind: result.building.kind,
+    refundRate: gameplayTuning.buildingRefundRate,
+  };
+};
+
 const hashText = (text: string): number => {
   let hash = 2_166_136_261;
   for (const character of text) {
@@ -62,8 +108,11 @@ export class SettlementRuntime {
     this.farmHarvestElapsed = state.farmHarvestElapsed;
   }
 
-  get buildingState(): BuildingState[] {
-    return this.buildings;
+  get buildingState(): readonly BuildingState[] {
+    return this.buildings.map((building) => ({
+      ...building,
+      position: { ...building.position },
+    }));
   }
   get serial(): number {
     return this.nextBuildingSerial;
@@ -81,7 +130,7 @@ export class SettlementRuntime {
     resources: ResourceBag,
     seed: string,
     input: SettlementInputs,
-  ): { result: PlacementResult; resources: ResourceBag } {
+  ): SettlementCommandOutcome {
     const rejection = this.validate(kind, position, input);
     if (rejection) return this.rejected(rejection, resources);
     const cost = resourcesForLevel(buildingDefinitions[kind].baseCost, 1);
@@ -95,10 +144,10 @@ export class SettlementRuntime {
     };
     this.nextBuildingSerial += 1;
     this.buildings = [...this.buildings, building];
-    return {
-      result: { ok: true, outcome: "placed", building },
-      resources: subtractResourceBags(resources, cost),
-    };
+    return this.outcome(
+      { ok: true, outcome: "placed", building },
+      subtractResourceBags(resources, cost),
+    );
   }
 
   relocate(
@@ -106,7 +155,7 @@ export class SettlementRuntime {
     position: Vector2,
     resources: ResourceBag,
     input: SettlementInputs,
-  ): { result: PlacementResult; resources: ResourceBag } {
+  ): SettlementCommandOutcome {
     const building = this.buildings.find((candidate) => candidate.id === id);
     if (!building)
       return this.rejected({ kind: "unknown-building" }, resources);
@@ -116,16 +165,13 @@ export class SettlementRuntime {
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? moved : candidate,
     );
-    return {
-      result: { ok: true, outcome: "relocated", building: moved },
+    return this.outcome(
+      { ok: true, outcome: "relocated", building: moved },
       resources,
-    };
+    );
   }
 
-  upgrade(
-    id: string,
-    resources: ResourceBag,
-  ): { result: PlacementResult; resources: ResourceBag } {
+  upgrade(id: string, resources: ResourceBag): SettlementCommandOutcome {
     const building = this.buildings.find((candidate) => candidate.id === id);
     if (!building)
       return this.rejected({ kind: "unknown-building" }, resources);
@@ -146,16 +192,13 @@ export class SettlementRuntime {
       subtractResourceBags(resources, cost),
       materialCapacityFor(this.buildings),
     );
-    return {
-      result: { ok: true, outcome: "upgraded", building: upgraded },
-      resources: nextResources,
-    };
+    return this.outcome(
+      { ok: true, outcome: "upgraded", building: upgraded },
+      nextResources,
+    );
   }
 
-  demolish(
-    id: string,
-    resources: ResourceBag,
-  ): { result: PlacementResult; resources: ResourceBag } {
+  demolish(id: string, resources: ResourceBag): SettlementCommandOutcome {
     const building = this.buildings.find((candidate) => candidate.id === id);
     if (!building)
       return this.rejected({ kind: "unknown-building" }, resources);
@@ -170,14 +213,14 @@ export class SettlementRuntime {
       cumulativeCost,
       gameplayTuning.buildingRefundRate,
     );
-    return {
-      result: { ok: true, outcome: "demolished", building },
-      resources: collectResourcesWithinCapacity(
+    return this.outcome(
+      { ok: true, outcome: "demolished", building },
+      collectResourcesWithinCapacity(
         resources,
         refund,
         materialCapacityFor(this.buildings),
       ),
-    };
+    );
   }
 
   passive(
@@ -223,16 +266,51 @@ export class SettlementRuntime {
     };
   }
 
-  nearby(
+  nearbyCampfireAt(
+    world: WorldIdentity,
     position: Vector2,
-    campfires: readonly SettlementCampfire[],
   ): SettlementCampfire | null {
-    return findNearbyCampfire(position, campfires);
+    return findNearbyCampfire(position, this.campfiresAround(world, position));
   }
-  buildRadius(campfires: readonly SettlementCampfire[]): number {
+  buildRadiusAt(world: WorldIdentity, position: Vector2): number {
     return settlementBuildRadius(
-      campfires,
+      this.campfiresAround(world, position),
       gameplayTuning.campfireBuildRadiusByLevel,
+    );
+  }
+  inputsFor(world: WorldIdentity, position: Vector2): SettlementInputs {
+    return {
+      position,
+      campfires: this.campfiresAround(world, position),
+      terrainBlocked: this.isTerrainBlocked(world, position),
+    };
+  }
+  private campfiresAround(
+    world: WorldIdentity,
+    position: Vector2,
+  ): SettlementCampfire[] {
+    const generated = visibleChunkCoordinates(position).flatMap((coordinate) =>
+      generateChunk(world, coordinate).campfires.map((campfire) => ({
+        id: campfire.id,
+        label: campfire.kind === "home" ? "home campfire" : "wild campfire",
+        position: campfire.position,
+        level: 1 as const,
+      })),
+    );
+    const playerBuilt = this.buildings
+      .filter((building) => building.kind === "Campfire")
+      .map((building) => ({
+        id: building.id,
+        label: "player campfire",
+        position: building.position,
+        level: building.level,
+      }));
+    return [...generated, ...playerBuilt];
+  }
+  private isTerrainBlocked(world: WorldIdentity, position: Vector2): boolean {
+    const coordinate = chunkCoordinateFor(position);
+    return generateChunk(world, coordinate).obstacles.some(
+      (obstacle) => distance(obstacle.position, position) < 0.9,
     );
   }
   private validate(
@@ -262,14 +340,23 @@ export class SettlementRuntime {
     )
       return {
         kind: "outside-settlement-radius",
-        radius: this.buildRadius(input.campfires),
+        radius: settlementBuildRadius(
+          input.campfires,
+          gameplayTuning.campfireBuildRadiusByLevel,
+        ),
       };
     return null;
+  }
+  private outcome(
+    result: PlacementResult,
+    resources: ResourceBag,
+  ): SettlementCommandOutcome {
+    return { result, resources, noticeDraft: placementNoticeFor(result) };
   }
   private rejected(
     rejection: PlacementRejection,
     resources: ResourceBag,
-  ): { result: PlacementResult; resources: ResourceBag } {
-    return { result: { ok: false, rejection }, resources };
+  ): SettlementCommandOutcome {
+    return this.outcome({ ok: false, rejection }, resources);
   }
 }
