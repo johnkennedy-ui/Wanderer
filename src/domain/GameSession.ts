@@ -1,7 +1,6 @@
 import {
   enemyDefinitions,
   gameplayTuning,
-  resourceDefinitions,
   upgradeDefinitionFor,
 } from "../data/definitions";
 import {
@@ -30,12 +29,12 @@ import type {
 } from "./types";
 import { chunkKey, visibleChunkCoordinates } from "./world";
 import {
-  cloneResources,
   copyVector,
   createFreshSessionState,
   DEFAULT_WORLD,
   hydrateSessionState,
 } from "./session/sessionState";
+import { floorDropCollectionPolicy } from "./session/floorDropCollectionPolicy";
 import {
   advanceProjectileFlight,
   enemyPursuitPosition,
@@ -574,35 +573,17 @@ export class GameSession {
   }
   private collectNearbyFloorDrops(): void {
     if (this.floorDrops.length === 0) return;
-    const remaining: FloorDropState[] = [];
-    let collectedAny = false;
     const materialCapacity = materialCapacityFor(this.settlement.buildingState);
-    for (const drop of this.floorDrops) {
-      if (
-        distance(this.player.position, drop.position) >
-        gameplayTuning.floorDropCollectDistance
-      ) {
-        remaining.push(drop);
-        continue;
-      }
-      const capacityRemaining = resourceDefinitions[drop.resource]
-        .storageLimited
-        ? Math.max(0, materialCapacity - this.resources[drop.resource])
-        : Number.POSITIVE_INFINITY;
-      const collectedAmount = Math.min(drop.amount, capacityRemaining);
-      if (collectedAmount <= 0) {
-        remaining.push(drop);
-        continue;
-      }
-      const resources = cloneResources(this.resources);
-      resources[drop.resource] += collectedAmount;
-      this.resources = clampResourcesToCapacity(resources, materialCapacity);
-      collectedAny = true;
-      if (collectedAmount < drop.amount)
-        remaining.push({ ...drop, amount: drop.amount - collectedAmount });
-    }
-    this.floorDrops = remaining;
-    if (collectedAny) this.notice = { kind: "drop.collected" };
+    const result = floorDropCollectionPolicy({
+      playerPosition: this.player.position,
+      floorDrops: this.floorDrops,
+      resources: this.resources,
+      materialCapacity,
+      collectDistance: gameplayTuning.floorDropCollectDistance,
+    });
+    this.floorDrops = [...result.floorDrops];
+    this.resources = result.resources;
+    if (result.collectedAny) this.notice = { kind: "drop.collected" };
   }
   private applyPassiveEffects(delta: number): void {
     const result = this.settlement.passive(

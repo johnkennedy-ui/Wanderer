@@ -1,10 +1,77 @@
 import { describe, expect, it } from "vitest";
 import { enemyDefinitions, gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { floorDropCollectionPolicy } from "../../domain/session/floorDropCollectionPolicy";
 import { combatStatsFor } from "../../domain/session/progressionRules";
+import { emptyResources } from "../../domain/types";
 import { advance, savedAtHome } from "./session-test-helpers";
 
 describe("GameSession combat-resolution consumer coverage", () => {
+  it("collects floor drops by range and capacity without mutating inputs", () => {
+    const resources = emptyResources();
+    resources.wood = 9;
+    const drops = [
+      {
+        id: "near-wood",
+        resource: "wood" as const,
+        amount: 4,
+        position: { x: 0, y: 0 },
+      },
+      {
+        id: "near-core",
+        resource: "bossCore" as const,
+        amount: 2,
+        position: { x: 0, y: 0 },
+      },
+      {
+        id: "far-stone",
+        resource: "stone" as const,
+        amount: 3,
+        position: { x: 2, y: 0 },
+      },
+    ];
+    const originalResources = { ...resources };
+    const originalDrops = drops.map((drop) => ({
+      ...drop,
+      position: { ...drop.position },
+    }));
+
+    const result = floorDropCollectionPolicy({
+      playerPosition: { x: 0, y: 0 },
+      floorDrops: drops,
+      resources,
+      materialCapacity: 10,
+      collectDistance: 0.8,
+    });
+
+    expect(result.resources).toEqual({
+      wood: 10,
+      stone: 0,
+      scrap: 0,
+      essence: 0,
+      bossCore: 2,
+    });
+    expect(result.floorDrops).toEqual([
+      {
+        id: "near-wood",
+        resource: "wood",
+        amount: 3,
+        position: { x: 0, y: 0 },
+      },
+      {
+        id: "far-stone",
+        resource: "stone",
+        amount: 3,
+        position: { x: 2, y: 0 },
+      },
+    ]);
+    expect(result.collectedAny).toBe(true);
+    expect(result.resources).not.toBe(resources);
+    expect(result.floorDrops).not.toBe(drops);
+    expect(resources).toEqual(originalResources);
+    expect(drops).toEqual(originalDrops);
+  });
+
   it("observes distinct primary and chain hits while capped hit healing restores max HP", () => {
     const base = savedAtHome();
     const session = new GameSession({
