@@ -14,7 +14,6 @@ import type {
   Vector2,
   WorldIdentity,
 } from "./types";
-import { chunkKey, visibleChunkCoordinates } from "./world";
 import {
   copyVector,
   createFreshSessionState,

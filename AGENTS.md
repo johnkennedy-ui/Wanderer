@@ -107,10 +107,9 @@ shared state.
 
 `GameNotice` is an instance-owned discriminated outcome. The UI translates its
 `kind` and facts through `noticePresentation.ts`; it must never infer gameplay
-behaviour by matching English display text. New presentation consumers should
-use the narrow `GameUiSnapshot` or `GameRendererSnapshot` projections. The
-legacy `GameSnapshot` aggregate is a transitional read-only facade, never a
-second authority.
+behaviour by matching English display text. Presentation consumers use the
+narrow `GameUiSnapshot` or `GameRendererSnapshot` projections; no broad legacy
+snapshot aggregate remains as a second authority.
 
 Allowed patterns include immutable module constants, deeply frozen authored
 catalogues, immutable generator-dispatch tables, pure functions, explicit
