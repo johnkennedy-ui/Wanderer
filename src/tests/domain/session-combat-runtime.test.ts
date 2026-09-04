@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   advanceAutoCombatPhase,
   advanceEnemyCombatPhase,
-  advanceProjectileCombatPhase,
 } from "../../domain/session/combatTickRuntime";
+import { advanceProjectileCombatPhase } from "../../domain/session/projectileCombatRuntime";
 import type {
   RuntimeEnemy,
   RuntimeProjectile,

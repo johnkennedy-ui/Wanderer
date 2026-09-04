@@ -25,8 +25,8 @@ import { floorDropCollectionPolicy } from "./session/floorDropCollectionPolicy";
 import {
   advanceAutoCombatPhase,
   advanceEnemyCombatPhase,
-  advanceProjectileCombatPhase,
 } from "./session/combatTickRuntime";
+import { advanceProjectileCombatPhase } from "./session/projectileCombatRuntime";
 import type {
   RuntimeEnemy,
   RuntimeProjectile,
