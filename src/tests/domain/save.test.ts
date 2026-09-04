@@ -86,7 +86,7 @@ describe("schema-2 persistence boundary", () => {
       expect(result.wireDocument).toEqual(fixtureValue(name));
       expect(toSaveV2Document(result.document)).toEqual(fixtureValue(name));
       expect(
-        new GameSession({ saved: result.document }).snapshot().world,
+        new GameSession({ saved: result.document }).presentation().ui.world,
       ).toEqual(result.document.world);
     },
   );

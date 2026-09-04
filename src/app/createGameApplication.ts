@@ -84,9 +84,9 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
   const frame = (now: number): void => {
     session.tick((now - previousFrame) / 1_000);
     previousFrame = now;
-    const snapshot = session.snapshot();
-    renderer.render(snapshot.renderer);
-    ui.render(snapshot.ui);
+    const presentation = session.presentation();
+    renderer.render(presentation.renderer);
+    ui.render(presentation.ui);
     ui.showTransient(platformMessage);
     animationFrame = requestAnimationFrame(frame);
   };

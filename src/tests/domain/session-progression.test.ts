@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { selectBossUpgradeChoices } from "../../domain/session/bossUpgradeChoices";
 import type { SaveDocument } from "../../domain/types";
 import { createBrowserSaveStorage } from "../../platform/storage/browserSaveStorage";
 import { advance, MemoryStore, savedAtHome } from "./session-test-helpers";
+
+const frozenDefaultBossChoiceTrio = [
+  "quick-hands",
+  "iron-skin",
+  "ember-aura",
+] as const;
 
 describe("GameSession progression", () => {
   it("keeps Boss Core and upgrades runtime-only until a later manual campfire commit", () => {
@@ -13,33 +20,48 @@ describe("GameSession progression", () => {
     advance(session, 1);
     session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
     advance(session, 4.2 + gameplayTuning.basicProjectileTravelSeconds);
-    const choices = session.snapshot().pendingUpgradeChoices;
-    const bossDrop = session
-      .snapshot()
-      .floorDrops.find((drop) => drop.resource === "bossCore");
+    const afterBossDefeat = session.presentation();
+    const choices = afterBossDefeat.ui.pendingUpgradeChoices;
+    const bossDrop = afterBossDefeat.renderer.floorDrops.find(
+      (drop) => drop.resource === "bossCore",
+    );
     if (bossDrop === undefined) throw new Error("boss should drop a Boss Core");
-    expect(session.snapshot().resources.bossCore).toBe(0);
+    expect(afterBossDefeat.ui.resources.bossCore).toBe(0);
+    expect(afterBossDefeat.ui.notice).toEqual({
+      kind: "boss.defeated",
+      hasUpgradeChoices: true,
+    });
+    expect(choices).toEqual(frozenDefaultBossChoiceTrio);
+    expect(
+      selectBossUpgradeChoices(
+        afterBossDefeat.ui.world.seed,
+        baseline.upgrades,
+      ),
+    ).toEqual(frozenDefaultBossChoiceTrio);
     session.setDestination({
       destination: bossDrop.position,
       source: "tap-to-move",
       at: 2.5,
     });
     advance(session, 1);
-    expect(session.snapshot().resources.bossCore).toBe(1);
+    expect(session.presentation().ui.resources.bossCore).toBe(1);
     expect(choices).toHaveLength(3);
     expect(choices).toContain("iron-skin");
-    const playerBeforeUpgrade = session.snapshot().player;
+    const playerBeforeUpgrade = session.presentation().ui.player;
     expect(session.chooseUpgrade("iron-skin")).toBe(true);
-    expect(session.snapshot().player.maxHp).toBe(
+    expect(session.presentation().ui.player.maxHp).toBe(
       playerBeforeUpgrade.maxHp + 25,
     );
-    expect(session.snapshot().player.hp).toBe(
+    expect(session.presentation().ui.player.hp).toBe(
       Math.min(playerBeforeUpgrade.maxHp + 25, playerBeforeUpgrade.hp + 25),
     );
 
     const unsavedReload = new GameSession({ saved: baseline });
-    expect(unsavedReload.snapshot().resources.bossCore).toBe(0);
-    expect(unsavedReload.snapshot().upgrades).toEqual([]);
+    expect(unsavedReload.presentation().ui.resources.bossCore).toBe(0);
+    const unsavedReloadSave = unsavedReload.createValidCampfireSaveRequest(98);
+    if (unsavedReloadSave === null)
+      throw new Error("baseline home should create a save document");
+    expect(unsavedReloadSave.document.upgrades).toEqual([]);
 
     session.setDestination({
       destination: { x: 0, y: 0 },
@@ -49,18 +71,23 @@ describe("GameSession progression", () => {
     advance(session, 3);
     const request = session.createValidCampfireSaveRequest(99);
     expect(request).not.toBeNull();
+    expect(request?.document.defeatedBossIds).toHaveLength(1);
+    expect(request?.document.upgrades).toContain("iron-skin");
     const storage = createBrowserSaveStorage(new MemoryStore());
     expect(storage.commit(request!.document).ok).toBe(true);
     session.recordSaveCommitted(request!.document);
-    expect(session.snapshot().notice).toEqual({
+    expect(session.presentation().ui.notice).toEqual({
       kind: "save.committed",
       savePointId: request!.document.savePointId,
     });
     const savedReload = new GameSession({
       saved: storage.load().document ?? undefined,
     });
-    expect(savedReload.snapshot().resources.bossCore).toBe(1);
-    expect(savedReload.snapshot().upgrades).toContain("iron-skin");
+    expect(savedReload.presentation().ui.resources.bossCore).toBe(1);
+    const savedReloadSave = savedReload.createValidCampfireSaveRequest(100);
+    if (savedReloadSave === null)
+      throw new Error("saved home should create a save document");
+    expect(savedReloadSave.document.upgrades).toContain("iron-skin");
   });
 
   it("respawns at the committed save-point position, applies the configured 25% loss, and never commits on death", () => {
@@ -83,15 +110,15 @@ describe("GameSession progression", () => {
     const session = new GameSession({ saved: committed });
     advance(session, 1.4);
 
-    expect(session.snapshot().player.position).toEqual({ x: -1, y: -1 });
-    expect(session.snapshot().resources).toEqual({
+    expect(session.presentation().ui.player.position).toEqual({ x: -1, y: -1 });
+    expect(session.presentation().ui.resources).toEqual({
       wood: 75,
       stone: 75,
       scrap: 75,
       essence: 75,
       bossCore: 6,
     });
-    expect(session.snapshot().notice).toEqual({
+    expect(session.presentation().ui.notice).toEqual({
       kind: "player.died",
       savePointLabel: "committed campfire",
       resourceLossRate: 0.25,

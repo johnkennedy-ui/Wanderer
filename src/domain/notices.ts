@@ -2,7 +2,6 @@ import type {
   BuildingKind,
   BuildingState,
   ChunkRecipe,
-  CombatStats,
   EnemyKind,
   EnemyState,
   FloorDropState,
@@ -10,9 +9,7 @@ import type {
   PlayerState,
   ProjectileState,
   ReadonlyResourceBag,
-  ResourceBag,
   UpgradeId,
-  Vector2,
   WorldIdentity,
 } from "./types";
 
@@ -120,37 +117,10 @@ export interface GameRendererSnapshot {
   readonly visibleChunks: readonly ChunkRecipe[];
 }
 
-/**
- * Transitional aggregate for callers that still need the complete read model.
- * New presentation consumers use `ui` and `renderer` rather than this facade.
- */
-export interface GameSnapshot {
+/** One immutable-shaped frame result with only the two narrow presentation views. */
+export interface GamePresentation {
   readonly ui: GameUiSnapshot;
   readonly renderer: GameRendererSnapshot;
-  readonly world: WorldIdentity;
-  readonly player: PlayerState;
-  readonly resources: ResourceBag;
-  readonly materialCapacity: number;
-  readonly buildRadius: number;
-  readonly deathResourceLossRate: number;
-  readonly combatStats: CombatStats;
-  readonly enemies: readonly EnemyState[];
-  readonly projectiles: readonly ProjectileState[];
-  readonly floorDrops: readonly FloorDropState[];
-  readonly buildings: readonly BuildingState[];
-  readonly visibleBuildings: readonly BuildingState[];
-  readonly visibleChunks: readonly ChunkRecipe[];
-  readonly moving: boolean;
-  readonly inputSource: InputSource;
-  readonly destination: Vector2 | null;
-  readonly combatStatus: string;
-  readonly effects: readonly string[];
-  readonly defeatedBossIds: readonly string[];
-  readonly upgrades: readonly UpgradeId[];
-  readonly pendingUpgradeChoices: readonly UpgradeId[];
-  readonly canSave: boolean;
-  readonly savePointLabel: string | null;
-  readonly notice: GameNotice;
 }
 
 /** Snapshot consumers receive a copy, never the session's retained notice object. */

@@ -34,9 +34,9 @@ must exhaustively present each notice kind. Behavioural UI code must use the
 notice kind/facts, never `startsWith`, `includes`, or an exact display phrase.
 
 Presentation gets narrow read models: `GameUiSnapshot` for the DOM UI and
-`GameRendererSnapshot` for the disposable Three.js renderer. `GameSnapshot`
-remains a transitional aggregate for existing consumers, but new consumers
-must not use it to acquire unrelated authority or mutable session internals.
+`GameRendererSnapshot` for the disposable Three.js renderer. No broad session
+snapshot aggregate remains; consumers cannot use presentation projections to
+acquire unrelated authority or mutable session internals.
 
 ## Allowed dependency direction
 
