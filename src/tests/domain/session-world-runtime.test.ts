@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { enemyDefinitions } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { advanceEnemyCombatPhase } from "../../domain/session/combatTickRuntime";
+import { distance } from "../../domain/math";
 import {
   missingVisibleRuntimeEnemyDraftsFor,
   visibleChunksFor,
@@ -14,6 +16,85 @@ const world = {
 };
 
 describe("session world runtime coordination", () => {
+  it("continues global pursuit far outside the player's 3x3 neighbourhood", () => {
+    const drafts = missingVisibleRuntimeEnemyDraftsFor({
+      visibleChunks: visibleChunksFor(world, { x: 0, y: 0 }),
+      existingEnemies: new Map(),
+      defeatedBossIds: new Set(),
+    });
+    const scout = drafts.find((enemy) => enemy.id === "enemy:starter-scout");
+    if (scout === undefined) throw new Error("missing canonical scout");
+    const playerPosition = { x: 160, y: -160 };
+    const visibleIds = visibleChunksFor(world, playerPosition).flatMap(
+      (chunk) => chunk.spawns.map((spawn) => spawn.id),
+    );
+    expect(visibleIds).not.toContain(scout.id);
+    const result = advanceEnemyCombatPhase({
+      delta: 0.1,
+      elapsed: 10,
+      player: { position: playerPosition, hp: 100, maxHp: 100 },
+      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      enemies: new Map([[scout.id, scout]]),
+      committedSavePoint: {
+        id: "campfire:home",
+        label: "home",
+        position: { x: 0, y: 0 },
+        level: 1,
+      },
+      input: { intent: { x: 0, y: 0 }, source: "system", at: 10 },
+      destination: null,
+      attackElapsed: 0,
+      enemyAttackStandoff: 1.8,
+      deathResourceLossRate: 0.25,
+    });
+    const pursued = result.enemies.get(scout.id);
+    if (pursued === undefined) throw new Error("distant scout was pruned");
+    expect(result.enemies.size).toBe(1);
+    expect(distance(pursued.position, playerPosition)).toBeLessThan(
+      distance(scout.position, playerPosition),
+    );
+    expect(distance(pursued.position, scout.position)).toBeCloseTo(
+      scout.moveSpeed * 0.1,
+      2,
+    );
+    expect(pursued.spawnPosition).toEqual(scout.spawnPosition);
+    expect(pursued.hp).toBe(scout.hp);
+    expect(pursued.defeated).toBe(false);
+  });
+  it("GameSession retains and advances off-neighbourhood enemies during public traversal", () => {
+    const session = new GameSession();
+    let checked = false;
+    for (let step = 0; step < 160 && !checked; step += 1) {
+      session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: step });
+      session.tick(0.1);
+      const before = session.diagnostics();
+      const visible = visibleChunkCoordinates(before.player.position);
+      const outside = before.enemies.find(
+        (enemy) =>
+          !enemy.defeated &&
+          !visible.some(
+            (chunk) =>
+              chunk.x === Math.floor(enemy.position.x / 16) &&
+              chunk.y === Math.floor(enemy.position.y / 16),
+          ),
+      );
+      if (outside === undefined) continue;
+      session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: step });
+      session.tick(0.1);
+      const after = session
+        .diagnostics()
+        .enemies.find((enemy) => enemy.id === outside.id);
+      if (after === undefined)
+        throw new Error("off-neighbourhood enemy was pruned");
+      expect(distance(after.position, before.player.position)).toBeLessThan(
+        distance(outside.position, before.player.position),
+      );
+      expect(after.spawnPosition).toEqual(outside.spawnPosition);
+      checked = true;
+    }
+    expect(checked).toBe(true);
+  });
+
   it("materializes the current generator's ordered 3x3 chunks for a non-home window", () => {
     const playerPosition = { x: 47.9, y: -17.2 };
     const expectedCoordinates = visibleChunkCoordinates(playerPosition);

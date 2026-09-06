@@ -38,6 +38,7 @@ import {
 } from "./session/worldRuntime";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
+import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
 import {
   SettlementRuntime,
   type SettlementCommandOutcome,
@@ -308,6 +309,30 @@ export class GameSession {
       savePointLabel: savePoint?.label ?? null,
       notice: this.notice,
       projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
+    });
+  }
+  /** Immutable diagnostic copy-out; not part of ordinary presentation ports. */
+  diagnostics() {
+    return projectRuntimeDiagnostics({
+      world: this.world,
+      player: this.player,
+      resources: this.resources,
+      buildings: this.settlement.buildingState,
+      enemies: this.enemies,
+      projectiles: this.projectiles,
+      floorDrops: this.floorDrops,
+      defeatedBossIds: this.defeatedBossIds,
+      upgrades: this.upgrades,
+      pendingUpgradeChoices: this.pendingUpgradeChoices,
+      nextBuildingSerial: this.settlement.serial,
+      nextProjectileSerial: this.nextProjectileSerial,
+      nextFloorDropSerial: this.nextFloorDropSerial,
+      committedSavePoint: this.committedSavePoint,
+      input: this.input,
+      destination: this.destination,
+      elapsed: this.elapsed,
+      attackElapsed: this.attackElapsed,
+      farmHarvestElapsed: this.settlement.harvestElapsed,
     });
   }
   private ensureNeighborhoodEnemies(): void {

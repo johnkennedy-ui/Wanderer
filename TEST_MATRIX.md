@@ -48,6 +48,31 @@ separate GitHub Pages deploy-path check. It is not a substitute for browser
 tests, and browser tests are not a substitute for the canonical `npm run
 verify` gate.
 
+## M4 deterministic runtime evidence
+
+`npm run test:soak` runs the fixed-seed headless soak, invariant/mutation-isolation
+suite, and global-pursuit regressions using existing Vitest tooling. Each of the
+uninterrupted and midpoint-hydrated schedules runs twice (4,160 fixed 0.1s steps
+per run). Tests compare canonical SHA-256 diagnostic hashes and all measured
+maxima/checkpoints, and print `M4_SOAK_EVIDENCE` JSON for durable log capture.
+There are no sleeps or elapsed-wall-time assertions; the 60s test timeout is only
+a failure watchdog, not a performance claim.
+
+The explicit valid home-campfire midpoint compares the complete durable save
+projection with its immediate hydration/re-save projection at the same fixed
+commit timestamp. Runtime combat state is intentionally reset on hydration;
+continued hydrated and uninterrupted combat are NOT asserted equal. Both routes
+must independently repeat deterministically. Tests assert traversal/revisits,
+projectiles, drops, building actions, finite invariants, serial/ID consistency,
+and observed retained-state growth. See `Documentation~/M4_RUNTIME_BOUNDS.md` for
+scope and the deferred pruning decision.
+
+Root Node 22 validation: 33 focused tests, 137 full-suite tests, formatting,
+typecheck, architecture and build/rebuild passed; 44 built-browser cases passed
+across root/Pages base paths. Eight schema-v2/generator-v1 fixtures remain
+byte-identical to accepted M3. Independent review and release remain separate
+gates. See the M4 document for finite measurements and limitations.
+
 ## Explicitly unverified native matrix
 
 All Android wrapper, APK/AAB, physical Android touch, pause/resume, lifecycle, performance, ARM64, target-SDK, signing, and Play evidence is **NOT YET VERIFIED** for this candidate. The rendered browser UI repeats this boundary for consumers. Native Android remains ungenerated. See `ANDROID_BUILD.md`.
