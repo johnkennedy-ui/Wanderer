@@ -11,6 +11,7 @@
     "format:check": "node scripts/agent/format.mjs --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:soak": "vitest run src/tests/domain/session-soak.test.ts src/tests/domain/session-runtime-bounds.test.ts src/tests/domain/session-world-runtime.test.ts",
     "check:architecture": "node src/tests/architecture-guard.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
