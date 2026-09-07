@@ -99,6 +99,38 @@ test("status and world-control panels independently hide and reopen while play s
   const statusToggle = page.getByTestId("toggle-status-panel");
   const worldControlsToggle = page.getByTestId("toggle-world-controls-panel");
 
+  // Resolve the real boss choice before panel clicks, not only if it is already
+  // visible: global pursuit can otherwise open it midway through the assertions.
+  // Follow the suite's public boss route, observing position instead of sleeping.
+  await page.keyboard.down("d");
+  try {
+    await expect
+      .poll(
+        async () => {
+          const text = await page.getByTestId("position").innerText();
+          const match = /^Position: (-?\d+(?:\.\d+)?),/.exec(text);
+          return match === null ? Number.NaN : Number(match[1]);
+        },
+        { intervals: [50] },
+      )
+      .toBeGreaterThanOrEqual(3);
+  } finally {
+    await page.keyboard.up("d");
+  }
+  const modal = page.getByTestId("upgrade-modal");
+  await expect(modal).toBeVisible({ timeout: 8_000 });
+  const choices = modal.getByRole("button");
+  await expect(choices).toHaveCount(3);
+  const selectedUpgradeLabel = (await choices.first().innerText()).split(
+    ":",
+  )[0];
+  await choices.first().click();
+  await expect(modal).toBeHidden();
+  await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
+  await expect(page.getByTestId("save-message")).toContainText(
+    "Fresh runtime: no committed save loaded.",
+  );
+
   await expect(statusToggle).toHaveAttribute("aria-expanded", "true");
   await expect(worldControlsToggle).toHaveAttribute("aria-expanded", "true");
   await statusToggle.click();
