@@ -8,10 +8,8 @@ export interface PlayerHitRecoveryTiming {
 export const playerHitRecoveryEndsAtFor = ({
   elapsed,
   recoverySeconds,
-}: Pick<
-  PlayerHitRecoveryTiming,
-  "elapsed" | "recoverySeconds"
->): number => elapsed + recoverySeconds;
+}: Pick<PlayerHitRecoveryTiming, "elapsed" | "recoverySeconds">): number =>
+  elapsed + recoverySeconds;
 
 /**
  * Returns a deterministic render state for the temporary hit-recovery window.
@@ -63,8 +61,5 @@ export const playerMoveDistanceWithHitRecoveryFor = ({
     Math.min(frameEndElapsed, recoveryEndsAt) -
       Math.max(frameStartElapsed, recoveryStartsAt),
   );
-  return (
-    baseMoveSpeed *
-    (delta + protectedSeconds * (speedMultiplier - 1))
-  );
+  return baseMoveSpeed * (delta + protectedSeconds * (speedMultiplier - 1));
 };
