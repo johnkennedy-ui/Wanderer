@@ -19,6 +19,7 @@ import {
   enemyRespawnResolutionFor,
 } from "./combatResolutionPolicy";
 import { scaleResourceBag, subtractResourceBags } from "./economy";
+import { playerHitRecoveryEndsAtFor } from "./hitRecoveryPolicy";
 import {
   combatStatsFor,
   projectileUpgradeEffectsFor,
@@ -150,6 +151,9 @@ export interface EnemyCombatPhaseInput {
   readonly attackElapsed: number;
   readonly enemyAttackStandoff: number;
   readonly deathResourceLossRate: number;
+  /** End time for the player's transient post-hit protection window. */
+  readonly playerHitRecoveryEndsAt?: number;
+  readonly playerHitRecoverySeconds?: number;
 }
 
 export interface EnemyCombatPhaseResult {
@@ -159,6 +163,7 @@ export interface EnemyCombatPhaseResult {
   readonly input: MoveCommand;
   readonly destination: Vector2 | null;
   readonly attackElapsed: number;
+  readonly playerHitRecoveryEndsAt: number;
   readonly notice: GameNotice | null;
   readonly resetHarvest: boolean;
 }
@@ -176,6 +181,8 @@ export const advanceEnemyCombatPhase = ({
   attackElapsed,
   enemyAttackStandoff,
   deathResourceLossRate,
+  playerHitRecoveryEndsAt: currentPlayerHitRecoveryEndsAt = 0,
+  playerHitRecoverySeconds = 0,
 }: EnemyCombatPhaseInput): EnemyCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const player = {
@@ -187,6 +194,7 @@ export const advanceEnemyCombatPhase = ({
   const input = { ...currentInput, intent: copyVector(currentInput.intent) };
   const destination =
     currentDestination === null ? null : copyVector(currentDestination);
+  let playerHitRecoveryEndsAt = currentPlayerHitRecoveryEndsAt;
 
   for (const enemy of enemies.values()) {
     if (enemy.defeated) continue;
@@ -227,8 +235,15 @@ export const advanceEnemyCombatPhase = ({
     if (resolution.kind === "inactive") continue;
     enemy.attackElapsed = resolution.attackElapsed;
     if (resolution.kind === "waiting") continue;
+    if (elapsed < playerHitRecoveryEndsAt) continue;
     player.hp = resolution.nextPlayerHp;
-    if (!resolution.playerDefeated) continue;
+    if (!resolution.playerDefeated) {
+      playerHitRecoveryEndsAt = playerHitRecoveryEndsAtFor({
+        elapsed,
+        recoverySeconds: playerHitRecoverySeconds,
+      });
+      continue;
+    }
 
     const carriedLoss = scaleResourceBag(resources, deathResourceLossRate);
     return {
@@ -242,6 +257,7 @@ export const advanceEnemyCombatPhase = ({
       input: { intent: { x: 0, y: 0 }, source: "system", at: elapsed },
       destination: null,
       attackElapsed: 0,
+      playerHitRecoveryEndsAt: 0,
       notice: {
         kind: "player.died",
         savePointLabel: committedSavePoint.label,
@@ -258,6 +274,7 @@ export const advanceEnemyCombatPhase = ({
     input,
     destination,
     attackElapsed,
+    playerHitRecoveryEndsAt,
     notice: null,
     resetHarvest: false,
   };

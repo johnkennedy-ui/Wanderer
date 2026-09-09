@@ -119,6 +119,10 @@ describe("GameSession lifecycle", () => {
     expect(reset.ui.buildings).toEqual([]);
     expect(reset.renderer.projectiles).toEqual([]);
     expect(reset.renderer.floorDrops).toEqual([]);
+    expect(reset.renderer.playerHitRecovery).toEqual({
+      active: false,
+      flashOn: false,
+    });
     expect(reset.ui.pendingUpgradeChoices).toEqual([]);
     const resetSave = session.createValidCampfireSaveRequest(2);
     if (resetSave === null) throw new Error("reset home should be saveable");

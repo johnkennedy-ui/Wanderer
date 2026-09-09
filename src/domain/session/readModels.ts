@@ -1,5 +1,9 @@
 import { copyGameNotice } from "../notices";
-import type { GameNotice, GamePresentation } from "../notices";
+import type {
+  GameNotice,
+  GamePresentation,
+  PlayerHitRecoveryPresentation,
+} from "../notices";
 import type {
   BuildingState,
   ChunkRecipe,
@@ -41,6 +45,7 @@ export interface ReadModelProjectileInput {
 export interface PresentationProjectionInput {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
+  readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly resources: ReadonlyResourceBag;
   readonly buildings: readonly BuildingState[];
   readonly enemies: ReadonlyMap<string, ReadModelEnemyInput>;
@@ -76,6 +81,7 @@ export const projectGamePresentation = (
     hp: input.player.hp,
     maxHp: input.player.maxHp,
   };
+  const playerHitRecovery = { ...input.playerHitRecovery };
   const resources = cloneResources(input.resources);
   const buildings = input.buildings.map((building) => ({
     ...building,
@@ -143,6 +149,7 @@ export const projectGamePresentation = (
   };
   const renderer = {
     player,
+    playerHitRecovery,
     enemies,
     projectiles,
     floorDrops,

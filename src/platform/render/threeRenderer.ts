@@ -219,7 +219,20 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         mesh.position.y = 0.24;
         projection.add(mesh);
       }
-      const player = cylinder(0.45, 1.05, 0x58a6ff);
+      const player = cylinder(
+        0.45,
+        1.05,
+        snapshot.playerHitRecovery.flashOn ? 0xfff3b0 : 0x58a6ff,
+      );
+      if (snapshot.playerHitRecovery.active) {
+        const material = player.material as THREE.MeshStandardMaterial;
+        material.emissive.setHex(
+          snapshot.playerHitRecovery.flashOn ? 0xff7043 : 0x1b4f72,
+        );
+        material.emissiveIntensity = snapshot.playerHitRecovery.flashOn
+          ? 1.1
+          : 0.2;
+      }
       player.position.y = 0.525;
       addMarker(player, snapshot.player.position);
       camera.position.set(
@@ -230,6 +243,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
       positionPlayerHealthLabel(snapshot);
       canvas.dataset.floorDropCount = String(snapshot.floorDrops.length);
+      canvas.dataset.playerHitRecovery = snapshot.playerHitRecovery.active
+        ? "active"
+        : "inactive";
+      canvas.dataset.playerHitFlash = snapshot.playerHitRecovery.flashOn
+        ? "on"
+        : "off";
       renderer.render(scene, camera);
     },
     dispose(): void {

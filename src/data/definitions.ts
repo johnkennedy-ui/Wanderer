@@ -109,6 +109,9 @@ const authoredGameplayTuning = {
   floorDropCollectDistance: 0.8,
   baseAttackRange: 3.2,
   baseMoveSpeed: 3,
+  playerHitRecoverySeconds: 0.5,
+  playerHitRecoverySpeedMultiplier: 2,
+  playerHitRecoveryFlashIntervalSeconds: 0.1,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
 };

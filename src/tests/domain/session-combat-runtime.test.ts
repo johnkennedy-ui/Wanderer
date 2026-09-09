@@ -242,4 +242,76 @@ describe("session combat tick runtime", () => {
       at: 1,
     });
   });
+
+  it("makes a surviving player invulnerable to same-window enemy hits before allowing a new hit", () => {
+    const firstAttacker = runtimeEnemy({
+      id: "enemy:first-attacker",
+      position: { x: 0, y: 0 },
+      spawnPosition: { x: 0, y: 0 },
+      attackEverySeconds: 0.1,
+    });
+    const secondAttacker = runtimeEnemy({
+      id: "enemy:second-attacker",
+      position: { x: 0, y: 0 },
+      spawnPosition: { x: 0, y: 0 },
+      attackEverySeconds: 0.1,
+    });
+    const input = { intent: { x: 0, y: 0 }, source: "system" as const, at: 2 };
+    const base = {
+      delta: 0.1,
+      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      committedSavePoint: {
+        id: "campfire:home",
+        label: "home",
+        position: { x: 0, y: 0 },
+        level: 1 as const,
+      },
+      enemyAttackStandoff: 1.8,
+      deathResourceLossRate: 0.25,
+      playerHitRecoverySeconds: 0.5,
+      attackElapsed: 0,
+    };
+    const first = advanceEnemyCombatPhase({
+      ...base,
+      elapsed: 2,
+      player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+      enemies: new Map([
+        [firstAttacker.id, firstAttacker],
+        [secondAttacker.id, secondAttacker],
+      ]),
+      input,
+      destination: null,
+      playerHitRecoveryEndsAt: 0,
+    });
+    expect(first.player.hp).toBe(97);
+    expect(first.playerHitRecoveryEndsAt).toBe(2.5);
+    expect(first.enemies.get(firstAttacker.id)?.attackElapsed).toBe(0);
+    expect(first.enemies.get(secondAttacker.id)?.attackElapsed).toBe(0);
+
+    const duringRecovery = advanceEnemyCombatPhase({
+      ...base,
+      elapsed: 2.4,
+      player: first.player,
+      resources: first.resources,
+      enemies: first.enemies,
+      input: first.input,
+      destination: first.destination,
+      playerHitRecoveryEndsAt: first.playerHitRecoveryEndsAt,
+    });
+    expect(duringRecovery.player.hp).toBe(97);
+    expect(duringRecovery.playerHitRecoveryEndsAt).toBe(2.5);
+
+    const afterRecovery = advanceEnemyCombatPhase({
+      ...base,
+      elapsed: 2.5,
+      player: duringRecovery.player,
+      resources: duringRecovery.resources,
+      enemies: duringRecovery.enemies,
+      input: duringRecovery.input,
+      destination: duringRecovery.destination,
+      playerHitRecoveryEndsAt: duringRecovery.playerHitRecoveryEndsAt,
+    });
+    expect(afterRecovery.player.hp).toBe(94);
+    expect(afterRecovery.playerHitRecoveryEndsAt).toBe(3);
+  });
 });

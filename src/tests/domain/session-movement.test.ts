@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { enemyDefinitions, gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
-import { advance } from "./session-test-helpers";
+import { advance, savedAtHome } from "./session-test-helpers";
 
 describe("GameSession movement", () => {
   it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {
@@ -162,6 +162,37 @@ describe("GameSession movement", () => {
     advance(session, 0.1);
     expect(session.presentation().ui.player.position.x).toBeLessThan(
       beforeStickCancellation,
+    );
+  });
+
+  it("doubles manual movement only while an enemy-hit recovery window is active", () => {
+    const save = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...save,
+        player: { ...save.player, position: { x: 6, y: 0 } },
+      },
+    });
+    let recoveryActive = false;
+    for (let tick = 0; tick < 25 && !recoveryActive; tick += 1) {
+      session.tick(0.1);
+      recoveryActive = session.presentation().renderer.playerHitRecovery.active;
+    }
+    expect(recoveryActive).toBe(true);
+
+    const before = session.presentation().ui.player.position;
+    session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 99 });
+    session.tick(0.1);
+    expect(session.presentation().ui.player.position.x - before.x).toBeCloseTo(
+      gameplayTuning.baseMoveSpeed *
+        gameplayTuning.playerHitRecoverySpeedMultiplier *
+        0.1,
+      8,
+    );
+
+    advance(session, gameplayTuning.playerHitRecoverySeconds);
+    expect(session.presentation().renderer.playerHitRecovery.active).toBe(
+      false,
     );
   });
 });
