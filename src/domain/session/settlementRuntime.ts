@@ -228,21 +228,28 @@ export class SettlementRuntime {
     hp: number,
     maxHp: number,
     resources: ResourceBag,
+    playerPosition: Vector2,
     nearCampfire: boolean,
   ): SettlementPassiveResult {
-    let nextHp = hp;
-    if (nearCampfire) {
-      const healing =
-        gameplayTuning.baseCampfireHealingPerSecond +
-        this.buildings
-          .filter((b) => b.kind === "Healer")
-          .reduce(
-            (total, b) =>
-              total + gameplayTuning.healerHealingBonusByLevel[b.level - 1],
-            0,
-          );
-      nextHp = Math.min(maxHp, hp + delta * healing);
-    }
+    const campfireHealing = nearCampfire
+      ? gameplayTuning.baseCampfireHealingPerSecond
+      : 0;
+    const healingHutHealing = this.buildings
+      .filter(
+        (building) =>
+          building.kind === "Healer" &&
+          distance(playerPosition, building.position) <=
+            gameplayTuning.healingHutRadiusByLevel[building.level - 1],
+      )
+      .reduce(
+        (total, building) =>
+          total + gameplayTuning.healerHealingBonusByLevel[building.level - 1],
+        0,
+      );
+    const nextHp = Math.min(
+      maxHp,
+      hp + delta * (campfireHealing + healingHutHealing),
+    );
     const farms = this.buildings.filter((b) => b.kind === "Farm");
     if (!farms.length) {
       this.farmHarvestElapsed = 0;

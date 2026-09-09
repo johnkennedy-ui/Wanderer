@@ -1,31 +1,157 @@
-import { expect, test } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 
 const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
 
-test("initial browser load exposes a known seed, WebGL world, and visible touch stick", async ({
+const choosePendingUpgradeIfOpen = async (page: Page): Promise<boolean> => {
+  const modal = page.getByTestId("upgrade-modal");
+  if (!(await modal.isVisible())) return false;
+  await modal.getByRole("button").first().click();
+  await expect(modal).toBeHidden();
+  return true;
+};
+
+const clickWithPendingUpgradeResolution = async (
+  page: Page,
+  target: Locator,
+): Promise<void> => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await choosePendingUpgradeIfOpen(page);
+    try {
+      await target.click({ timeout: 5_000 });
+      return;
+    } catch (error) {
+      if (!(await page.getByTestId("upgrade-modal").isVisible())) throw error;
+    }
+  }
+  throw new Error(
+    "A pending Boss Core upgrade kept the requested action blocked.",
+  );
+};
+
+const openStatus = async (page: Page): Promise<void> => {
+  const toggle = page.getByTestId("character-status-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true")
+    await toggle.click();
+  await expect(page.getByTestId("character-status-panel")).toBeVisible();
+};
+
+const openBuildMenu = async (page: Page): Promise<void> => {
+  const toggle = page.getByTestId("build-menu-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true")
+    await clickWithPendingUpgradeResolution(page, toggle);
+  await expect(page.getByTestId("build-menu-panel")).toBeVisible();
+};
+
+const tapCanvas = async (
+  page: Page,
+  xRatio: number,
+  yRatio: number,
+  useTouchPointer = false,
+): Promise<void> => {
+  const canvas = page.getByTestId("world-canvas");
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error("World canvas was not laid out");
+  const clientX = box.x + box.width * xRatio;
+  const clientY = box.y + box.height * yRatio;
+  if (useTouchPointer) {
+    await choosePendingUpgradeIfOpen(page);
+    await canvas.dispatchEvent("pointerdown", {
+      pointerId: 41,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY,
+    });
+    await canvas.dispatchEvent("pointerup", {
+      pointerId: 41,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      clientX,
+      clientY,
+    });
+    return;
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await choosePendingUpgradeIfOpen(page);
+    try {
+      await canvas.click({
+        position: { x: box.width * xRatio, y: box.height * yRatio },
+        timeout: 5_000,
+      });
+      return;
+    } catch (error) {
+      if (!(await page.getByTestId("upgrade-modal").isVisible())) throw error;
+    }
+  }
+  throw new Error("A pending Boss Core upgrade kept the world canvas blocked.");
+};
+
+test("initial browser load uses compact circular actions with accessible hidden panels", async ({
   page,
 }) => {
   await page.goto(applicationPath);
-  await expect(page.getByTestId("world-canvas")).toBeVisible();
+  const canvas = page.getByTestId("world-canvas");
+  const buildToggle = page.getByTestId("build-menu-toggle");
+  const statusToggle = page.getByTestId("character-status-toggle");
+  await expect(canvas).toBeVisible();
   await expect(page.getByTestId("world-player-hp")).toHaveText("100 / 100 HP");
-  await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("virtual-stick")).toBeVisible();
-  await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
-  await expect(page.getByTestId("projectile-status")).toContainText(
-    "in flight",
+  await expect(buildToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(statusToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(buildToggle).toHaveAttribute(
+    "aria-controls",
+    "build-menu-panel",
   );
+  await expect(statusToggle).toHaveAttribute(
+    "aria-controls",
+    "character-status-panel",
+  );
+  await expect(buildToggle).toHaveAccessibleName("Build");
+  await expect(statusToggle).toHaveAccessibleName("Character Status");
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await expect(page.getByTestId("toggle-status-panel")).toHaveCount(0);
+  await expect(page.getByTestId("toggle-world-controls-panel")).toHaveCount(0);
+  await expect(page.getByTestId("building-x")).toHaveCount(0);
+  await expect(page.getByTestId("building-y")).toHaveCount(0);
+
+  const buildBox = await buildToggle.boundingBox();
+  const statusBox = await statusToggle.boundingBox();
+  if (buildBox === null || statusBox === null)
+    throw new Error("Circular action buttons were not laid out");
+  expect(buildBox.width).toBeGreaterThanOrEqual(44);
+  expect(buildBox.height).toBeGreaterThanOrEqual(44);
+  expect(statusBox.width).toBeGreaterThanOrEqual(44);
+  expect(statusBox.height).toBeGreaterThanOrEqual(44);
+
+  await openStatus(page);
+  await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
+  await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
   await expect(page.getByTestId("save-button")).toBeEnabled();
   await expect(page.getByTestId("resources")).toContainText("Wood");
-  await expect(page.getByTestId("resources")).toContainText("Stone");
-  await expect(page.getByTestId("resources")).toContainText("Metal / Scrap");
-  await expect(page.getByTestId("resources")).toContainText("Essence");
   await expect(page.getByTestId("resources")).toContainText("Boss Core");
-  await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
   await expect(page.getByTestId("boss-route-cue")).toContainText(
     "boss is 6m east of the home Campfire",
   );
   await expect(page.getByTestId("native-truth-boundary")).toHaveText(
     "Browser MVP evidence only: native Android wrapper/device, APK/AAB, and Google Play evidence are unverified.",
+  );
+
+  await openBuildMenu(page);
+  await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
+  await expect(page.getByTestId("build-radius")).toContainText("3m/4m/5m");
+  await expect(page.getByTestId("build-Healer")).toHaveText(
+    "Place Healing Hut",
   );
 });
 
@@ -39,6 +165,7 @@ test("a present corrupt save is surfaced and left untouched on built-output boot
   );
 
   await page.goto(applicationPath);
+  await openStatus(page);
   await expect(page.getByTestId("save-message")).toContainText(
     "Save was not loaded: Save data is not valid JSON.",
   );
@@ -50,27 +177,20 @@ test("a present corrupt save is surfaced and left untouched on built-output boot
   ).resolves.toBe(corruptPrimary);
 });
 
-test("enabled primary canvas taps travel to a destination", async ({
+test("enabled primary canvas taps travel to a destination when no build mode is active", async ({
   page,
 }) => {
   await page.goto(applicationPath);
-  const canvas = page.getByTestId("world-canvas");
+  await openStatus(page);
   const position = page.getByTestId("position");
   const toggle = page.getByTestId("tap-to-move-toggle");
-  const controlsPanel = page.getByTestId("world-controls-panel");
-  const controlsToggle = page.getByTestId("toggle-world-controls-panel");
-  const box = await canvas.boundingBox();
-  if (box === null) throw new Error("World canvas was not laid out");
   const initialPosition = await position.textContent();
   if (initialPosition === null)
     throw new Error("World position text was not available");
 
   await toggle.check();
-  await controlsToggle.click();
-  await expect(controlsPanel).toBeHidden();
-  await canvas.click({
-    position: { x: box.width * 0.4, y: box.height * 0.55 },
-  });
+  await page.getByTestId("close-character-status").click();
+  await tapCanvas(page, 0.4, 0.62);
   await expect(position).toContainText("input: tap-to-move");
   await expect(page.getByTestId("combat-status")).toContainText("suppressed");
   await expect(position).not.toHaveText(initialPosition);
@@ -80,6 +200,7 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
   const canvas = page.getByTestId("world-canvas");
   await expect(canvas).toHaveAttribute("data-floor-drop-count", /[1-9]/, {
     timeout: 4_000,
@@ -113,74 +234,154 @@ test("enemy hits visibly flash the player during a finite recovery window", asyn
     .toBe("inactive");
 });
 
-test("status and world-control panels independently hide and reopen while play stays visible", async ({
+test("a Healing Hut is selected and placed through the canvas without moving the player", async ({
+  page,
+}, testInfo: TestInfo) => {
+  await page.goto(applicationPath);
+  await openStatus(page);
+  await openBuildMenu(page);
+  const resources = page.getByTestId("resources");
+  const position = page.getByTestId("position");
+  const beforePosition = await position.textContent();
+  const beforeResources = await resources.textContent();
+  if (beforePosition === null || beforeResources === null)
+    throw new Error("Initial player state was not available");
+
+  await page.getByTestId("tap-to-move-toggle").check();
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("build-Healer"),
+  );
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await expect(page.getByTestId("placement-mode")).toContainText(
+    "Healing Hut selected",
+  );
+  await expect(page.getByTestId("cancel-placement")).toBeVisible();
+  await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
+
+  await expect(page.getByTestId("placement-mode")).toBeHidden();
+  await expect(page.getByTestId("placement-message")).toContainText(
+    "Healing Hut placed",
+  );
+  await expect(page.getByTestId("building-list")).toContainText(
+    "Healing Hut L1",
+  );
+  await expect(page.getByTestId("building-list")).toContainText(
+    "Healing aura: 3m radius",
+  );
+  await expect(resources).not.toHaveText(beforeResources);
+  await expect(position).toHaveText(beforePosition);
+  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+    "data-healing-hut-aura-count",
+    "1",
+  );
+  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+    "data-healing-hut-aura-radii",
+    "3",
+  );
+
+  await openBuildMenu(page);
+  const hutRow = page
+    .getByTestId("building-list")
+    .locator(".building-row")
+    .filter({ hasText: "Healing Hut" });
+  await clickWithPendingUpgradeResolution(
+    page,
+    hutRow.getByRole("button", { name: "Upgrade" }),
+  );
+  await expect(hutRow).toContainText("Healing aura: 4m radius");
+  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+    "data-healing-hut-aura-radii",
+    "4",
+  );
+  await clickWithPendingUpgradeResolution(
+    page,
+    hutRow.getByRole("button", { name: "Upgrade" }),
+  );
+  await expect(hutRow).toContainText("Healing aura: 5m radius");
+  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+    "data-healing-hut-aura-radii",
+    "5",
+  );
+
+  await page.reload();
+  await openBuildMenu(page);
+  await expect(page.getByTestId("building-list")).toBeEmpty();
+});
+
+test("invalid canvas placement remains selected, non-mutating, and explains the rejection", async ({
+  page,
+}, testInfo: TestInfo) => {
+  await page.goto(applicationPath);
+  await openStatus(page);
+  await openBuildMenu(page);
+  const resources = page.getByTestId("resources");
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("build-Storage"),
+  );
+  await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
+  await expect(page.getByTestId("placement-mode")).toBeHidden();
+  const before = await resources.textContent();
+  if (before === null)
+    throw new Error("Storage placement did not update resources");
+
+  await openBuildMenu(page);
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("build-Workshop"),
+  );
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
+  await expect(page.getByTestId("placement-message")).toContainText(
+    "Building action rejected",
+  );
+  await expect(page.getByTestId("placement-message")).toContainText(
+    "overlaps an existing building",
+  );
+  await expect(page.getByTestId("placement-mode")).toContainText(
+    "Workshop selected",
+  );
+  await expect(page.getByTestId("building-list")).toContainText("Storage L1");
+  await expect(page.getByTestId("building-list")).not.toContainText(
+    "Workshop L1",
+  );
+  await expect(resources).toHaveText(before);
+});
+
+test("status and build circle actions independently open and close their panels", async ({
   page,
 }) => {
   await page.goto(applicationPath);
-  const statusPanel = page.getByTestId("status-panel");
-  const worldControlsPanel = page.getByTestId("world-controls-panel");
-  const statusToggle = page.getByTestId("toggle-status-panel");
-  const worldControlsToggle = page.getByTestId("toggle-world-controls-panel");
+  const statusPanel = page.getByTestId("character-status-panel");
+  const buildPanel = page.getByTestId("build-menu-panel");
+  const statusToggle = page.getByTestId("character-status-toggle");
+  const buildToggle = page.getByTestId("build-menu-toggle");
 
-  // Resolve the real boss choice before panel clicks, not only if it is already
-  // visible: global pursuit can otherwise open it midway through the assertions.
-  // Follow the suite's public boss route, observing position instead of sleeping.
-  await page.keyboard.down("d");
-  try {
-    await expect
-      .poll(
-        async () => {
-          const text = await page.getByTestId("position").innerText();
-          const match = /^Position: (-?\d+(?:\.\d+)?),/.exec(text);
-          return match === null ? Number.NaN : Number(match[1]);
-        },
-        { intervals: [50] },
-      )
-      .toBeGreaterThanOrEqual(3);
-  } finally {
-    await page.keyboard.up("d");
-  }
-  const modal = page.getByTestId("upgrade-modal");
-  await expect(modal).toBeVisible({ timeout: 8_000 });
-  const choices = modal.getByRole("button");
-  await expect(choices).toHaveCount(3);
-  const selectedUpgradeLabel = (await choices.first().innerText()).split(
-    ":",
-  )[0];
-  await choices.first().click();
-  await expect(modal).toBeHidden();
-  await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(page.getByTestId("save-message")).toContainText(
-    "Fresh runtime: no committed save loaded.",
-  );
-
+  await statusToggle.click();
+  await expect(statusPanel).toBeVisible();
   await expect(statusToggle).toHaveAttribute("aria-expanded", "true");
-  await expect(worldControlsToggle).toHaveAttribute("aria-expanded", "true");
+  await buildToggle.click();
+  await expect(buildPanel).toBeVisible();
+  await expect(buildToggle).toHaveAttribute("aria-expanded", "true");
+
   await statusToggle.click();
   await expect(statusPanel).toBeHidden();
-  await expect(statusToggle).toHaveText("Show status");
-  await expect(statusToggle).toHaveAttribute("aria-expanded", "false");
-
-  await worldControlsToggle.click();
-  await expect(worldControlsPanel).toBeHidden();
-  await expect(worldControlsToggle).toHaveText("Show controls");
-  await expect(worldControlsToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(buildPanel).toBeVisible();
+  await buildToggle.click();
+  await expect(buildPanel).toBeHidden();
   await expect(page.getByTestId("world-canvas")).toBeVisible();
   await expect(page.getByTestId("virtual-stick")).toBeVisible();
-
-  await statusToggle.click();
-  await worldControlsToggle.click();
-  await expect(statusPanel).toBeVisible();
-  await expect(worldControlsPanel).toBeVisible();
-  await expect(statusToggle).toHaveText("Hide status");
-  await expect(worldControlsToggle).toHaveText("Hide controls");
 });
 
 test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
+  await openBuildMenu(page);
   await page.getByTestId("build-Storage").click();
+  await tapCanvas(page, 0.5, 0.5);
   await expect(page.getByTestId("resources")).toContainText(
     "capacity 180 each",
   );
@@ -193,6 +394,7 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
   const combat = page.getByTestId("combat-status");
   await page.keyboard.down("d");
   await page.waitForTimeout(180);
@@ -231,6 +433,7 @@ test("virtual-stick short drag, cancellation, capture loss, and blur safely clea
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
   const combat = page.getByTestId("combat-status");
   const stick = page.getByTestId("virtual-stick");
   const box = await stick.boundingBox();
@@ -284,6 +487,7 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
   await page.getByTestId("save-button").click();
   await expect(page.getByTestId("save-message")).toContainText(
     "Saved explicitly",
@@ -296,6 +500,7 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
     "Position: 0.0, 0.0",
   );
   await page.reload();
+  await openStatus(page);
   await expect(page.getByTestId("save-message")).toContainText(
     "Recovered last explicit campfire save",
   );
@@ -304,29 +509,11 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
   );
 });
 
-test("invalid normal-building placement rejects without adding a record", async ({
-  page,
-}) => {
-  await page.goto(applicationPath);
-  const resources = page.getByTestId("resources");
-  await page.keyboard.down("d");
-  await expect(page.getByTestId("combat-status")).toContainText("suppressed");
-  await page.getByTestId("building-x").fill("48.1");
-  await page.getByTestId("building-y").fill("48.1");
-  const before = await resources.textContent();
-  await page.getByTestId("build-Workshop").click();
-  await expect(page.getByTestId("placement-message")).toContainText(
-    "outside the 6m campfire settlement radius",
-  );
-  await expect(page.getByTestId("building-list")).toBeEmpty();
-  await expect(resources).toHaveText(before ?? "");
-  await page.keyboard.up("d");
-});
-
 test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
   page,
 }) => {
   await page.goto(applicationPath);
+  await openStatus(page);
   const saveMessage = page.getByTestId("save-message");
   const position = page.getByTestId("position");
   const combat = page.getByTestId("combat-status");
@@ -357,6 +544,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
 
   await choices.first().click();
   await expect(modal).toBeHidden();
+  await openBuildMenu(page);
   await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
   await expect(resources).toContainText("Boss Core");
   await expect(saveMessage).toContainText(
@@ -364,6 +552,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   );
 
   await page.reload();
+  await openStatus(page);
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );

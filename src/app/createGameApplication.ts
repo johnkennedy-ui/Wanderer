@@ -1,5 +1,6 @@
 import { GameSession } from "../domain/GameSession";
 import type { BuildingKind, UpgradeId, Vector2 } from "../domain/types";
+import { createBuildPlacementInput } from "../platform/input/buildPlacementInput";
 import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
 import { createVirtualStickInput } from "../platform/input/virtualStickInput";
@@ -50,11 +51,11 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
       platformMessage =
         "New deterministic runtime started. Existing browser saves are untouched until a fresh load; this action did not save.";
     },
-    place(kind: BuildingKind, position: Vector2): void {
-      session.placeBuilding(kind, position);
+    place(kind: BuildingKind, position: Vector2) {
+      return session.placeBuilding(kind, position);
     },
-    relocate(id: string, position: Vector2): void {
-      session.relocateBuilding(id, position);
+    relocate(id: string, position: Vector2) {
+      return session.relocateBuilding(id, position);
     },
     upgradeBuilding(id: string): void {
       session.upgradeBuilding(id);
@@ -76,6 +77,13 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
     renderer.worldPositionFromClientPoint,
     ui.isTapToMoveEnabled,
     (command) => session.setDestination(command),
+    ui.isWorldPlacementEnabled,
+  );
+  const buildPlacement = createBuildPlacementInput(
+    renderer.canvas,
+    renderer.worldPositionFromClientPoint,
+    ui.isWorldPlacementEnabled,
+    (position) => ui.applyWorldPlacement(position),
   );
   const lifecycle = createBrowserLifecycle((message) => {
     platformMessage = message;
@@ -96,6 +104,7 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
     dispose(): void {
       cancelAnimationFrame(animationFrame);
       lifecycle.dispose();
+      buildPlacement.dispose();
       tapToMove.dispose();
       stick.dispose();
       keyboard.dispose();

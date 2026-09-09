@@ -1,22 +1,22 @@
 import type { Vector2 } from "../../domain/types";
-import type { DestinationSink, InputAdapter } from "./inputContracts";
+import type { InputAdapter, WorldPlacementSink } from "./inputContracts";
 
 const MAX_TAP_TRAVEL_PIXELS = 12;
 
-/** Backwards-compatible name for the narrow disposable tap input adapter. */
-export type TapToMoveInput = InputAdapter;
-
-/** Translates enabled primary canvas taps into explicit domain destination commands. */
-export const createTapToMoveInput = (
+/**
+ * Translates one enabled primary canvas tap into a UI-owned building-placement
+ * position. The composition root keeps this mutually exclusive with
+ * tap-to-move, so this adapter never reaches into gameplay state directly.
+ */
+export const createBuildPlacementInput = (
   canvas: HTMLCanvasElement,
   worldPositionFromClientPoint: (
     clientX: number,
     clientY: number,
   ) => Vector2 | null,
   isEnabled: () => boolean,
-  sink: DestinationSink,
-  isClaimedByPlacement: () => boolean = () => false,
-): TapToMoveInput => {
+  sink: WorldPlacementSink,
+): InputAdapter => {
   let pendingTap:
     | {
         readonly pointerId: number;
@@ -26,13 +26,7 @@ export const createTapToMoveInput = (
     | undefined;
 
   const down = (event: PointerEvent): void => {
-    if (
-      !isEnabled() ||
-      isClaimedByPlacement() ||
-      !event.isPrimary ||
-      event.button !== 0
-    )
-      return;
+    if (!isEnabled() || !event.isPrimary || event.button !== 0) return;
     pendingTap = {
       pointerId: event.pointerId,
       clientX: event.clientX,
@@ -49,22 +43,14 @@ export const createTapToMoveInput = (
       tap === undefined ||
       tap.pointerId !== event.pointerId ||
       !isEnabled() ||
-      isClaimedByPlacement() ||
       Math.hypot(event.clientX - tap.clientX, event.clientY - tap.clientY) >
         MAX_TAP_TRAVEL_PIXELS
     )
       return;
-    const destination = worldPositionFromClientPoint(
-      event.clientX,
-      event.clientY,
-    );
-    if (destination === null) return;
+    const position = worldPositionFromClientPoint(event.clientX, event.clientY);
+    if (position === null) return;
     event.preventDefault();
-    sink({
-      destination,
-      source: "tap-to-move",
-      at: performance.now(),
-    });
+    sink(position);
   };
 
   canvas.addEventListener("pointerdown", down);
