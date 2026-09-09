@@ -63,14 +63,18 @@ describe("GameSession progression", () => {
       throw new Error("baseline home should create a save document");
     expect(unsavedReloadSave.document.upgrades).toEqual([]);
 
+    const resourcesBeforeReturn = session.presentation().ui.resources;
     session.setDestination({
       destination: { x: 0, y: 0 },
       source: "tap-to-move",
       at: 3,
     });
     advance(session, 3);
+    expect(session.presentation().ui.player.position).toEqual({ x: 0, y: 0 });
+    expect(session.presentation().ui.resources).toEqual(resourcesBeforeReturn);
     const request = session.createValidCampfireSaveRequest(99);
     expect(request).not.toBeNull();
+    expect(request?.document.savePointId).toBe("campfire:home");
     expect(request?.document.defeatedBossIds).toHaveLength(1);
     expect(request?.document.upgrades).toContain("iron-skin");
     const storage = createBrowserSaveStorage(new MemoryStore());

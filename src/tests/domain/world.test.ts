@@ -6,9 +6,11 @@ import {
   generateChunk,
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
+  WANDERER_WEB_V2,
 } from "../../domain/world";
 
 const world = { seed: "review-seed", generatorVersion: "wanderer-web-v1" };
+const v2World = { seed: "review-seed", generatorVersion: WANDERER_WEB_V2 };
 
 const goldenFixtureNames = [
   "home-0-0",
@@ -115,6 +117,33 @@ describe("deterministic chunk generation", () => {
     ]);
   });
 
+  it("uses V2 for exactly one normal three-enemy group per non-home 5-by-2 macrocell", () => {
+    const coordinates = [2, 3].flatMap((y) =>
+      [5, 6, 7, 8, 9].map((x) => ({ x, y })),
+    );
+    const first = coordinates.map((coordinate) =>
+      generateChunk(v2World, coordinate),
+    );
+
+    generateChunk(v2World, { x: -4, y: 9 });
+    const again = coordinates.map((coordinate) =>
+      generateChunk(v2World, coordinate),
+    );
+    const encounterGroups = first.filter((chunk) => chunk.spawns.length > 0);
+    const home = generateChunk(v2World, { x: 0, y: 0 });
+
+    expect(first.flatMap((chunk) => chunk.spawns)).toHaveLength(3);
+    expect(encounterGroups).toHaveLength(1);
+    expect(encounterGroups[0]?.spawns).toHaveLength(3);
+    expect(again).toEqual(first);
+    expect(home.spawns.map((spawn) => spawn.id)).toEqual([
+      "enemy:starter-scout",
+      "enemy:starter-brute",
+      "enemy:starter-elite",
+      "boss:ember-wyrm",
+    ]);
+  });
+
   it("adds deterministic distance progression that materially scales far enemies without changing recipes", () => {
     const homeDanger = dangerForChunkCoordinate({ x: 0, y: 0 });
     const farDanger = dangerForChunkCoordinate({ x: 5, y: -6 });
@@ -138,7 +167,7 @@ describe("deterministic chunk generation", () => {
   });
 
   it("rejects unknown and prototype-named versions without falling back to v1", () => {
-    for (const generatorVersion of ["wanderer-web-v2", "toString"]) {
+    for (const generatorVersion of ["wanderer-web-v3", "toString"]) {
       try {
         generateChunk(
           { seed: "unsupported-generator", generatorVersion },

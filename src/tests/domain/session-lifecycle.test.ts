@@ -11,6 +11,7 @@ import type { SaveDocument } from "../../domain/types";
 import {
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
+  WANDERER_WEB_V2,
 } from "../../domain/world";
 import { savedAtHome } from "./session-test-helpers";
 
@@ -18,7 +19,7 @@ describe("GameSession lifecycle", () => {
   it("constructs, hydrates, resets, and projects complete instance-owned lifecycle state", () => {
     const fresh = createFreshSessionState();
     expect(fresh).toMatchObject({
-      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V1 },
+      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V2 },
       player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
       resources: {
         wood: 120,
@@ -263,14 +264,20 @@ describe("GameSession lifecycle", () => {
   });
 
   it("hydrates recorded v1 worlds and rejects an unavailable recorded generator", () => {
-    const saved = savedAtHome();
+    const v1Session = new GameSession({
+      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V1 },
+    });
+    const saved = v1Session.createValidCampfireSaveRequest(42);
+    if (saved === null)
+      throw new Error("V1 home should create a save document");
     expect(
-      new GameSession({ saved }).presentation().ui.world.generatorVersion,
+      new GameSession({ saved: saved.document }).presentation().ui.world
+        .generatorVersion,
     ).toBe(WANDERER_WEB_V1);
 
     const unsupported = {
-      ...saved,
-      world: { ...saved.world, generatorVersion: "wanderer-web-v2" },
+      ...saved.document,
+      world: { ...saved.document.world, generatorVersion: "wanderer-web-v3" },
     };
     expect(() => new GameSession({ saved: unsupported })).toThrow(
       UnsupportedWorldGeneratorVersionError,
