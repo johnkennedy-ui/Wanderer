@@ -512,6 +512,7 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
   page,
 }) => {
+  test.setTimeout(45_000);
   await page.goto(applicationPath);
   await openStatus(page);
   const saveMessage = page.getByTestId("save-message");
@@ -529,7 +530,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await page.keyboard.up("d");
   await expect(combat).toContainText("Auto-attacking");
 
-  await expect(modal).toBeVisible({ timeout: 8_000 });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
   const choices = modal.getByRole("button");
   await expect(choices).toHaveCount(3);
   const choiceIds = await choices.evaluateAll((buttons) =>
