@@ -24,11 +24,11 @@ export interface ProjectileUpgradeEffects {
 
 export const playerLevelForExperience = (
   experience: number,
-): 0 | 1 | 2 | 3 | 4 => {
+): 0 | 1 | 2 | 3 | 4 | 5 => {
   const reached = gameplayTuning.experienceThresholds.filter(
     (threshold) => experience >= threshold,
   ).length;
-  return Math.min(4, reached) as 0 | 1 | 2 | 3 | 4;
+  return Math.min(5, reached) as 0 | 1 | 2 | 3 | 4 | 5;
 };
 
 export const pendingClassSkillChoicesFor = (
@@ -36,7 +36,7 @@ export const pendingClassSkillChoicesFor = (
 ): readonly ClassSkillId[] => {
   if (progression.playerClass === null) return [];
   const tier = progression.skillIds.length + 1;
-  if (tier > 3 || progression.level < tier + 1) return [];
+  if (tier > 4 || progression.level < tier + 1) return [];
   return classSkillDefinitions
     .filter(
       (skill) =>

@@ -17,9 +17,9 @@ import { savedAtHome } from "./session-test-helpers";
 
 const progression = (
   playerClass: ClassProgression["playerClass"],
-  level: ClassProgression["level"] = 4,
+  level: ClassProgression["level"] = 5,
   skillIds: ClassProgression["skillIds"] = [],
-): ClassProgression => ({ experience: 10, level, playerClass, skillIds });
+): ClassProgression => ({ experience: 1500, level, playerClass, skillIds });
 
 const enemy = (
   id: string,
@@ -42,16 +42,20 @@ const enemy = (
 });
 
 describe("class progression", () => {
-  it("uses cumulative deterministic experience thresholds for four initial levels", () => {
-    expect(gameplayTuning.experienceThresholds).toEqual([1, 3, 6, 10]);
+  it("uses cumulative deterministic experience thresholds for five levels", () => {
+    expect(gameplayTuning.experienceThresholds).toEqual([
+      30, 100, 250, 600, 1500,
+    ]);
     expect(
-      [0, 1, 2, 3, 5, 6, 9, 10, 999].map(playerLevelForExperience),
-    ).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4]);
+      [0, 29, 30, 99, 100, 249, 250, 599, 600, 1499, 1500, 9999].map(
+        playerLevelForExperience,
+      ),
+    ).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
   });
 
   it("offers two class-local choices per earned skill tier", () => {
     for (const playerClass of ["knight", "wizard", "archer"] as const) {
-      for (const tier of [1, 2, 3] as const) {
+      for (const tier of [1, 2, 3, 4] as const) {
         expect(
           classSkillDefinitions.filter(
             (skill) => skill.playerClass === playerClass && skill.tier === tier,
@@ -59,7 +63,7 @@ describe("class progression", () => {
         ).toHaveLength(2);
       }
     }
-    const wizard = progression("wizard", 4);
+    const wizard = progression("wizard", 5);
     expect(pendingClassSkillChoicesFor(wizard)).toEqual([
       "wizard-flame-orb",
       "wizard-wide-blast",
@@ -73,6 +77,18 @@ describe("class progression", () => {
       "wizard-mana-siphon",
     ]);
     expect(classSkillDefinitionFor("archer-piercing-arrow").tier).toBe(3);
+    const tierFour = {
+      ...wizard,
+      skillIds: [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+      ] as const,
+    };
+    expect(pendingClassSkillChoicesFor(tierFour)).toEqual([
+      "wizard-meteor",
+      "wizard-spellweave",
+    ]);
   });
 
   it("selects a class once, chooses one skill per tier, and persists only through campfire save", () => {
@@ -90,7 +106,7 @@ describe("class progression", () => {
     const skilled = new GameSession({
       saved: {
         ...base,
-        classProgression: progression("wizard", 4, []),
+        classProgression: progression("wizard", 5, []),
       },
     });
     expect(skilled.chooseClassSkill("wizard-wide-blast")).toBe(true);
@@ -98,8 +114,8 @@ describe("class progression", () => {
     expect(skilled.presentation().ui.player).toEqual(beforeSkill);
     const request = skilled.createValidCampfireSaveRequest(11);
     expect(request?.document.classProgression).toEqual({
-      experience: 10,
-      level: 4,
+      experience: 1500,
+      level: 5,
       playerClass: "wizard",
       skillIds: ["wizard-wide-blast"],
     });

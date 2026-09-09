@@ -124,18 +124,24 @@ export const classSkillIds = Object.freeze([
   "knight-rapid-cuts",
   "knight-execution-arc",
   "knight-crescent-sweep",
+  "knight-bulwark",
+  "knight-whirlwind",
   "wizard-flame-orb",
   "wizard-wide-blast",
   "wizard-arcane-haste",
   "wizard-mana-siphon",
   "wizard-nova",
   "wizard-aether-ward",
+  "wizard-meteor",
+  "wizard-spellweave",
   "archer-longbow",
   "archer-barbed-arrow",
   "archer-quickdraw",
   "archer-volley",
   "archer-piercing-arrow",
   "archer-trailstep",
+  "archer-eagle-eye",
+  "archer-multishot",
 ] as const);
 
 export type ClassSkillId = (typeof classSkillIds)[number];
@@ -143,7 +149,7 @@ export type AttackStyle = "basic" | "slash" | "magic" | "arrow";
 
 export interface ClassProgression {
   readonly experience: number;
-  readonly level: 0 | 1 | 2 | 3 | 4;
+  readonly level: 0 | 1 | 2 | 3 | 4 | 5;
   readonly playerClass: PlayerClass | null;
   readonly skillIds: readonly ClassSkillId[];
 }
