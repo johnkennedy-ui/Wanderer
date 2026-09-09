@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { GameSession } from "../../domain/GameSession";
 import type { RuntimeDiagnostics } from "../../domain/session/runtimeDiagnostics";
 import { resourceKinds } from "../../domain/types";
+import { WANDERER_WEB_V1, WANDERER_WEB_V2 } from "../../domain/world";
 
 export const SOAK_HALF_STEPS = 2080;
 export const SOAK_STEP_SECONDS = 0.1;
@@ -51,7 +52,10 @@ export const assertRuntimeInvariants = (state: RuntimeDiagnostics): void => {
   canonicalJson(state);
   requireInvariant(state.world.seed.length > 0, "world seed");
   requireInvariant(
-    state.world.generatorVersion === "wanderer-web-v1",
+    [WANDERER_WEB_V1, WANDERER_WEB_V2].includes(
+      state.world.generatorVersion as
+        typeof WANDERER_WEB_V1 | typeof WANDERER_WEB_V2,
+    ),
     "generator",
   );
   nonnegative(state.elapsed, "elapsed");

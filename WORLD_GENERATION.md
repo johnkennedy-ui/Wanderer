@@ -38,6 +38,12 @@ deterministic-output change requires a new `wanderer-web-v2` module and a new
 dispatcher entry. New worlds may then select that newest supported version,
 while saved `wanderer-web-v1` worlds continue to use V1.
 
+`wanderer-web-v2` is the current default for new worlds. It preserves the V1
+home starter and boss scenario, but retains normal three-enemy encounter groups
+in exactly one chunk per deterministic 5-by-2 non-home macrocell: three normal
+enemies across ten chunks (10% of V1's 30). Existing V1 saves deliberately
+retain their frozen V1 density and are never silently migrated.
+
 Procedural IDs are persisted compatibility data. The checked-in V1 golden
 fixtures under `src/tests/fixtures/world/v1/` were captured from released
 commit `30fd4845ae716599b214573e5663d8437abc4ed3`; their hashes must not be
