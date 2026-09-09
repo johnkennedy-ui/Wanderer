@@ -28,6 +28,11 @@ button {
 button:hover:not(:disabled) {
   background: #326273;
 }
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #fff0a8;
+  outline-offset: 2px;
+}
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -64,33 +69,64 @@ input {
 .panel[hidden] {
   display: none;
 }
-.panel-toggle-controls {
+.hud-action-dock {
   position: absolute;
   top: max(0.75rem, env(safe-area-inset-top));
   right: max(0.75rem, env(safe-area-inset-right));
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 0.35rem;
-  max-width: calc(100vw - 1.5rem);
   pointer-events: auto;
-  z-index: 1;
+  z-index: 3;
+}
+.hud-circle-button {
+  width: 3.25rem;
+  min-width: 44px;
+  height: 3.25rem;
+  min-height: 44px;
+  padding: 0.2rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.05;
+  background: rgb(19 54 63 / 94%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 38%);
 }
 .top-panel {
   position: absolute;
-  top: max(0.75rem, env(safe-area-inset-top));
+  top: max(4.75rem, calc(env(safe-area-inset-top) + 4rem));
   left: 0.75rem;
   right: 0.75rem;
   padding: 0.65rem 0.75rem;
 }
 .side-panel {
   position: absolute;
-  top: 7.4rem;
+  top: max(4.75rem, calc(env(safe-area-inset-top) + 4rem));
   right: 0.75rem;
   width: min(23rem, calc(100vw - 1.5rem));
-  max-height: calc(100vh - 8.1rem);
+  max-height: calc(100vh - 5.5rem);
   overflow: auto;
   padding: 0.65rem;
+}
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.panel-close {
+  width: 2.75rem;
+  min-width: 44px;
+  height: 2.75rem;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.4rem;
+  line-height: 1;
 }
 .status-grid {
   display: flex;
@@ -109,12 +145,15 @@ input {
 .subtle {
   color: #c5cfbf;
 }
-.coordinates,
 .build-buttons,
-.upgrade-choices {
+.upgrade-choices,
+.status-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+.status-actions {
+  margin-top: 0.45rem;
 }
 .tap-to-move-toggle {
   display: flex;
@@ -125,13 +164,28 @@ input {
 .tap-to-move-toggle input {
   min-width: auto;
 }
-.coordinates label {
-  display: grid;
-  gap: 0.15rem;
-  width: 5.8rem;
-}
 .build-buttons {
   margin-top: 0.45rem;
+}
+.build-buttons button[aria-pressed="true"] {
+  border-color: #fff0a8;
+  box-shadow: 0 0 0 3px rgb(230 214 144 / 28%);
+}
+.placement-mode {
+  margin: 0.65rem 0 0;
+  color: #fff0a8;
+  min-height: 2.4rem;
+}
+.placement-feedback {
+  position: absolute;
+  top: max(4.75rem, calc(env(safe-area-inset-top) + 4rem));
+  left: max(0.75rem, env(safe-area-inset-left));
+  width: min(23rem, calc(100vw - 1.5rem));
+  pointer-events: auto;
+  z-index: 2;
+}
+.placement-cancel {
+  margin-top: 0.2rem;
 }
 .building-list {
   display: grid;
@@ -204,6 +258,10 @@ input {
   pointer-events: none;
   white-space: nowrap;
 }
+.world-host[data-placement-mode="active"] .world-canvas {
+  cursor: crosshair;
+  touch-action: none;
+}
 .upgrade-modal {
   position: absolute;
   inset: 0;
@@ -234,12 +292,19 @@ h2 {
 }
 @media (max-width: 700px) {
   .top-panel {
+    top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
     font-size: 0.75rem;
+    max-height: 52vh;
+    overflow: auto;
+  }
+  .placement-feedback {
+    top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
+    width: min(20rem, calc(100vw - 1.5rem));
   }
   .side-panel {
-    top: 8.8rem;
+    top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
     width: min(20rem, calc(100vw - 1.5rem));
-    max-height: 48vh;
+    max-height: 52vh;
   }
   .touch-controls {
     transform: scale(0.94);

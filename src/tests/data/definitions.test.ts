@@ -10,6 +10,7 @@ import {
   upgradeDefinitionsById,
 } from "../../data/definitions";
 import { deepFreeze } from "../../data/deepFreeze";
+import { saveV2BuildingKinds } from "../../domain/persistence/saveV2";
 import {
   buildingKinds,
   enemyKinds,
@@ -109,6 +110,17 @@ describe("authored definitions", () => {
     expect(Object.keys(enemyPresentation).sort()).toEqual(
       [...enemyKinds].sort(),
     );
+  });
+
+  it("keeps the historical Healer save ID while presenting a level-scaling Healing Hut", () => {
+    expect(saveV2BuildingKinds).toContain("Healer");
+    expect(buildingDefinitions.Healer.label).toBe("Healing Hut");
+    expect(gameplayTuning.healingHutRadiusByLevel).toEqual([3, 4, 5]);
+    expect(buildingDefinitions.Healer.levelEffects).toEqual([
+      "L1: 3m aura, +1 health/s while stationary inside it.",
+      "L2: 4m aura, +3 health/s while stationary inside it.",
+      "L3: 5m aura, +6 health/s while stationary inside it.",
+    ]);
   });
 
   it("represents every upgrade as one explicit qualitative effect", () => {

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { resourceDefinitions } from "../../data/definitions";
+import { gameplayTuning, resourceDefinitions } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type {
   BuildingKind,
@@ -73,6 +73,18 @@ const cylinder = (radius: number, height: number, color: number): THREE.Mesh =>
   new THREE.Mesh(
     new THREE.CylinderGeometry(radius, radius, height, 10),
     new THREE.MeshStandardMaterial({ color, roughness: 0.8 }),
+  );
+
+const healingHutAura = (radius: number): THREE.Mesh =>
+  new THREE.Mesh(
+    new THREE.RingGeometry(Math.max(0, radius - 0.08), radius, 48),
+    new THREE.MeshBasicMaterial({
+      color: buildingColors.Healer,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
   );
 
 /** Disposable Three.js projection. It only receives snapshots; it cannot command the session. */
@@ -174,6 +186,15 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         }
       }
       for (const building of snapshot.visibleBuildings) {
+        if (building.kind === "Healer") {
+          const aura = healingHutAura(
+            gameplayTuning.healingHutRadiusByLevel[building.level - 1],
+          );
+          aura.rotation.x = -Math.PI / 2;
+          aura.position.copy(toWorld(building.position));
+          aura.position.y = 0.025;
+          projection.add(aura);
+        }
         const mesh = cylinder(
           0.48 + building.level * 0.07,
           0.7 + building.level * 0.15,
@@ -249,6 +270,16 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       canvas.dataset.playerHitFlash = snapshot.playerHitRecovery.flashOn
         ? "on"
         : "off";
+      const healingHutAuras = snapshot.visibleBuildings.filter(
+        (building) => building.kind === "Healer",
+      );
+      canvas.dataset.healingHutAuraCount = String(healingHutAuras.length);
+      canvas.dataset.healingHutAuraRadii = healingHutAuras
+        .map(
+          (building) =>
+            gameplayTuning.healingHutRadiusByLevel[building.level - 1],
+        )
+        .join(",");
       renderer.render(scene, camera);
     },
     dispose(): void {

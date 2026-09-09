@@ -6,6 +6,7 @@ import {
   presentGameNotice,
   presentPlacementNotice,
   presentPlacementRejection,
+  presentPlacementResult,
 } from "../../ui/noticePresentation";
 
 describe("notice presentation", () => {
@@ -100,6 +101,12 @@ describe("notice presentation", () => {
       }),
     ).toContain("unknown building");
     expect(presentPlacementNotice({ kind: "drop.collected" })).toBe("");
+    expect(
+      presentPlacementResult({
+        ok: false,
+        rejection: { kind: "outside-settlement-radius", radius: 6 },
+      }),
+    ).toContain("outside the 6m campfire settlement radius");
   });
 
   it("keeps UI placement behaviour independent of English message fragments", () => {

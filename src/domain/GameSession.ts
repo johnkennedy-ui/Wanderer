@@ -477,6 +477,7 @@ export class GameSession {
       this.player.hp,
       this.player.maxHp,
       this.resources,
+      this.player.position,
       this.settlement.nearbyCampfireAt(this.world, this.player.position) !==
         null,
     );

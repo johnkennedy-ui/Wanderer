@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../../domain/GameSession";
+import { buildingDefinitions } from "../../data/definitions";
 import { decodeSave, isSaveDocument } from "../../domain/save";
 import { toSaveV2Document } from "../../domain/persistence/currentSave";
 import type { SaveDocument } from "../../domain/types";
@@ -90,6 +91,16 @@ describe("schema-2 persistence boundary", () => {
       ).toEqual(result.document.world);
     },
   );
+
+  it("keeps a historical Healer building wire value while presenting a Healing Hut", () => {
+    const result = decodeSave(fixtureText("recovery-primary"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document.buildings).toContainEqual(
+      expect.objectContaining({ kind: "Healer" }),
+    );
+    expect(buildingDefinitions.Healer.label).toBe("Healing Hut");
+  });
 
   it("distinguishes absent, malformed, invalid, unsupported schema, and unsupported generator data", () => {
     expect(decodeSave(null)).toMatchObject({ ok: false, failure: "absent" });

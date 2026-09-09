@@ -2,11 +2,38 @@ import { describe, expect, it } from "vitest";
 import { gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
 import { combatStatsFor } from "../../domain/session/progressionRules";
+import { SettlementRuntime } from "../../domain/session/settlementRuntime";
+import type { BuildingState, ResourceBag, Vector2 } from "../../domain/types";
 import {
   advance,
   placeAndUpgradeTo,
   savedAtHome,
 } from "./session-test-helpers";
+
+const emptyResources = (): ResourceBag => ({
+  wood: 0,
+  stone: 0,
+  scrap: 0,
+  essence: 0,
+  bossCore: 0,
+});
+
+const healingHut = (
+  id: string,
+  level: 1 | 2 | 3,
+  position: Vector2,
+): BuildingState => ({ id, kind: "Healer", level, position });
+
+const passiveHp = (
+  buildings: readonly BuildingState[],
+  position: Vector2,
+  nearCampfire: boolean,
+): number =>
+  new SettlementRuntime({
+    buildings: [...buildings],
+    nextBuildingSerial: 1,
+    farmHarvestElapsed: 0,
+  }).passive(1, 50, 100, emptyResources(), position, nearCampfire).hp;
 
 describe("GameSession settlement", () => {
   it("applies all three Campfire radii in actual placement validation", () => {
@@ -102,6 +129,55 @@ describe("GameSession settlement", () => {
         6,
       );
     }
+  });
+
+  it("uses small inclusive Healing Hut auras independently of campfires and stacks overlaps", () => {
+    for (const [level, radius, bonus] of [
+      [1, 3, 1],
+      [2, 4, 3],
+      [3, 5, 6],
+    ] as const) {
+      const hut = healingHut(`hut:l${level}`, level, { x: 0, y: 0 });
+      expect(passiveHp([hut], { x: radius, y: 0 }, false)).toBeCloseTo(
+        50 + bonus,
+        6,
+      );
+      expect(passiveHp([hut], { x: radius + 0.01, y: 0 }, false)).toBeCloseTo(
+        50,
+        6,
+      );
+    }
+
+    expect(
+      passiveHp(
+        [
+          healingHut("hut:left", 1, { x: -1, y: 0 }),
+          healingHut("hut:right", 2, { x: 1, y: 0 }),
+        ],
+        { x: 0, y: 0 },
+        false,
+      ),
+    ).toBeCloseTo(54, 6);
+    expect(passiveHp([], { x: 20, y: 20 }, true)).toBeCloseTo(52, 6);
+  });
+
+  it("applies Healing Hut recovery only while the GameSession is stationary", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        player: { position: { x: 2.5, y: 0 }, hp: 50, maxHp: 100 },
+        buildings: [healingHut("building:fixture:0001", 1, { x: 0, y: 0 })],
+        nextBuildingSerial: 2,
+      },
+    });
+    session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });
+    session.tick(0.1);
+    expect(session.presentation().ui.player.hp).toBeCloseTo(50, 6);
+
+    session.move({ intent: { x: 0, y: 0 }, source: "keyboard", at: 2 });
+    session.tick(0.1);
+    expect(session.presentation().ui.player.hp).toBeCloseTo(50.1, 6);
   });
 
   it("enforces Storage capacity for all common materials while exempting Boss Core", () => {

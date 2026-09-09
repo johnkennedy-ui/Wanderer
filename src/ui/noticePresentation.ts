@@ -1,5 +1,9 @@
 import { buildingDefinitions, upgradeDefinitionFor } from "../data/definitions";
-import type { GameNotice, PlacementRejection } from "../domain/notices";
+import type {
+  GameNotice,
+  PlacementRejection,
+  PlacementResult,
+} from "../domain/notices";
 
 const exhaustNotice = (notice: never): never => {
   throw new Error(`Unhandled game notice: ${JSON.stringify(notice)}`);
@@ -38,13 +42,13 @@ export const presentGameNotice = (notice: GameNotice): string => {
     case "tap-to-move.rejected.invalid-destination":
       return "Tap-to-move ignored an invalid destination.";
     case "building.placed":
-      return `${notice.buildingKind} placed. It is runtime-only until an explicit campfire save.`;
+      return `${buildingDefinitions[notice.buildingKind].label} placed. It is runtime-only until an explicit campfire save.`;
     case "building.relocated":
-      return `${notice.buildingKind} relocated atomically. Save at a campfire to commit it.`;
+      return `${buildingDefinitions[notice.buildingKind].label} relocated atomically. Save at a campfire to commit it.`;
     case "building.upgraded":
-      return `${notice.buildingKind} upgraded to level ${notice.level}; ${buildingDefinitions[notice.buildingKind].levelEffects[notice.level - 1]} The change remains unsaved.`;
+      return `${buildingDefinitions[notice.buildingKind].label} upgraded to level ${notice.level}; ${buildingDefinitions[notice.buildingKind].levelEffects[notice.level - 1]} The change remains unsaved.`;
     case "building.demolished":
-      return `${notice.buildingKind} demolished safely; ${(notice.refundRate * 100).toFixed(0)}% of its invested resources were refunded.`;
+      return `${buildingDefinitions[notice.buildingKind].label} demolished safely; ${(notice.refundRate * 100).toFixed(0)}% of its invested resources were refunded.`;
     case "building.rejected":
       return `Building action rejected: ${presentPlacementRejection(notice.rejection)}. No resources or records changed.`;
     case "upgrade.rejected.invalid-choice":
@@ -99,4 +103,43 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     default:
       return exhaustNotice(notice);
   }
+};
+
+/**
+ * Keeps a direct placement command observable even when an unrelated runtime
+ * event supersedes the session's latest notice on the next animation frame.
+ */
+export const presentPlacementResult = (result: PlacementResult): string => {
+  if (!result.ok)
+    return presentGameNotice({
+      kind: "building.rejected",
+      rejection: result.rejection,
+    });
+
+  switch (result.outcome) {
+    case "placed":
+      return presentGameNotice({
+        kind: "building.placed",
+        buildingId: result.building.id,
+        buildingKind: result.building.kind,
+      });
+    case "relocated":
+      return presentGameNotice({
+        kind: "building.relocated",
+        buildingId: result.building.id,
+        buildingKind: result.building.kind,
+      });
+    case "upgraded":
+      return result.building.level === 1
+        ? `${buildingDefinitions[result.building.kind].label} upgrade completed.`
+        : presentGameNotice({
+            kind: "building.upgraded",
+            buildingId: result.building.id,
+            buildingKind: result.building.kind,
+            level: result.building.level,
+          });
+    case "demolished":
+      return `${buildingDefinitions[result.building.kind].label} demolished.`;
+  }
+  return `${buildingDefinitions[result.building.kind].label} action completed.`;
 };

@@ -101,6 +101,7 @@ const authoredGameplayTuning = {
   ] as const satisfies readonly ReadonlyResourceBag[],
   baseCampfireHealingPerSecond: 2,
   healerHealingBonusByLevel: [1, 3, 6] as const,
+  healingHutRadiusByLevel: [3, 4, 5] as const,
   buildingRefundRate: 0.5,
   baseAttackDamage: 12,
   baseAttackIntervalSeconds: 0.5,
@@ -206,13 +207,14 @@ const authoredBuildingDefinitions = {
     ],
   },
   Healer: {
-    label: "Healer",
+    label: "Healing Hut",
     baseCost: { wood: 10, stone: 10, scrap: 4, essence: 1, bossCore: 0 },
-    description: "Strengthens stationary healing near a campfire.",
+    description:
+      "Heals a stationary Wanderer inside its own compact healing aura.",
     levelEffects: [
-      "L1: +1 health/s near a campfire.",
-      "L2: +3 health/s near a campfire.",
-      "L3: +6 health/s near a campfire.",
+      "L1: 3m aura, +1 health/s while stationary inside it.",
+      "L2: 4m aura, +3 health/s while stationary inside it.",
+      "L3: 5m aura, +6 health/s while stationary inside it.",
     ],
   },
 } satisfies Record<BuildingKind, BuildingDefinition>;
