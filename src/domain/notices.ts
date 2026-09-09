@@ -107,9 +107,16 @@ export interface GameUiSnapshot {
   readonly notice: GameNotice;
 }
 
+/** A transient, renderer-only projection of the player's post-hit state. */
+export interface PlayerHitRecoveryPresentation {
+  readonly active: boolean;
+  readonly flashOn: boolean;
+}
+
 /** The disposable Three renderer receives only world-projection fields. */
 export interface GameRendererSnapshot {
   readonly player: PlayerState;
+  readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
   readonly floorDrops: readonly FloorDropState[];

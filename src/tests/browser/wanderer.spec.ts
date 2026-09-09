@@ -90,6 +90,29 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
   );
 });
 
+test("enemy hits visibly flash the player during a finite recovery window", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const canvas = page.getByTestId("world-canvas");
+  await expect
+    .poll(
+      async () =>
+        `${await canvas.getAttribute("data-player-hit-recovery")}:${await canvas.getAttribute("data-player-hit-flash")}`,
+      {
+        intervals: [50, 50, 100],
+        timeout: 12_000,
+      },
+    )
+    .toBe("active:on");
+  await expect
+    .poll(() => canvas.getAttribute("data-player-hit-recovery"), {
+      intervals: [50, 50, 100],
+      timeout: 1_000,
+    })
+    .toBe("inactive");
+});
+
 test("status and world-control panels independently hide and reopen while play stays visible", async ({
   page,
 }) => {

@@ -52,6 +52,10 @@ import {
   combatStatsFor,
   describeProgressionEffects,
 } from "./session/progressionRules";
+import {
+  playerHitRecoveryPresentationFor,
+  playerMoveDistanceWithHitRecoveryFor,
+} from "./session/hitRecoveryPolicy";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -79,6 +83,7 @@ export class GameSession {
   private destination!: Vector2 | null;
   private elapsed!: number;
   private attackElapsed!: number;
+  private playerHitRecoveryEndsAt = 0;
   private notice!: GameNotice;
   private combatStatus!: string;
   constructor(options: SessionOptions = {}) {
@@ -115,6 +120,7 @@ export class GameSession {
     this.destination = state.destination;
     this.elapsed = state.elapsed;
     this.attackElapsed = state.attackElapsed;
+    this.playerHitRecoveryEndsAt = 0;
     this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
@@ -142,20 +148,14 @@ export class GameSession {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
     this.updateProjectiles(delta);
-    const destinationMoving = this.moveTowardDestination(delta);
+    const movementDistance = this.playerMoveDistanceFor(delta);
+    const destinationMoving = this.moveTowardDestination(movementDistance);
     const moving = destinationMoving || isMeaningfulMovement(this.input.intent);
 
     if (moving) {
       if (!destinationMoving)
         this.player.position = roundVector(
-          add(
-            this.player.position,
-            scale(
-              this.input.intent,
-              combatStatsFor(this.settlement.buildingState, this.upgrades)
-                .moveSpeed * delta,
-            ),
-          ),
+          add(this.player.position, scale(this.input.intent, movementDistance)),
         );
       this.combatStatus = "Moving: basic auto-attack suppressed";
       this.attackElapsed = 0;
@@ -293,6 +293,13 @@ export class GameSession {
     return projectGamePresentation({
       world: this.world,
       player: this.player,
+      playerHitRecovery: playerHitRecoveryPresentationFor({
+        elapsed: this.elapsed,
+        recoveryEndsAt: this.playerHitRecoveryEndsAt,
+        recoverySeconds: gameplayTuning.playerHitRecoverySeconds,
+        flashIntervalSeconds:
+          gameplayTuning.playerHitRecoveryFlashIntervalSeconds,
+      }),
       resources: this.resources,
       materialCapacity,
       buildRadius,
@@ -386,16 +393,26 @@ export class GameSession {
     this.nextFloorDropSerial = result.nextFloorDropSerial;
     if (result.notice !== null) this.notice = result.notice;
   }
-  private moveTowardDestination(delta: number): boolean {
+  private playerMoveDistanceFor(delta: number): number {
+    return playerMoveDistanceWithHitRecoveryFor({
+      baseMoveSpeed: combatStatsFor(
+        this.settlement.buildingState,
+        this.upgrades,
+      ).moveSpeed,
+      frameStartElapsed: this.elapsed - delta,
+      delta,
+      recoveryEndsAt: this.playerHitRecoveryEndsAt,
+      recoverySeconds: gameplayTuning.playerHitRecoverySeconds,
+      speedMultiplier: gameplayTuning.playerHitRecoverySpeedMultiplier,
+    });
+  }
+  private moveTowardDestination(maximumTravel: number): boolean {
     if (this.destination === null) return false;
     const offset = {
       x: this.destination.x - this.player.position.x,
       y: this.destination.y - this.player.position.y,
     };
     const remainingDistance = magnitude(offset);
-    const maximumTravel =
-      combatStatsFor(this.settlement.buildingState, this.upgrades).moveSpeed *
-      delta;
     if (
       remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
       maximumTravel >= remainingDistance
@@ -427,6 +444,8 @@ export class GameSession {
       attackElapsed: this.attackElapsed,
       enemyAttackStandoff: gameplayTuning.enemyAttackStandoff,
       deathResourceLossRate: gameplayTuning.deathResourceLossRate,
+      playerHitRecoveryEndsAt: this.playerHitRecoveryEndsAt,
+      playerHitRecoverySeconds: gameplayTuning.playerHitRecoverySeconds,
     });
     this.player = result.player;
     this.resources = result.resources;
@@ -434,6 +453,7 @@ export class GameSession {
     this.input = result.input;
     this.destination = result.destination;
     this.attackElapsed = result.attackElapsed;
+    this.playerHitRecoveryEndsAt = result.playerHitRecoveryEndsAt;
     if (result.notice !== null) this.notice = result.notice;
     if (result.resetHarvest) this.settlement.resetHarvest();
   }
