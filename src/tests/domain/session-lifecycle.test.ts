@@ -93,10 +93,14 @@ describe("GameSession lifecycle", () => {
     (hydrated.buildings[0]?.position as { x: number }).x = 5;
     expect(projected.resources.wood).toBe(90);
     expect(projected.buildings[0]?.position).toEqual({ x: 1, y: 1 });
-    expect(projected).toEqual(toSaveV2Document(projected));
-    expect(JSON.stringify(projected)).toBe(
-      JSON.stringify(toSaveV2Document(projected)),
-    );
+    const { classProgression, ...historicalProjection } = projected;
+    expect(historicalProjection).toEqual(toSaveV2Document(projected));
+    expect(classProgression).toEqual({
+      experience: 0,
+      level: 0,
+      playerClass: null,
+      skillIds: [],
+    });
 
     const session = new GameSession({ saved });
     session.move({ intent: { x: 1, y: 0 }, source: "keyboard", at: 1 });

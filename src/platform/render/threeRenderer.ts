@@ -57,6 +57,21 @@ const projectilePosition = (projectile: ProjectileState): Vector2 => ({
     (projectile.targetPosition.y - projectile.origin.y) * projectile.progress,
 });
 
+const projectilePresentationFor = (projectile: ProjectileState) => {
+  switch (projectile.style) {
+    case "slash":
+      return { color: 0xd8dde8, emissive: 0x6d7585, radius: 0.25 };
+    case "magic":
+      return { color: 0xb388ff, emissive: 0x5e35b1, radius: 0.23 };
+    case "arrow":
+      return { color: 0x8d6e63, emissive: 0x4e342e, radius: 0.14 };
+    case "basic":
+      return { color: 0xffe082, emissive: 0x8a5a00, radius: 0.17 };
+    default:
+      return { color: 0xffe082, emissive: 0x8a5a00, radius: 0.17 };
+  }
+};
+
 const disposeGroup = (group: THREE.Group): void => {
   group.traverse((object) => {
     if (object instanceof THREE.Mesh) {
@@ -214,11 +229,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         addMarker(mesh, enemy.position);
       }
       for (const projectile of snapshot.projectiles) {
+        const presentation = projectilePresentationFor(projectile);
         const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.17, 10, 10),
+          new THREE.SphereGeometry(presentation.radius, 10, 10),
           new THREE.MeshStandardMaterial({
-            color: 0xffe082,
-            emissive: 0x8a5a00,
+            color: presentation.color,
+            emissive: presentation.emissive,
             roughness: 0.35,
           }),
         );

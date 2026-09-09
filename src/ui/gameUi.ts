@@ -1,11 +1,19 @@
 import {
   buildingDefinitions,
+  classDefinitionFor,
+  classSkillDefinitionFor,
   gameplayTuning,
   upgradeDefinitionFor,
 } from "../data/definitions";
 import type { GameUiSnapshot, PlacementResult } from "../domain/notices";
 import { buildingKinds } from "../domain/types";
-import type { BuildingKind, UpgradeId, Vector2 } from "../domain/types";
+import type {
+  BuildingKind,
+  ClassSkillId,
+  PlayerClass,
+  UpgradeId,
+  Vector2,
+} from "../domain/types";
 import {
   presentGameNotice,
   presentPlacementNotice,
@@ -20,6 +28,8 @@ export interface UiIntents {
   upgradeBuilding(id: string): void;
   demolish(id: string): void;
   chooseUpgrade(id: UpgradeId): void;
+  chooseClass(playerClass: PlayerClass): void;
+  chooseClassSkill(skillId: ClassSkillId): void;
 }
 
 type PlacementMode =
@@ -76,6 +86,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <span data-testid="seed"></span>
         <span data-testid="position"></span>
         <span data-testid="health"></span>
+        <span data-testid="class-progression"></span>
         <span data-testid="combat-status"></span>
         <span data-testid="projectile-status"></span>
       </div>
@@ -119,6 +130,13 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <div data-testid="upgrade-choices" class="upgrade-choices"></div>
       </div>
     </section>
+    <section class="upgrade-modal class-modal" data-testid="class-modal" hidden aria-live="assertive">
+      <div class="upgrade-card">
+        <h2 data-testid="class-modal-title">Choose a class</h2>
+        <p data-testid="class-modal-description">Your class changes your stationary auto-attack.</p>
+        <div data-testid="class-choices" class="upgrade-choices"></div>
+      </div>
+    </section>
   `;
   root.append(worldHost, ui);
 
@@ -138,6 +156,12 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const cancelPlacement = byTestId<HTMLButtonElement>("cancel-placement");
   const upgradeModal = byTestId<HTMLElement>("upgrade-modal");
   const upgradeChoices = byTestId<HTMLDivElement>("upgrade-choices");
+  const classModal = byTestId<HTMLElement>("class-modal");
+  const classModalTitle = byTestId<HTMLElement>("class-modal-title");
+  const classModalDescription = byTestId<HTMLElement>(
+    "class-modal-description",
+  );
+  const classChoices = byTestId<HTMLDivElement>("class-choices");
   const virtualStick = byTestId<HTMLDivElement>("virtual-stick");
   const statusPanel = byTestId<HTMLElement>("character-status-panel");
   const buildMenuPanel = byTestId<HTMLElement>("build-menu-panel");
@@ -270,6 +294,12 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         byTestId("health"),
         `Health: ${Math.ceil(snapshot.player.hp)} / ${snapshot.player.maxHp}`,
       );
+      text(
+        byTestId("class-progression"),
+        snapshot.classProgression.playerClass === null
+          ? `Experience: ${snapshot.classProgression.experience} · level ${snapshot.classProgression.level} · class unselected`
+          : `Experience: ${snapshot.classProgression.experience} · level ${snapshot.classProgression.level} · ${classDefinitionFor(snapshot.classProgression.playerClass).label}`,
+      );
       text(byTestId("combat-status"), snapshot.combatStatus);
       text(
         byTestId("projectile-status"),
@@ -364,7 +394,11 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           Object.assign(document.createElement("li"), { textContent: effect }),
         ),
       );
-      upgradeModal.hidden = snapshot.pendingUpgradeChoices.length === 0;
+      const hasClassChoice =
+        snapshot.pendingClassChoices.length > 0 ||
+        snapshot.pendingClassSkillChoices.length > 0;
+      upgradeModal.hidden =
+        hasClassChoice || snapshot.pendingUpgradeChoices.length === 0;
       const choiceKey = snapshot.pendingUpgradeChoices.join("|");
       if (upgradeChoices.dataset.choiceKey !== choiceKey) {
         upgradeChoices.replaceChildren();
@@ -377,6 +411,48 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           upgradeChoices.append(button);
         }
         upgradeChoices.dataset.choiceKey = choiceKey;
+      }
+      classModal.hidden = !hasClassChoice;
+      const classChoiceKey = [
+        ...snapshot.pendingClassChoices,
+        ...snapshot.pendingClassSkillChoices,
+      ].join("|");
+      if (classChoices.dataset.choiceKey !== classChoiceKey) {
+        classChoices.replaceChildren();
+        if (snapshot.pendingClassChoices.length > 0) {
+          text(classModalTitle, "Choose a class");
+          text(
+            classModalDescription,
+            "Your class changes your stationary auto-attack. Choose once.",
+          );
+          for (const playerClass of snapshot.pendingClassChoices) {
+            const definition = classDefinitionFor(playerClass);
+            const button = document.createElement("button");
+            button.dataset.testid = `class-${playerClass}`;
+            button.textContent = `${definition.label}: ${definition.description}`;
+            button.addEventListener("click", () =>
+              intents.chooseClass(playerClass),
+            );
+            classChoices.append(button);
+          }
+        } else {
+          text(classModalTitle, "Choose a class skill");
+          text(
+            classModalDescription,
+            "Choose exactly one skill from your current class tier.",
+          );
+          for (const skillId of snapshot.pendingClassSkillChoices) {
+            const definition = classSkillDefinitionFor(skillId);
+            const button = document.createElement("button");
+            button.dataset.testid = `class-skill-${skillId}`;
+            button.textContent = `${definition.label}: ${definition.description}`;
+            button.addEventListener("click", () =>
+              intents.chooseClassSkill(skillId),
+            );
+            classChoices.append(button);
+          }
+        }
+        classChoices.dataset.choiceKey = classChoiceKey;
       }
     },
     dispose(): void {

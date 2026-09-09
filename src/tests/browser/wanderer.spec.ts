@@ -8,40 +8,98 @@ import {
 
 const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
 
+const choosePendingClassChoicesIfOpen = async (
+  page: Page,
+): Promise<boolean> => {
+  const classModal = page.getByTestId("class-modal");
+  let selected = false;
+  for (let selection = 0; selection < 4; selection += 1) {
+    if (!(await classModal.isVisible())) return selected;
+    const wizard = classModal.getByTestId("class-wizard");
+    if ((await wizard.count()) === 1) await wizard.click();
+    else await classModal.getByRole("button").first().click();
+    selected = true;
+    await page.waitForTimeout(25);
+  }
+  return selected;
+};
+
 const choosePendingUpgradeIfOpen = async (page: Page): Promise<boolean> => {
   const modal = page.getByTestId("upgrade-modal");
-  if (!(await modal.isVisible())) return false;
-  await modal.getByRole("button").first().click();
-  await expect(modal).toBeHidden();
-  return true;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (await choosePendingClassChoicesIfOpen(page)) continue;
+    if (!(await modal.isVisible())) return false;
+    try {
+      await modal.getByRole("button").first().click({ timeout: 1_000 });
+      await expect(modal).toBeHidden({ timeout: 1_000 });
+      return true;
+    } catch {
+      await page.waitForTimeout(25);
+    }
+  }
+  return false;
 };
+
+const hasPendingChoice = async (page: Page): Promise<boolean> =>
+  (await page.getByTestId("class-modal").isVisible()) ||
+  (await page.getByTestId("upgrade-modal").isVisible());
+
+const checkWithPendingClassResolution = async (
+  page: Page,
+  target: Locator,
+): Promise<void> => {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await choosePendingUpgradeIfOpen(page);
+    try {
+      await target.check({ timeout: 5_000 });
+      return;
+    } catch (error) {
+      if (!(await hasPendingChoice(page))) throw error;
+    }
+  }
+  throw new Error("A pending class choice kept the requested control blocked.");
+};
+
+test("earned experience opens a class choice and the selected class is visible", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const classModal = page.getByTestId("class-modal");
+  await expect(classModal).toBeVisible({ timeout: 8_000 });
+  await classModal.getByTestId("class-wizard").click();
+  await expect(classModal).toBeHidden();
+  await openStatus(page);
+  await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+});
 
 const clickWithPendingUpgradeResolution = async (
   page: Page,
   target: Locator,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     await choosePendingUpgradeIfOpen(page);
     try {
       await target.click({ timeout: 5_000 });
       return;
     } catch (error) {
-      if (!(await page.getByTestId("upgrade-modal").isVisible())) throw error;
+      if (!(await hasPendingChoice(page))) throw error;
     }
   }
   throw new Error(
-    "A pending Boss Core upgrade kept the requested action blocked.",
+    "A pending class or Boss Core choice kept the action blocked.",
   );
 };
 
 const openStatus = async (page: Page): Promise<void> => {
   const toggle = page.getByTestId("character-status-toggle");
+  await choosePendingUpgradeIfOpen(page);
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await toggle.click();
   await expect(page.getByTestId("character-status-panel")).toBeVisible();
 };
 
 const openBuildMenu = async (page: Page): Promise<void> => {
+  await choosePendingClassChoicesIfOpen(page);
   const toggle = page.getByTestId("build-menu-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await clickWithPendingUpgradeResolution(page, toggle);
@@ -81,7 +139,7 @@ const tapCanvas = async (
     });
     return;
   }
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     await choosePendingUpgradeIfOpen(page);
     try {
       await canvas.click({
@@ -90,10 +148,12 @@ const tapCanvas = async (
       });
       return;
     } catch (error) {
-      if (!(await page.getByTestId("upgrade-modal").isVisible())) throw error;
+      if (!(await hasPendingChoice(page))) throw error;
     }
   }
-  throw new Error("A pending Boss Core upgrade kept the world canvas blocked.");
+  throw new Error(
+    "A pending class or Boss Core choice kept the world canvas blocked.",
+  );
 };
 
 test("initial browser load uses compact circular actions with accessible hidden panels", async ({
@@ -188,8 +248,12 @@ test("enabled primary canvas taps travel to a destination when no build mode is 
   if (initialPosition === null)
     throw new Error("World position text was not available");
 
-  await toggle.check();
-  await page.getByTestId("close-character-status").click();
+  await choosePendingClassChoicesIfOpen(page);
+  await checkWithPendingClassResolution(page, toggle);
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("close-character-status"),
+  );
   await tapCanvas(page, 0.4, 0.62);
   await expect(position).toContainText("input: tap-to-move");
   await expect(page.getByTestId("combat-status")).toContainText("suppressed");
@@ -237,6 +301,7 @@ test("enemy hits visibly flash the player during a finite recovery window", asyn
 test("a Healing Hut is selected and placed through the canvas without moving the player", async ({
   page,
 }, testInfo: TestInfo) => {
+  test.setTimeout(60_000);
   await page.goto(applicationPath);
   await openStatus(page);
   await openBuildMenu(page);
@@ -247,7 +312,11 @@ test("a Healing Hut is selected and placed through the canvas without moving the
   if (beforePosition === null || beforeResources === null)
     throw new Error("Initial player state was not available");
 
-  await page.getByTestId("tap-to-move-toggle").check();
+  await choosePendingClassChoicesIfOpen(page);
+  await checkWithPendingClassResolution(
+    page,
+    page.getByTestId("tap-to-move-toggle"),
+  );
   await clickWithPendingUpgradeResolution(
     page,
     page.getByTestId("build-Healer"),
@@ -312,6 +381,7 @@ test("a Healing Hut is selected and placed through the canvas without moving the
 test("invalid canvas placement remains selected, non-mutating, and explains the rejection", async ({
   page,
 }, testInfo: TestInfo) => {
+  test.setTimeout(60_000);
   await page.goto(applicationPath);
   await openStatus(page);
   await openBuildMenu(page);
@@ -379,8 +449,12 @@ test("Storage exposes an enforced common-material capacity while Boss Core is ex
 }) => {
   await page.goto(applicationPath);
   await openStatus(page);
+  await choosePendingClassChoicesIfOpen(page);
   await openBuildMenu(page);
-  await page.getByTestId("build-Storage").click();
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("build-Storage"),
+  );
   await tapCanvas(page, 0.5, 0.5);
   await expect(page.getByTestId("resources")).toContainText(
     "capacity 180 each",
@@ -488,7 +562,11 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 }) => {
   await page.goto(applicationPath);
   await openStatus(page);
-  await page.getByTestId("save-button").click();
+  await choosePendingClassChoicesIfOpen(page);
+  await clickWithPendingUpgradeResolution(
+    page,
+    page.getByTestId("save-button"),
+  );
   await expect(page.getByTestId("save-message")).toContainText(
     "Saved explicitly",
   );
@@ -512,7 +590,7 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
   page,
 }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(60_000);
   await page.goto(applicationPath);
   await openStatus(page);
   const saveMessage = page.getByTestId("save-message");
@@ -530,7 +608,15 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await page.keyboard.up("d");
   await expect(combat).toContainText("Auto-attacking");
 
-  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(
+      async () => {
+        await choosePendingClassChoicesIfOpen(page);
+        return modal.isVisible();
+      },
+      { timeout: 30_000, intervals: [100, 250, 500] },
+    )
+    .toBe(true);
   const choices = modal.getByRole("button");
   await expect(choices).toHaveCount(3);
   const choiceIds = await choices.evaluateAll((buttons) =>

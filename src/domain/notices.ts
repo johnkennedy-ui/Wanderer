@@ -1,6 +1,8 @@
 import type {
   BuildingKind,
   BuildingState,
+  ClassProgression,
+  ClassSkillId,
   ChunkRecipe,
   EnemyKind,
   EnemyState,
@@ -10,6 +12,7 @@ import type {
   ProjectileState,
   ReadonlyResourceBag,
   UpgradeId,
+  PlayerClass,
   WorldIdentity,
 } from "./types";
 
@@ -73,6 +76,10 @@ export type GameNotice =
     }
   | { readonly kind: "upgrade.rejected.invalid-choice" }
   | { readonly kind: "upgrade.applied"; readonly upgradeId: UpgradeId }
+  | { readonly kind: "class.rejected.invalid-choice" }
+  | { readonly kind: "class.selected"; readonly playerClass: PlayerClass }
+  | { readonly kind: "class-skill.rejected.invalid-choice" }
+  | { readonly kind: "class-skill.selected"; readonly skillId: ClassSkillId }
   | { readonly kind: "save.rejected.not-near-campfire" }
   | { readonly kind: "save.committed"; readonly savePointId: string }
   | {
@@ -102,6 +109,9 @@ export interface GameUiSnapshot {
   readonly buildings: readonly BuildingState[];
   readonly effects: readonly string[];
   readonly pendingUpgradeChoices: readonly UpgradeId[];
+  readonly classProgression: ClassProgression;
+  readonly pendingClassChoices: readonly PlayerClass[];
+  readonly pendingClassSkillChoices: readonly ClassSkillId[];
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
   readonly notice: GameNotice;

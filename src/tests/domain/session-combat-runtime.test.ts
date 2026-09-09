@@ -121,6 +121,7 @@ describe("session combat tick runtime", () => {
         chainTargetIds: [],
         chainDamage: 0,
         hitHeal: 0,
+        style: "basic",
         elapsed: 0,
       },
     ]);

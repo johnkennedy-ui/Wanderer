@@ -1,4 +1,5 @@
 import { isSupportedWorldGeneratorVersion } from "../world";
+import { isClassProgression } from "./currentSave";
 import { migrateSaveV2 } from "./migrateSave";
 import { isSaveV2Document, SAVE_V2_SCHEMA_VERSION } from "./saveV2";
 import type { SaveDecodeResult } from "./saveErrors";
@@ -41,7 +42,11 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
       "Save data does not match schema version 2.",
     );
 
-  const document = migrateSaveV2(raw);
+  const progression =
+    "classProgression" in raw ? raw.classProgression : undefined;
+  if (progression !== undefined && !isClassProgression(progression))
+    return failure("invalid-document", "Save class progression is invalid.");
+  const document = migrateSaveV2(raw, progression);
   if (!isSupportedWorldGeneratorVersion(document.world.generatorVersion)) {
     return failure(
       "unsupported-generator",

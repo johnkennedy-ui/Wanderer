@@ -32,6 +32,10 @@ describe("session progression rules", () => {
       attackRange: 3.2,
       moveSpeed: 3,
       chainTargets: 0,
+      attackStyle: "basic",
+      classSecondaryDamageMultiplier: 0,
+      classAreaRadius: 0,
+      classArcCosine: 1,
     });
 
     for (const [level, attackDamage] of [
@@ -45,6 +49,10 @@ describe("session progression rules", () => {
         attackRange: 3.2,
         moveSpeed: 3,
         chainTargets: 0,
+        attackStyle: "basic",
+        classSecondaryDamageMultiplier: 0,
+        classAreaRadius: 0,
+        classArcCosine: 1,
       });
     }
   });
@@ -71,6 +79,10 @@ describe("session progression rules", () => {
       attackRange: 4.32,
       moveSpeed: 3.4499999999999997,
       chainTargets: 1,
+      attackStyle: "basic",
+      classSecondaryDamageMultiplier: 0,
+      classAreaRadius: 0,
+      classArcCosine: 1,
     });
   });
 
@@ -142,6 +154,7 @@ describe("session progression rules", () => {
       "Storage L1: L1: 180 per Wood, Stone, Metal / Scrap, and Essence.",
       "Trailblazer: 15% faster movement.",
       "Iron Skin: +25 maximum health and heal 25 immediately.",
+      "Experience: 0 / 1 · choose a class at level 1.",
     ]);
   });
 });

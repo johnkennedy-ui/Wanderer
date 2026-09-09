@@ -1,7 +1,9 @@
-import { upgradeIds } from "../domain/types";
+import { classSkillIds, playerClasses, upgradeIds } from "../domain/types";
 import type {
   BuildingKind,
+  ClassSkillId,
   EnemyKind,
+  PlayerClass,
   ResourceKind,
   ReadonlyResourceBag,
   UpgradeId,
@@ -49,6 +51,34 @@ export interface UpgradeDefinition {
   readonly label: string;
   readonly description: string;
   readonly effect: UpgradeEffect;
+}
+
+export type ClassSkillEffect =
+  | UpgradeEffect
+  | { readonly kind: "area-radius"; readonly amount: number }
+  | { readonly kind: "secondary-targets"; readonly amount: number };
+
+export interface ClassDefinition {
+  readonly id: PlayerClass;
+  readonly label: string;
+  readonly description: string;
+  readonly attackStyle: "slash" | "magic" | "arrow";
+  readonly damageMultiplier: number;
+  readonly attackIntervalSeconds: number;
+  readonly attackRange: number;
+  readonly secondaryDamageMultiplier: number;
+  readonly areaRadius: number;
+  readonly arcCosine: number;
+  readonly secondaryTargets: number;
+}
+
+export interface ClassSkillDefinition {
+  readonly id: ClassSkillId;
+  readonly playerClass: PlayerClass;
+  readonly tier: 1 | 2 | 3;
+  readonly label: string;
+  readonly description: string;
+  readonly effect: ClassSkillEffect;
 }
 
 const authoredResourceDefinitions = {
@@ -115,6 +145,7 @@ const authoredGameplayTuning = {
   playerHitRecoveryFlashIntervalSeconds: 0.1,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
+  experienceThresholds: [1, 3, 6, 10] as const,
 };
 
 export const gameplayTuning = deepFreeze(authoredGameplayTuning);
@@ -303,3 +334,212 @@ export const upgradeDefinitions = deepFreeze(
 
 export const upgradeDefinitionFor = (id: UpgradeId): UpgradeDefinition =>
   upgradeDefinitionsById[id];
+
+const authoredClassDefinitions = {
+  knight: {
+    id: "knight",
+    label: "Knight",
+    description: "Close-range sweeping slashes that strike a forward arc.",
+    attackStyle: "slash",
+    damageMultiplier: 1.2,
+    attackIntervalSeconds: 0.45,
+    attackRange: 2.4,
+    secondaryDamageMultiplier: 0.7,
+    areaRadius: 0,
+    arcCosine: 0.5,
+    secondaryTargets: 2,
+  },
+  wizard: {
+    id: "wizard",
+    label: "Wizard",
+    description: "Ranged magic that splashes nearby enemies on impact.",
+    attackStyle: "magic",
+    damageMultiplier: 1.15,
+    attackIntervalSeconds: 0.7,
+    attackRange: 5,
+    secondaryDamageMultiplier: 0.7,
+    areaRadius: 1.5,
+    arcCosine: 1,
+    secondaryTargets: 8,
+  },
+  archer: {
+    id: "archer",
+    label: "Archer",
+    description: "Long-range bow shots aimed at a single target.",
+    attackStyle: "arrow",
+    damageMultiplier: 1,
+    attackIntervalSeconds: 0.55,
+    attackRange: 5.8,
+    secondaryDamageMultiplier: 0.5,
+    areaRadius: 0,
+    arcCosine: 1,
+    secondaryTargets: 0,
+  },
+} satisfies Record<PlayerClass, ClassDefinition>;
+
+export const classDefinitionsById = deepFreeze(authoredClassDefinitions);
+export const classDefinitions = deepFreeze(
+  playerClasses.map((id) => classDefinitionsById[id]),
+);
+export const classDefinitionFor = (id: PlayerClass): ClassDefinition =>
+  classDefinitionsById[id];
+
+type ClassSkillCatalogue = {
+  readonly [Id in ClassSkillId]: ClassSkillDefinition & { readonly id: Id };
+};
+
+const authoredClassSkillsById = {
+  "knight-iron-guard": {
+    id: "knight-iron-guard",
+    playerClass: "knight",
+    tier: 1,
+    label: "Iron Guard",
+    description: "+20 maximum health and heal 20 immediately.",
+    effect: { kind: "maximum-health", amount: 20 },
+  },
+  "knight-wide-slash": {
+    id: "knight-wide-slash",
+    playerClass: "knight",
+    tier: 1,
+    label: "Wide Slash",
+    description: "Your slash hits one additional enemy in its arc.",
+    effect: { kind: "secondary-targets", amount: 1 },
+  },
+  "knight-heavy-blade": {
+    id: "knight-heavy-blade",
+    playerClass: "knight",
+    tier: 2,
+    label: "Heavy Blade",
+    description: "+6 slash damage.",
+    effect: { kind: "attack-damage", amount: 6 },
+  },
+  "knight-rapid-cuts": {
+    id: "knight-rapid-cuts",
+    playerClass: "knight",
+    tier: 2,
+    label: "Rapid Cuts",
+    description: "Slash 20% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.8 },
+  },
+  "knight-execution-arc": {
+    id: "knight-execution-arc",
+    playerClass: "knight",
+    tier: 3,
+    label: "Execution Arc",
+    description: "+10 slash damage.",
+    effect: { kind: "attack-damage", amount: 10 },
+  },
+  "knight-crescent-sweep": {
+    id: "knight-crescent-sweep",
+    playerClass: "knight",
+    tier: 3,
+    label: "Crescent Sweep",
+    description: "Your slash hits one additional enemy in its arc.",
+    effect: { kind: "secondary-targets", amount: 1 },
+  },
+  "wizard-flame-orb": {
+    id: "wizard-flame-orb",
+    playerClass: "wizard",
+    tier: 1,
+    label: "Flame Orb",
+    description: "+5 magic damage.",
+    effect: { kind: "attack-damage", amount: 5 },
+  },
+  "wizard-wide-blast": {
+    id: "wizard-wide-blast",
+    playerClass: "wizard",
+    tier: 1,
+    label: "Wide Blast",
+    description: "+0.7m magic splash radius.",
+    effect: { kind: "area-radius", amount: 0.7 },
+  },
+  "wizard-arcane-haste": {
+    id: "wizard-arcane-haste",
+    playerClass: "wizard",
+    tier: 2,
+    label: "Arcane Haste",
+    description: "Cast 20% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.8 },
+  },
+  "wizard-mana-siphon": {
+    id: "wizard-mana-siphon",
+    playerClass: "wizard",
+    tier: 2,
+    label: "Mana Siphon",
+    description: "Restore 1 health per magic hit.",
+    effect: { kind: "hit-heal", amount: 1 },
+  },
+  "wizard-nova": {
+    id: "wizard-nova",
+    playerClass: "wizard",
+    tier: 3,
+    label: "Nova",
+    description: "+1m magic splash radius.",
+    effect: { kind: "area-radius", amount: 1 },
+  },
+  "wizard-aether-ward": {
+    id: "wizard-aether-ward",
+    playerClass: "wizard",
+    tier: 3,
+    label: "Aether Ward",
+    description: "+20 maximum health and heal 20 immediately.",
+    effect: { kind: "maximum-health", amount: 20 },
+  },
+  "archer-longbow": {
+    id: "archer-longbow",
+    playerClass: "archer",
+    tier: 1,
+    label: "Longbow",
+    description: "35% more bow range.",
+    effect: { kind: "attack-range", multiplier: 1.35 },
+  },
+  "archer-barbed-arrow": {
+    id: "archer-barbed-arrow",
+    playerClass: "archer",
+    tier: 1,
+    label: "Barbed Arrow",
+    description: "+6 bow damage.",
+    effect: { kind: "attack-damage", amount: 6 },
+  },
+  "archer-quickdraw": {
+    id: "archer-quickdraw",
+    playerClass: "archer",
+    tier: 2,
+    label: "Quickdraw",
+    description: "Fire 20% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.8 },
+  },
+  "archer-volley": {
+    id: "archer-volley",
+    playerClass: "archer",
+    tier: 2,
+    label: "Volley",
+    description: "Each arrow also hits one nearby target for half damage.",
+    effect: { kind: "secondary-targets", amount: 1 },
+  },
+  "archer-piercing-arrow": {
+    id: "archer-piercing-arrow",
+    playerClass: "archer",
+    tier: 3,
+    label: "Piercing Arrow",
+    description:
+      "Each arrow hits one additional nearby target for half damage.",
+    effect: { kind: "secondary-targets", amount: 1 },
+  },
+  "archer-trailstep": {
+    id: "archer-trailstep",
+    playerClass: "archer",
+    tier: 3,
+    label: "Trailstep",
+    description: "Move 15% faster.",
+    effect: { kind: "move-speed", multiplier: 1.15 },
+  },
+} satisfies ClassSkillCatalogue;
+
+export const classSkillsById = deepFreeze(authoredClassSkillsById);
+export const classSkillDefinitions = deepFreeze(
+  classSkillIds.map((id) => classSkillsById[id]),
+);
+export const classSkillDefinitionFor = (
+  id: ClassSkillId,
+): ClassSkillDefinition => classSkillsById[id];
