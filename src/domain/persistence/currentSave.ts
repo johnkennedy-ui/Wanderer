@@ -22,7 +22,8 @@ export const isClassProgression = (
       candidate.level === 1 ||
       candidate.level === 2 ||
       candidate.level === 3 ||
-      candidate.level === 4) &&
+      candidate.level === 4 ||
+      candidate.level === 5) &&
     (candidate.playerClass === null ||
       playerClasses.includes(
         candidate.playerClass as (typeof playerClasses)[number],

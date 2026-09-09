@@ -75,7 +75,7 @@ export interface ClassDefinition {
 export interface ClassSkillDefinition {
   readonly id: ClassSkillId;
   readonly playerClass: PlayerClass;
-  readonly tier: 1 | 2 | 3;
+  readonly tier: 1 | 2 | 3 | 4;
   readonly label: string;
   readonly description: string;
   readonly effect: ClassSkillEffect;
@@ -145,7 +145,7 @@ const authoredGameplayTuning = {
   playerHitRecoveryFlashIntervalSeconds: 0.1,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
-  experienceThresholds: [1, 3, 6, 10] as const,
+  experienceThresholds: [30, 100, 250, 600, 1500] as const,
 };
 
 export const gameplayTuning = deepFreeze(authoredGameplayTuning);
@@ -437,6 +437,22 @@ const authoredClassSkillsById = {
     description: "Your slash hits one additional enemy in its arc.",
     effect: { kind: "secondary-targets", amount: 1 },
   },
+  "knight-bulwark": {
+    id: "knight-bulwark",
+    playerClass: "knight",
+    tier: 4,
+    label: "Bulwark",
+    description: "+30 maximum health and heal 30 immediately.",
+    effect: { kind: "maximum-health", amount: 30 },
+  },
+  "knight-whirlwind": {
+    id: "knight-whirlwind",
+    playerClass: "knight",
+    tier: 4,
+    label: "Whirlwind",
+    description: "Your slash hits two additional enemies in its arc.",
+    effect: { kind: "secondary-targets", amount: 2 },
+  },
   "wizard-flame-orb": {
     id: "wizard-flame-orb",
     playerClass: "wizard",
@@ -484,6 +500,22 @@ const authoredClassSkillsById = {
     label: "Aether Ward",
     description: "+20 maximum health and heal 20 immediately.",
     effect: { kind: "maximum-health", amount: 20 },
+  },
+  "wizard-meteor": {
+    id: "wizard-meteor",
+    playerClass: "wizard",
+    tier: 4,
+    label: "Meteor",
+    description: "+14 magic damage.",
+    effect: { kind: "attack-damage", amount: 14 },
+  },
+  "wizard-spellweave": {
+    id: "wizard-spellweave",
+    playerClass: "wizard",
+    tier: 4,
+    label: "Spellweave",
+    description: "Cast 25% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.75 },
   },
   "archer-longbow": {
     id: "archer-longbow",
@@ -533,6 +565,22 @@ const authoredClassSkillsById = {
     label: "Trailstep",
     description: "Move 15% faster.",
     effect: { kind: "move-speed", multiplier: 1.15 },
+  },
+  "archer-eagle-eye": {
+    id: "archer-eagle-eye",
+    playerClass: "archer",
+    tier: 4,
+    label: "Eagle Eye",
+    description: "30% more bow range.",
+    effect: { kind: "attack-range", multiplier: 1.3 },
+  },
+  "archer-multishot": {
+    id: "archer-multishot",
+    playerClass: "archer",
+    tier: 4,
+    label: "Multishot",
+    description: "Each arrow also hits two nearby targets for half damage.",
+    effect: { kind: "secondary-targets", amount: 2 },
   },
 } satisfies ClassSkillCatalogue;
 
