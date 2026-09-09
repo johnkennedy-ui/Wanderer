@@ -1,3 +1,4 @@
+import type { ClassProgression } from "../types";
 import type { CurrentSave } from "./currentSave";
 import type { SaveV2Document } from "./saveV2";
 
@@ -5,7 +6,17 @@ import type { SaveV2Document } from "./saveV2";
  * Pure in-memory migration from the released V2 DTO to the current model.
  * It deliberately performs no persistence or GameSession mutation.
  */
-export const migrateSaveV2 = (document: SaveV2Document): CurrentSave => ({
+const defaultClassProgression = (): ClassProgression => ({
+  experience: 0,
+  level: 0,
+  playerClass: null,
+  skillIds: [],
+});
+
+export const migrateSaveV2 = (
+  document: SaveV2Document,
+  classProgression: ClassProgression = defaultClassProgression(),
+): CurrentSave => ({
   schemaVersion: 2,
   world: {
     seed: document.world.seed,
@@ -37,5 +48,9 @@ export const migrateSaveV2 = (document: SaveV2Document): CurrentSave => ({
   savePointPosition: {
     x: document.savePointPosition.x,
     y: document.savePointPosition.y,
+  },
+  classProgression: {
+    ...classProgression,
+    skillIds: [...classProgression.skillIds],
   },
 });

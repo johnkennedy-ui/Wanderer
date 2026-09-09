@@ -2,6 +2,8 @@ import { DEFAULT_WORLD_GENERATOR_VERSION } from "../world";
 import type { GameNotice } from "../notices";
 import type {
   BuildingState,
+  AttackStyle,
+  ClassProgression,
   CurrentSave,
   EnemyKind,
   FloorDropState,
@@ -52,6 +54,7 @@ export interface RuntimeProjectile {
   readonly chainTargetIds: readonly string[];
   readonly chainDamage: number;
   readonly hitHeal: number;
+  readonly style?: AttackStyle;
   elapsed: number;
 }
 
@@ -82,6 +85,7 @@ export interface SessionState {
   floorDrops: FloorDropState[];
   defeatedBossIds: Set<string>;
   upgrades: Set<UpgradeId>;
+  classProgression: ClassProgression;
   pendingUpgradeChoices: UpgradeId[];
   nextBuildingSerial: number;
   nextProjectileSerial: number;
@@ -110,6 +114,15 @@ export const cloneResources = (
   resources: ReadonlyResourceBag,
 ): ResourceBag => ({
   ...resources,
+});
+
+export const cloneClassProgression = (
+  progression: ClassProgression | undefined,
+): ClassProgression => ({
+  experience: progression?.experience ?? 0,
+  level: progression?.level ?? 0,
+  playerClass: progression?.playerClass ?? null,
+  skillIds: [...(progression?.skillIds ?? [])],
 });
 
 export const cloneBuildings = (
@@ -165,6 +178,7 @@ export const createFreshSessionState = (
     floorDrops: [],
     defeatedBossIds: new Set(),
     upgrades: new Set(),
+    classProgression: cloneClassProgression(undefined),
     pendingUpgradeChoices: [],
     nextBuildingSerial: 1,
     nextProjectileSerial: 1,
@@ -198,6 +212,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   floorDrops: [],
   defeatedBossIds: new Set(saved.defeatedBossIds),
   upgrades: new Set(saved.upgrades),
+  classProgression: cloneClassProgression(saved.classProgression),
   pendingUpgradeChoices: [],
   nextBuildingSerial: saved.nextBuildingSerial,
   nextProjectileSerial: 1,

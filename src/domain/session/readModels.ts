@@ -6,10 +6,13 @@ import type {
 } from "../notices";
 import type {
   BuildingState,
+  ClassProgression,
+  ClassSkillId,
   ChunkRecipe,
   EnemyKind,
   FloorDropState,
   InputSource,
+  PlayerClass,
   PlayerState,
   ReadonlyResourceBag,
   UpgradeId,
@@ -39,6 +42,7 @@ export interface ReadModelProjectileInput {
   readonly targetId: string;
   readonly targetPosition: Vector2;
   readonly elapsed: number;
+  readonly style?: "basic" | "slash" | "magic" | "arrow";
 }
 
 /** Explicit facts from which the two narrow presentation views are built. */
@@ -58,6 +62,9 @@ export interface PresentationProjectionInput {
   readonly combatStatus: string;
   readonly effects: readonly string[];
   readonly pendingUpgradeChoices: readonly UpgradeId[];
+  readonly classProgression: ClassProgression;
+  readonly pendingClassChoices: readonly PlayerClass[];
+  readonly pendingClassSkillChoices: readonly ClassSkillId[];
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
   readonly notice: GameNotice;
@@ -120,6 +127,7 @@ export const projectGamePresentation = (
           : projectile.targetPosition,
       ),
       progress: Math.min(1, projectile.elapsed / input.projectileTravelSeconds),
+      style: projectile.style ?? "basic",
     };
   });
   const floorDrops = input.floorDrops
@@ -143,6 +151,12 @@ export const projectGamePresentation = (
     buildings,
     effects: input.effects,
     pendingUpgradeChoices: input.pendingUpgradeChoices,
+    classProgression: {
+      ...input.classProgression,
+      skillIds: [...input.classProgression.skillIds],
+    },
+    pendingClassChoices: [...input.pendingClassChoices],
+    pendingClassSkillChoices: [...input.pendingClassSkillChoices],
     canSave: input.canSave,
     savePointLabel: input.savePointLabel,
     notice,

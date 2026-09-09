@@ -66,6 +66,7 @@ export interface ProjectileState {
   readonly targetId: string;
   readonly targetPosition: Vector2;
   readonly progress: number;
+  readonly style: AttackStyle;
 }
 
 /** A runtime-only resource bundle left by a completed lethal projectile impact. */
@@ -107,6 +108,45 @@ export const upgradeIds = Object.freeze([
 ] as const);
 
 export type UpgradeId = (typeof upgradeIds)[number];
+
+export const playerClasses = Object.freeze([
+  "knight",
+  "wizard",
+  "archer",
+] as const);
+
+export type PlayerClass = (typeof playerClasses)[number];
+
+export const classSkillIds = Object.freeze([
+  "knight-iron-guard",
+  "knight-wide-slash",
+  "knight-heavy-blade",
+  "knight-rapid-cuts",
+  "knight-execution-arc",
+  "knight-crescent-sweep",
+  "wizard-flame-orb",
+  "wizard-wide-blast",
+  "wizard-arcane-haste",
+  "wizard-mana-siphon",
+  "wizard-nova",
+  "wizard-aether-ward",
+  "archer-longbow",
+  "archer-barbed-arrow",
+  "archer-quickdraw",
+  "archer-volley",
+  "archer-piercing-arrow",
+  "archer-trailstep",
+] as const);
+
+export type ClassSkillId = (typeof classSkillIds)[number];
+export type AttackStyle = "basic" | "slash" | "magic" | "arrow";
+
+export interface ClassProgression {
+  readonly experience: number;
+  readonly level: 0 | 1 | 2 | 3 | 4;
+  readonly playerClass: PlayerClass | null;
+  readonly skillIds: readonly ClassSkillId[];
+}
 
 export interface PlayerState {
   readonly position: Vector2;
@@ -161,6 +201,10 @@ export interface CombatStats {
   readonly attackRange: number;
   readonly moveSpeed: number;
   readonly chainTargets: number;
+  readonly attackStyle: AttackStyle;
+  readonly classSecondaryDamageMultiplier: number;
+  readonly classAreaRadius: number;
+  readonly classArcCosine: number;
 }
 
 /**
@@ -179,6 +223,8 @@ export interface CurrentSave {
   readonly committedAt: number;
   readonly savePointId: string;
   readonly savePointPosition: Vector2;
+  /** Optional extension: historical schema-2 documents omit this safely. */
+  readonly classProgression?: ClassProgression;
 }
 
 /** Compatibility alias for callers that still use the historical name. */

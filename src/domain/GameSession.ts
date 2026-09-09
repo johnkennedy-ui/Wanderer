@@ -4,9 +4,11 @@ import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
+  ClassSkillId,
   DestinationCommand,
   FloorDropState,
   MoveCommand,
+  PlayerClass,
   ResourceBag,
   CurrentSave,
   UpgradeId,
@@ -51,6 +53,10 @@ import {
   applyUpgradeEffectToPlayer,
   combatStatsFor,
   describeProgressionEffects,
+  applyClassSkillToPlayer,
+  isValidClassSkillChoice,
+  pendingClassSkillChoicesFor,
+  playerLevelForExperience,
 } from "./session/progressionRules";
 import {
   playerHitRecoveryPresentationFor,
@@ -75,6 +81,7 @@ export class GameSession {
   private floorDrops!: FloorDropState[];
   private defeatedBossIds!: Set<string>;
   private upgrades!: Set<UpgradeId>;
+  private classProgression!: import("./types").ClassProgression;
   private pendingUpgradeChoices!: UpgradeId[];
   private nextProjectileSerial!: number;
   private nextFloorDropSerial!: number;
@@ -112,6 +119,7 @@ export class GameSession {
     this.floorDrops = state.floorDrops;
     this.defeatedBossIds = state.defeatedBossIds;
     this.upgrades = state.upgrades;
+    this.classProgression = state.classProgression;
     this.pendingUpgradeChoices = state.pendingUpgradeChoices;
     this.nextProjectileSerial = state.nextProjectileSerial;
     this.nextFloorDropSerial = state.nextFloorDropSerial;
@@ -218,6 +226,31 @@ export class GameSession {
     this.notice = { kind: "upgrade.applied", upgradeId: id };
     return true;
   }
+  chooseClass(playerClass: PlayerClass): boolean {
+    if (
+      this.classProgression.level < 1 ||
+      this.classProgression.playerClass !== null
+    ) {
+      this.notice = { kind: "class.rejected.invalid-choice" };
+      return false;
+    }
+    this.classProgression = { ...this.classProgression, playerClass };
+    this.notice = { kind: "class.selected", playerClass };
+    return true;
+  }
+  chooseClassSkill(skillId: ClassSkillId): boolean {
+    if (!isValidClassSkillChoice(this.classProgression, skillId)) {
+      this.notice = { kind: "class-skill.rejected.invalid-choice" };
+      return false;
+    }
+    this.classProgression = {
+      ...this.classProgression,
+      skillIds: [...this.classProgression.skillIds, skillId],
+    };
+    this.player = applyClassSkillToPlayer(this.player, skillId);
+    this.notice = { kind: "class-skill.selected", skillId };
+    return true;
+  }
 
   resetWorld(seed: string): void {
     const cleanSeed = seed.trim() || DEFAULT_WORLD.seed;
@@ -254,6 +287,7 @@ export class GameSession {
         buildings: this.settlement.buildingState,
         defeatedBossIds: this.defeatedBossIds,
         upgrades: this.upgrades,
+        classProgression: this.classProgression,
         nextBuildingSerial: this.settlement.serial,
       },
       committedAt,
@@ -289,6 +323,7 @@ export class GameSession {
     const effects = describeProgressionEffects(
       this.settlement.buildingState,
       this.upgrades,
+      this.classProgression,
     );
     return projectGamePresentation({
       world: this.world,
@@ -312,6 +347,15 @@ export class GameSession {
       combatStatus: this.combatStatus,
       effects,
       pendingUpgradeChoices: [...this.pendingUpgradeChoices],
+      classProgression: this.classProgression,
+      pendingClassChoices:
+        this.classProgression.playerClass === null &&
+        this.classProgression.level >= 1
+          ? ["knight", "wizard", "archer"]
+          : [],
+      pendingClassSkillChoices: pendingClassSkillChoicesFor(
+        this.classProgression,
+      ),
       canSave: savePoint !== null,
       savePointLabel: savePoint?.label ?? null,
       notice: this.notice,
@@ -358,6 +402,7 @@ export class GameSession {
       enemies: this.enemies,
       buildings: this.settlement.buildingState,
       upgrades: this.upgrades,
+      classProgression: this.classProgression,
       projectiles: this.projectiles,
       attackElapsed: this.attackElapsed,
       nextProjectileSerial: this.nextProjectileSerial,
@@ -390,6 +435,15 @@ export class GameSession {
     this.floorDrops = result.floorDrops;
     this.defeatedBossIds = result.defeatedBossIds;
     this.pendingUpgradeChoices = result.pendingUpgradeChoices;
+    if (result.experienceEarned > 0) {
+      const experience =
+        this.classProgression.experience + result.experienceEarned;
+      this.classProgression = {
+        ...this.classProgression,
+        experience,
+        level: playerLevelForExperience(experience),
+      };
+    }
     this.nextFloorDropSerial = result.nextFloorDropSerial;
     if (result.notice !== null) this.notice = result.notice;
   }
@@ -398,6 +452,7 @@ export class GameSession {
       baseMoveSpeed: combatStatsFor(
         this.settlement.buildingState,
         this.upgrades,
+        this.classProgression,
       ).moveSpeed,
       frameStartElapsed: this.elapsed - delta,
       delta,

@@ -1,5 +1,5 @@
 import { add, distance, magnitude, normalize, scale } from "../math";
-import type { Vector2 } from "../types";
+import type { AttackStyle, Vector2 } from "../types";
 
 export interface CombatTarget {
   readonly id: string;
@@ -112,6 +112,57 @@ export const projectileDraftFor = <Target extends CombatTarget>({
   chainDamage: attackDamage * chainDamageMultiplier,
   hitHeal,
 });
+
+export interface ClassSecondaryTargetInput<Target extends CombatTarget> {
+  readonly style: AttackStyle;
+  readonly playerPosition: Vector2;
+  readonly primaryTarget: Target;
+  readonly targets: readonly Target[];
+  readonly maximumTargets: number;
+  readonly areaRadius: number;
+  readonly arcCosine: number;
+}
+
+/** Selects deterministic secondary targets for the chosen class attack shape. */
+export const classSecondaryTargetIdsFor = <Target extends CombatTarget>({
+  style,
+  playerPosition,
+  primaryTarget,
+  targets,
+  maximumTargets,
+  areaRadius,
+  arcCosine,
+}: ClassSecondaryTargetInput<Target>): readonly string[] => {
+  if (maximumTargets <= 0) return [];
+  const others = targets.filter((target) => target.id !== primaryTarget.id);
+  if (style === "magic")
+    return others
+      .filter(
+        (target) =>
+          distance(target.position, primaryTarget.position) <= areaRadius,
+      )
+      .slice(0, maximumTargets)
+      .map((target) => target.id);
+  if (style === "slash") {
+    const direction = normalize({
+      x: primaryTarget.position.x - playerPosition.x,
+      y: primaryTarget.position.y - playerPosition.y,
+    });
+    return others
+      .filter((target) => {
+        const candidate = normalize({
+          x: target.position.x - playerPosition.x,
+          y: target.position.y - playerPosition.y,
+        });
+        return (
+          direction.x * candidate.x + direction.y * candidate.y >= arcCosine
+        );
+      })
+      .slice(0, maximumTargets)
+      .map((target) => target.id);
+  }
+  return others.slice(0, maximumTargets).map((target) => target.id);
+};
 
 export interface ProjectileFlightInput {
   readonly elapsed: number;

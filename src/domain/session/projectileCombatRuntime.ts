@@ -53,6 +53,7 @@ interface EnemyDefeatResult {
   readonly pendingUpgradeChoices: UpgradeId[];
   readonly nextFloorDropSerial: number;
   readonly notice: GameNotice;
+  readonly experienceEarned: number;
 }
 
 const defeatEnemy = ({
@@ -89,6 +90,7 @@ const defeatEnemy = ({
         kind: "boss.defeated",
         hasUpgradeChoices: pendingUpgradeChoices.length === 3,
       },
+      experienceEarned: 1,
     };
   }
 
@@ -103,6 +105,7 @@ const defeatEnemy = ({
       enemyKind: enemy.kind,
       respawns: true,
     },
+    experienceEarned: 1,
   };
 };
 
@@ -132,6 +135,7 @@ export interface ProjectileCombatPhaseResult {
   readonly pendingUpgradeChoices: UpgradeId[];
   readonly nextFloorDropSerial: number;
   readonly notice: GameNotice | null;
+  readonly experienceEarned: number;
 }
 
 /** Advances projectile flight and resolves completed impacts without mutating inputs. */
@@ -160,6 +164,7 @@ export const advanceProjectileCombatPhase = ({
   let nextFloorDropSerial = currentFloorDropSerial;
   let nextPlayerHp = playerHp;
   let notice: GameNotice | null = null;
+  let experienceEarned = 0;
 
   for (const current of currentProjectiles) {
     const projectile = copyProjectile(current);
@@ -201,6 +206,7 @@ export const advanceProjectileCombatPhase = ({
       pendingUpgradeChoices = defeat.pendingUpgradeChoices;
       nextFloorDropSerial = defeat.nextFloorDropSerial;
       notice = defeat.notice;
+      experienceEarned += defeat.experienceEarned;
     }
     if (resolution.landedHitCount > 0 && projectile.hitHeal > 0)
       nextPlayerHp = Math.min(
@@ -218,5 +224,6 @@ export const advanceProjectileCombatPhase = ({
     pendingUpgradeChoices,
     nextFloorDropSerial,
     notice,
+    experienceEarned,
   };
 };

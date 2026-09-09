@@ -2,6 +2,7 @@ import { distance } from "../math";
 import type { GameNotice } from "../notices";
 import type {
   BuildingState,
+  ClassProgression,
   MoveCommand,
   ReadonlyResourceBag,
   ResourceBag,
@@ -9,6 +10,7 @@ import type {
   Vector2,
 } from "../types";
 import {
+  classSecondaryTargetIdsFor,
   enemyPursuitPosition,
   liveTargetsInRange,
   projectileDraftFor,
@@ -61,6 +63,7 @@ export interface AutoCombatPhaseInput {
   readonly enemies: ReadonlyMap<string, RuntimeEnemy>;
   readonly buildings: readonly BuildingState[];
   readonly upgrades: ReadonlySet<UpgradeId>;
+  readonly classProgression?: ClassProgression;
   readonly projectiles: readonly RuntimeProjectile[];
   readonly attackElapsed: number;
   readonly nextProjectileSerial: number;
@@ -80,12 +83,13 @@ export const advanceAutoCombatPhase = ({
   enemies,
   buildings,
   upgrades,
+  classProgression,
   projectiles: currentProjectiles,
   attackElapsed,
   nextProjectileSerial,
 }: AutoCombatPhaseInput): AutoCombatPhaseResult => {
   const projectiles = currentProjectiles.map(copyProjectile);
-  const stats = combatStatsFor(buildings, upgrades);
+  const stats = combatStatsFor(buildings, upgrades, classProgression);
   const targets = liveTargetsInRange({
     playerPosition,
     targets: enemies.values(),
@@ -116,19 +120,37 @@ export const advanceAutoCombatPhase = ({
       combatStatus,
     };
 
-  const projectileEffects = projectileUpgradeEffectsFor(upgrades);
+  const projectileEffects = projectileUpgradeEffectsFor(
+    upgrades,
+    classProgression,
+  );
+  const classSecondaryTargetIds = classSecondaryTargetIdsFor({
+    style: stats.attackStyle,
+    playerPosition,
+    primaryTarget: decision.target,
+    targets,
+    maximumTargets: stats.chainTargets,
+    areaRadius: stats.classAreaRadius,
+    arcCosine: stats.classArcCosine,
+  });
   const draft = projectileDraftFor({
     playerPosition,
     target: decision.target,
     targets,
     attackDamage: stats.attackDamage,
-    chainTargets: stats.chainTargets,
-    chainDamageMultiplier: projectileEffects.chainDamageMultiplier,
+    chainTargets: 0,
+    chainDamageMultiplier: 0,
     hitHeal: projectileEffects.hitHeal,
   });
   projectiles.push({
     id: `projectile:${nextProjectileSerial.toString().padStart(4, "0")}`,
     ...draft,
+    chainTargetIds: classSecondaryTargetIds,
+    chainDamage:
+      stats.attackDamage *
+      (stats.classSecondaryDamageMultiplier ||
+        projectileEffects.chainDamageMultiplier),
+    style: stats.attackStyle,
     elapsed: 0,
   });
   return {

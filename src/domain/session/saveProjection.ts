@@ -1,5 +1,6 @@
 import type {
   BuildingState,
+  ClassProgression,
   CurrentSave,
   ResourceBag,
   UpgradeId,
@@ -26,6 +27,7 @@ export interface SaveProjectionInput {
   readonly buildings: readonly BuildingState[];
   readonly defeatedBossIds: Iterable<string>;
   readonly upgrades: Iterable<UpgradeId>;
+  readonly classProgression: ClassProgression;
   readonly nextBuildingSerial: number;
 }
 
@@ -54,4 +56,8 @@ export const projectCurrentSave = (
   committedAt,
   savePointId: savePoint.id,
   savePointPosition: copyVector(savePoint.position),
+  classProgression: {
+    ...state.classProgression,
+    skillIds: [...state.classProgression.skillIds],
+  },
 });

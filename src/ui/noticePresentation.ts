@@ -1,4 +1,9 @@
-import { buildingDefinitions, upgradeDefinitionFor } from "../data/definitions";
+import {
+  buildingDefinitions,
+  classDefinitionFor,
+  classSkillDefinitionFor,
+  upgradeDefinitionFor,
+} from "../data/definitions";
 import type {
   GameNotice,
   PlacementRejection,
@@ -55,6 +60,14 @@ export const presentGameNotice = (notice: GameNotice): string => {
       return "Choose exactly one unowned upgrade from the current boss reward options.";
     case "upgrade.applied":
       return `${upgradeDefinitionFor(notice.upgradeId).label} applied in runtime. Campfire-save it to keep it.`;
+    case "class.rejected.invalid-choice":
+      return "Choose a class only after reaching level 1, and only once.";
+    case "class.selected":
+      return `${classDefinitionFor(notice.playerClass).label} selected in runtime. Earn more experience for class skills, then campfire-save to keep it.`;
+    case "class-skill.rejected.invalid-choice":
+      return "Choose exactly one available skill from your current class tier.";
+    case "class-skill.selected":
+      return `${classSkillDefinitionFor(notice.skillId).label} applied in runtime. Campfire-save it to keep it.`;
     case "save.rejected.not-near-campfire":
       return "Save rejected: stand within 2m of a home, wild, or player Campfire.";
     case "save.committed":
@@ -92,6 +105,10 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     case "tap-to-move.rejected.invalid-destination":
     case "upgrade.rejected.invalid-choice":
     case "upgrade.applied":
+    case "class.rejected.invalid-choice":
+    case "class.selected":
+    case "class-skill.rejected.invalid-choice":
+    case "class-skill.selected":
     case "save.rejected.not-near-campfire":
     case "save.committed":
     case "player.died":

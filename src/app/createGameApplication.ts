@@ -1,5 +1,11 @@
 import { GameSession } from "../domain/GameSession";
-import type { BuildingKind, UpgradeId, Vector2 } from "../domain/types";
+import type {
+  BuildingKind,
+  ClassSkillId,
+  PlayerClass,
+  UpgradeId,
+  Vector2,
+} from "../domain/types";
 import { createBuildPlacementInput } from "../platform/input/buildPlacementInput";
 import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
@@ -65,6 +71,12 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
     },
     chooseUpgrade(id: UpgradeId): void {
       session.chooseUpgrade(id);
+    },
+    chooseClass(playerClass: PlayerClass): void {
+      session.chooseClass(playerClass);
+    },
+    chooseClassSkill(skillId: ClassSkillId): void {
+      session.chooseClassSkill(skillId);
     },
   });
   const renderer = createThreeRenderer(ui.worldHost);
