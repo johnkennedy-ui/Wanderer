@@ -55,6 +55,7 @@ import {
   describeProgressionEffects,
   applyClassSkillToPlayer,
   isValidClassSkillChoice,
+  movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
 } from "./session/progressionRules";
@@ -165,8 +166,19 @@ export class GameSession {
         this.player.position = roundVector(
           add(this.player.position, scale(this.input.intent, movementDistance)),
         );
-      this.combatStatus = "Moving: basic auto-attack suppressed";
-      this.attackElapsed = 0;
+      const attackSpeedMultiplier = movingAttackSpeedMultiplierFor(
+        this.classProgression,
+      );
+      if (attackSpeedMultiplier === 0) {
+        this.combatStatus = "Moving: basic auto-attack suppressed";
+        this.attackElapsed = 0;
+      } else {
+        this.updateAutoCombat(delta, attackSpeedMultiplier);
+        this.combatStatus = this.combatStatus.replace(
+          /^(Stationary:|Auto-attacking)/,
+          "Moving (50% attack speed):",
+        );
+      }
       this.settlement.resetHarvest();
     } else {
       this.applyPassiveEffects(delta);
@@ -395,9 +407,10 @@ export class GameSession {
     });
     for (const draft of drafts) this.enemies.set(draft.id, draft);
   }
-  private updateAutoCombat(delta: number): void {
+  private updateAutoCombat(delta: number, attackSpeedMultiplier = 1): void {
     const result = advanceAutoCombatPhase({
       delta,
+      attackSpeedMultiplier,
       playerPosition: this.player.position,
       enemies: this.enemies,
       buildings: this.settlement.buildingState,

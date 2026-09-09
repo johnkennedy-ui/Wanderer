@@ -90,11 +90,32 @@ input {
   display: grid;
   place-items: center;
   text-align: center;
-  font-size: 0.72rem;
+  font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.05;
   background: rgb(19 54 63 / 94%);
   box-shadow: 0 4px 14px rgb(0 0 0 / 38%);
+}
+.hud-quick-stats {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(0.75rem, env(safe-area-inset-left));
+  display: flex;
+  gap: 0.3rem;
+  pointer-events: none;
+  z-index: 3;
+}
+.hud-quick-stats span,
+.resource-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  border: 1px solid rgb(184 213 174 / 42%);
+  border-radius: 999px;
+  background: rgb(10 20 25 / 88%);
+  padding: 0.2rem 0.48rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 .top-panel {
   position: absolute;
@@ -167,6 +188,15 @@ input {
 .build-buttons {
   margin-top: 0.45rem;
 }
+.build-option {
+  width: 3.15rem;
+  min-width: 44px;
+  height: 3.15rem;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.35rem;
+}
 .build-buttons button[aria-pressed="true"] {
   border-color: #fff0a8;
   box-shadow: 0 0 0 3px rgb(230 214 144 / 28%);
@@ -202,6 +232,15 @@ input {
 }
 .building-row span {
   flex: 1 1 100%;
+}
+.resource-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+.resource-chip {
+  font-size: 1rem;
 }
 .effects {
   margin: 0.3rem 0;

@@ -8,6 +8,7 @@ import {
 import { decodeSave } from "../../domain/persistence/decodeSave";
 import { advanceAutoCombatPhase } from "../../domain/session/combatTickRuntime";
 import {
+  movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
 } from "../../domain/session/progressionRules";
@@ -161,5 +162,30 @@ describe("class progression", () => {
       targetId: "east",
       chainTargetIds: [],
     });
+  });
+
+  it("allows Knight and Archer to accumulate attacks at half speed while moving", () => {
+    const enemies = new Map([["east", enemy("east", { x: 2, y: 0 })]]);
+    const movingAttack = (playerClass: ClassProgression["playerClass"]) =>
+      advanceAutoCombatPhase({
+        delta: 0.9,
+        attackSpeedMultiplier: movingAttackSpeedMultiplierFor(
+          progression(playerClass),
+        ),
+        playerPosition: { x: 0, y: 0 },
+        enemies,
+        buildings: [],
+        upgrades: new Set(),
+        classProgression: progression(playerClass),
+        projectiles: [],
+        attackElapsed: 0,
+        nextProjectileSerial: 1,
+      });
+
+    expect(movingAttack("knight").projectiles).toHaveLength(1);
+    expect(movingAttack("archer").projectiles).toHaveLength(0);
+    expect(movingAttack("archer").attackElapsed).toBeCloseTo(0.45, 8);
+    expect(movingAttack("wizard").projectiles).toHaveLength(0);
+    expect(movingAttack("wizard").attackElapsed).toBe(0);
   });
 });
