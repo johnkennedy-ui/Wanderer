@@ -26,9 +26,11 @@ createServer((request, response) => {
   const relativePath = relativePathFor(pathname);
   const candidate = normalize(join(root, relativePath));
   const insideRoot = candidate === root || candidate.startsWith(`${root}/`);
-  const file = insideRoot && existsSync(candidate) ? candidate : join(root, "index.html");
+  const file =
+    insideRoot && existsSync(candidate) ? candidate : join(root, "index.html");
   response.writeHead(200, {
-    "content-type": mimeByExtension[extname(file)] ?? "application/octet-stream",
+    "content-type":
+      mimeByExtension[extname(file)] ?? "application/octet-stream",
   });
   createReadStream(file).pipe(response);
 })
