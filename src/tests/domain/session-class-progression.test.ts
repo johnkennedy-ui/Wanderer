@@ -8,9 +8,11 @@ import {
 import { decodeSave } from "../../domain/persistence/decodeSave";
 import { advanceAutoCombatPhase } from "../../domain/session/combatTickRuntime";
 import {
+  combatStatsFor,
   movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
+  playerStatsFor,
 } from "../../domain/session/progressionRules";
 import type { ClassProgression } from "../../domain/types";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
@@ -92,6 +94,38 @@ describe("class progression", () => {
     ]);
   });
 
+  it("projects the authored class passives and applies their current combat roles", () => {
+    expect(playerStatsFor(progression("knight"))).toEqual({
+      strength: 6,
+      dexterity: 0,
+      agility: 0,
+      luck: 0,
+      vitality: 6,
+      magic: 0,
+      defense: 3,
+      magicDefense: 0,
+    });
+    expect(playerStatsFor(progression("archer"))).toMatchObject({
+      dexterity: 6,
+      agility: 6,
+      luck: 3,
+    });
+    expect(playerStatsFor(progression("wizard"))).toMatchObject({
+      magic: 6,
+      agility: 3,
+      magicDefense: 3,
+    });
+
+    const knight = combatStatsFor([], new Set(), progression("knight"));
+    const archer = combatStatsFor([], new Set(), progression("archer"));
+    const wizard = combatStatsFor([], new Set(), progression("wizard"));
+    expect(knight.attackDamage).toBe(20.4);
+    expect(archer.attackDamage).toBe(18);
+    expect(archer.moveSpeed).toBe(3.3);
+    expect(wizard.attackDamage).toBeCloseTo(19.8, 8);
+    expect(wizard.moveSpeed).toBe(3.15);
+  });
+
   it("selects a class once, chooses one skill per tier, and persists only through campfire save", () => {
     const base = savedAtHome();
     const session = new GameSession({
@@ -128,10 +162,27 @@ describe("class progression", () => {
     );
   });
 
-  it("gives Knight arcs, Wizard splash, and Archer a single long-range arrow", () => {
+  it("applies Knight vitality once when the class is selected", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        classProgression: progression(null, 1, []),
+      },
+    });
+    expect(session.chooseClass("knight")).toBe(true);
+    expect(session.presentation().ui.player).toMatchObject({
+      hp: 130,
+      maxHp: 130,
+    });
+  });
+
+  it("gives Knight an immediate crescent, Wizard splash, and Archer a single long-range arrow", () => {
     const enemies = new Map([
       ["east", enemy("east", { x: 2, y: 0 })],
       ["arc", enemy("arc", { x: 1.8, y: 1 })],
+      ["arc-east", enemy("arc-east", { x: 2.2, y: 0.4 })],
+      ["arc-west", enemy("arc-west", { x: 1.8, y: -1 })],
       ["splash", enemy("splash", { x: 3.3, y: 0 })],
     ]);
     const attack = (classState: ClassProgression) =>
@@ -145,23 +196,127 @@ describe("class progression", () => {
         projectiles: [],
         attackElapsed: 0,
         nextProjectileSerial: 1,
-      }).projectiles[0];
+      });
 
-    expect(attack(progression("knight"))).toMatchObject({
-      style: "slash",
-      targetId: "east",
-      chainTargetIds: ["arc"],
+    const knightAttack = attack(progression("knight"));
+    expect(knightAttack).toMatchObject({
+      projectiles: [],
+      crescentAttacks: [
+        expect.objectContaining({
+          id: "crescent:0001",
+          radius: 2.4,
+          arcCosine: 0.5,
+        }),
+      ],
     });
-    expect(attack(progression("wizard"))).toMatchObject({
+    expect(knightAttack.meleeImpacts).toEqual([
+      { targetId: "east", damage: 20.4 },
+      { targetId: "arc", damage: 10.2 },
+      { targetId: "arc-west", damage: 10.2 },
+      { targetId: "arc-east", damage: 10.2 },
+    ]);
+    expect(attack(progression("wizard")).projectiles[0]).toMatchObject({
       style: "magic",
       targetId: "east",
-      chainTargetIds: ["arc", "splash"],
+      chainTargetIds: ["arc", "arc-west", "arc-east", "splash"],
     });
-    expect(attack(progression("archer"))).toMatchObject({
+    expect(attack(progression("archer")).projectiles[0]).toMatchObject({
       style: "arrow",
       targetId: "east",
       chainTargetIds: [],
     });
+  });
+
+  it("makes each Knight crescent skill meaningful without changing fixed secondary damage", () => {
+    const enemies = new Map([
+      ["primary", enemy("primary", { x: 2, y: 0 })],
+      ["baseline-secondary", enemy("baseline-secondary", { x: 1.8, y: 1 })],
+      ["reach-secondary", enemy("reach-secondary", { x: 2.8, y: 0 })],
+      ["arc-secondary", enemy("arc-secondary", { x: 1, y: 2 })],
+    ]);
+    const attack = (skillId?: ClassProgression["skillIds"][number]) =>
+      advanceAutoCombatPhase({
+        delta: 1,
+        playerPosition: { x: 0, y: 0 },
+        enemies,
+        buildings: [],
+        upgrades: new Set(),
+        classProgression: progression(
+          "knight",
+          5,
+          skillId === undefined ? [] : [skillId],
+        ),
+        projectiles: [],
+        attackElapsed: 0,
+        nextProjectileSerial: 1,
+      });
+
+    const baseline = attack();
+    expect(combatStatsFor([], new Set(), progression("knight"))).toMatchObject({
+      attackRange: 2.4,
+      classAreaRadius: 2.4,
+      classArcCosine: 0.5,
+      classSecondaryDamageMultiplier: 0.5,
+    });
+    expect(baseline.meleeImpacts).toEqual([
+      { targetId: "primary", damage: 20.4 },
+      { targetId: "baseline-secondary", damage: 10.2 },
+    ]);
+
+    const wideSlash = attack("knight-wide-slash");
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-wide-slash"]),
+      ),
+    ).toMatchObject({ attackRange: 3, classAreaRadius: 3 });
+    expect(wideSlash.meleeImpacts).toContainEqual({
+      targetId: "reach-secondary",
+      damage: 10.2,
+    });
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-wide-slash"]),
+      ).classSecondaryDamageMultiplier,
+    ).toBe(0.5);
+
+    const crescentSweep = attack("knight-crescent-sweep");
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-crescent-sweep"]),
+      ).classArcCosine,
+    ).toBe(0.25);
+    expect(crescentSweep.meleeImpacts).toContainEqual({
+      targetId: "arc-secondary",
+      damage: 10.2,
+    });
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-crescent-sweep"]),
+      ).classSecondaryDamageMultiplier,
+    ).toBe(0.5);
+
+    const whirlwind = attack("knight-whirlwind");
+    const whirlwindStats = combatStatsFor(
+      [],
+      new Set(),
+      progression("knight", 5, ["knight-whirlwind"]),
+    );
+    expect(whirlwindStats).toMatchObject({
+      attackIntervalSeconds: 0.315,
+      classSecondaryDamageMultiplier: 0.5,
+    });
+    const whirlwindSecondary = whirlwind.meleeImpacts.find(
+      (impact) => impact.targetId === "baseline-secondary",
+    );
+    expect(whirlwindSecondary?.damage).toBeCloseTo(10.2, 8);
   });
 
   it("allows Knight and Archer to accumulate attacks at half speed while moving", () => {
@@ -182,7 +337,8 @@ describe("class progression", () => {
         nextProjectileSerial: 1,
       });
 
-    expect(movingAttack("knight").projectiles).toHaveLength(1);
+    expect(movingAttack("knight").projectiles).toHaveLength(0);
+    expect(movingAttack("knight").crescentAttacks).toHaveLength(1);
     expect(movingAttack("archer").projectiles).toHaveLength(0);
     expect(movingAttack("archer").attackElapsed).toBeCloseTo(0.45, 8);
     expect(movingAttack("wizard").projectiles).toHaveLength(0);

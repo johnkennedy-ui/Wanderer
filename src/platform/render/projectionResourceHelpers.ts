@@ -46,6 +46,7 @@ export class ProjectionResources {
   private readonly geometries = new Map<string, THREE.BufferGeometry>();
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
   private auraMaterial: THREE.MeshBasicMaterial | undefined;
+  private crescentMaterial: THREE.MeshBasicMaterial | undefined;
   private geometriesCreated = 0;
   private materialsCreated = 0;
   private meshesCreated = 0;
@@ -70,6 +71,35 @@ export class ProjectionResources {
       `aura:${radius}`,
       () => new THREE.RingGeometry(Math.max(0, radius - 0.08), radius, 48),
     );
+  }
+  crescent(radius: number, arcCosine: number): THREE.BufferGeometry {
+    // Direction, progress and attack ID are transient state; only shape
+    // selects a retained geometry variant.
+    return this.geometry(`crescent:${radius}:${arcCosine}`, () => {
+      const halfArc = Math.acos(arcCosine);
+      return new THREE.RingGeometry(
+        Math.max(0.45, radius - 0.32),
+        radius,
+        32,
+        1,
+        -halfArc,
+        halfArc * 2,
+      );
+    });
+  }
+  knightCrescentMaterial(): THREE.MeshBasicMaterial {
+    this.assertLive();
+    if (this.crescentMaterial === undefined) {
+      this.crescentMaterial = new THREE.MeshBasicMaterial({
+        color: 0xd8dde8,
+        transparent: true,
+        opacity: 0.86,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      this.materialsCreated += 1;
+    }
+    return this.crescentMaterial;
   }
   healingHutMaterial(): THREE.MeshBasicMaterial {
     this.assertLive();
@@ -138,6 +168,11 @@ export class ProjectionResources {
       this.auraMaterial.dispose();
       this.materialsDisposed += 1;
       this.auraMaterial = undefined;
+    }
+    if (this.crescentMaterial !== undefined) {
+      this.crescentMaterial.dispose();
+      this.materialsDisposed += 1;
+      this.crescentMaterial = undefined;
     }
     this.geometries.clear();
     this.materials.clear();

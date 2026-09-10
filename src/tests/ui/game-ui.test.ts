@@ -238,6 +238,16 @@ const snapshot = (
 ): GameUiSnapshot => ({
   world: { seed: "ui", generatorVersion: "wanderer-web-v2" },
   player: { position: { x: 0, y: 0 }, hp: 90, maxHp: 100 },
+  playerStats: {
+    strength: 0,
+    dexterity: 0,
+    agility: 0,
+    luck: 0,
+    vitality: 0,
+    magic: 0,
+    defense: 0,
+    magicDefense: 0,
+  },
   resources: { wood: 120, stone: 120, scrap: 120, essence: 120, bossCore: 1 },
   materialCapacity: 120,
   buildRadius: 6,

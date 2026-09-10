@@ -308,6 +308,87 @@ describe("retained Three CPU projection", () => {
     projection.dispose();
   });
 
+  it("retains Knight crescents with shape, orientation, height and material through motion and removal", () => {
+    const projection = new RetainedProjection();
+    const snapshot = visualVariantSnapshot();
+    projection.render(snapshot);
+    const twin = meshFor(projection, "crescent:twin");
+    for (const attack of snapshot.crescentAttacks) {
+      const mesh = meshFor(projection, attack.id);
+      const halfArc = Math.acos(attack.arcCosine);
+      expect((mesh.geometry as THREE.RingGeometry).parameters).toEqual({
+        innerRadius: Math.max(0.45, attack.radius - 0.32),
+        outerRadius: attack.radius,
+        thetaSegments: 32,
+        phiSegments: 1,
+        thetaStart: -halfArc,
+        thetaLength: halfArc * 2,
+      });
+      expect(mesh.position.toArray()).toEqual([
+        attack.origin.x,
+        0.08,
+        -attack.origin.y,
+      ]);
+      expect(mesh.rotation.x).toBe(-Math.PI / 2);
+      expect(mesh.rotation.z).toBe(
+        Math.atan2(attack.direction.y, attack.direction.x),
+      );
+      expect(mesh.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+      expect((mesh.material as THREE.MeshBasicMaterial).color.getHex()).toBe(
+        0xd8dde8,
+      );
+      expect(mesh.material).toMatchObject({
+        transparent: true,
+        opacity: 0.86,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      expect(mesh.material).toBe(twin.material);
+    }
+    const mesh = meshFor(projection, "crescent:2.4:0.5");
+    const originalGeometry = mesh.geometry;
+    const before = projection.diagnostics();
+    for (const direction of [
+      { x: 1, y: 0 },
+      { x: 0, y: -1 },
+      { x: -1, y: 0 },
+      { x: -3, y: 4 },
+    ]) {
+      projection.render({
+        ...snapshot,
+        crescentAttacks: snapshot.crescentAttacks.map((attack) =>
+          attack.id === mesh.name
+            ? {
+                ...attack,
+                origin: { x: 7, y: -9 },
+                direction,
+                progress: 0.9,
+                radius: 3,
+                arcCosine: 0.25,
+              }
+            : attack,
+        ),
+      });
+      expect(meshFor(projection, mesh.name)).toBe(mesh);
+      expect(mesh.position.toArray()).toEqual([7, 0.08, 9]);
+      expect(mesh.rotation.z).toBe(Math.atan2(direction.y, direction.x));
+      expect(mesh.geometry).toBe(
+        meshFor(projection, "crescent:3:0.25").geometry,
+      );
+      expect(twin.geometry).toBe(originalGeometry);
+      expect(twin.rotation.z).toBe(0);
+      expect(projection.diagnostics()).toEqual(before);
+    }
+    projection.render({ ...snapshot, crescentAttacks: [] });
+    expect(mesh.parent).toBeNull();
+    expect(twin.parent).toBeNull();
+    expect(projection.diagnostics().maps.crescents).toBe(0);
+    expect(projection.diagnostics().meshesRemoved - before.meshesRemoved).toBe(
+      snapshot.crescentAttacks.length,
+    );
+    projection.dispose();
+  });
+
   it("resets player recovery materials and reuses warmed variants without color bleed", () => {
     const projection = new RetainedProjection();
     const snapshot = visualVariantSnapshot();
@@ -484,6 +565,10 @@ describe("retained Three CPU projection", () => {
           ...marker,
           id: marker.id + suffix,
         })),
+        crescentAttacks: snapshot.crescentAttacks.map((attack) => ({
+          ...attack,
+          id: attack.id + suffix,
+        })),
         floorDrops: snapshot.floorDrops.map((marker) => ({
           ...marker,
           id: marker.id + suffix,
@@ -577,6 +662,7 @@ describe("retained Three CPU projection", () => {
       visibleChunks: [],
       visibleBuildings: [],
       projectiles: [],
+      crescentAttacks: [],
       enemies: [],
       floorDrops: [],
     });
@@ -590,7 +676,16 @@ describe("retained Three CPU projection", () => {
     expect(counts.materialsDisposed).toBe(counts.materialsCreated);
     expect(counts.meshesRemoved).toBe(counts.meshesCreated);
     expect(counts.visibleMeshes).toBe(0);
-    expect(Object.values(counts.maps)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(counts.maps).toEqual({
+      obstacles: 0,
+      campfires: 0,
+      buildings: 0,
+      auras: 0,
+      enemies: 0,
+      projectiles: 0,
+      crescents: 0,
+      drops: 0,
+    });
     for (const dispose of disposals) expect(dispose).toHaveBeenCalledTimes(1);
     const secondBefore = second.diagnostics();
     second.render(snapshot);
@@ -697,6 +792,8 @@ describe("Three browser adapter ownership", () => {
     renderer.render(snapshot);
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "1",
+      projectileCount: "8",
+      crescentAttackCount: "5",
       playerHitRecovery: "active",
       playerHitFlash: "on",
       healingHutAuraCount: "4",
@@ -728,15 +825,21 @@ describe("Three browser adapter ownership", () => {
       playerHitRecovery: { active: false, flashOn: false },
       visibleBuildings: [],
       floorDrops: [],
+      projectiles: [],
+      crescentAttacks: [],
     });
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "0",
+      projectileCount: "0",
+      crescentAttackCount: "0",
       playerHitRecovery: "inactive",
       playerHitFlash: "off",
       healingHutAuraCount: "0",
       healingHutAuraRadii: "",
     });
     expect(renderer.diagnostics().maps.auras).toBe(0);
+    expect(renderer.diagnostics().maps.projectiles).toBe(0);
+    expect(renderer.diagnostics().maps.crescents).toBe(0);
     renderer.dispose();
   });
 });

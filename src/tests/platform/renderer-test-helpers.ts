@@ -44,6 +44,26 @@ export const visualVariantSnapshot = (): GameRendererSnapshot => {
       })),
       { id: "hut:twin", kind: "Healer", level: 1, position: { x: -7, y: 9 } },
     ],
+    crescentAttacks: [
+      ...[2.4, 3].flatMap((radius) =>
+        [0.5, 0.25].map((arcCosine) => ({
+          id: `crescent:${radius}:${arcCosine}`,
+          origin: { x: -2, y: 3 },
+          direction: { x: 0, y: 1 },
+          radius,
+          arcCosine,
+          progress: 0.5,
+        })),
+      ),
+      {
+        id: "crescent:twin",
+        origin: { x: 4, y: -5 },
+        direction: { x: 1, y: 0 },
+        radius: 2.4,
+        arcCosine: 0.5,
+        progress: 0,
+      },
+    ],
     projectiles: (["basic", "slash", "magic", "arrow"] as const).flatMap(
       (style) => [
         { ...snapshot.projectiles[0], id: `shot:${style}`, style },

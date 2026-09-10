@@ -129,6 +129,11 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.updateMatrixWorld();
       positionPlayerHealthLabel(snapshot);
       setDataset("floorDropCount", String(snapshot.floorDrops.length));
+      setDataset("projectileCount", String(snapshot.projectiles.length));
+      setDataset(
+        "crescentAttackCount",
+        String(snapshot.crescentAttacks.length),
+      );
       setDataset(
         "playerHitRecovery",
         snapshot.playerHitRecovery.active ? "active" : "inactive",

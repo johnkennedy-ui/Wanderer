@@ -9,6 +9,8 @@ import type {
   FloorDropState,
   InputSource,
   PlayerState,
+  PlayerStats,
+  CrescentAttackState,
   ProjectileState,
   ReadonlyResourceBag,
   UpgradeId,
@@ -100,6 +102,7 @@ export type GameNotice =
 export interface GameUiSnapshot {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
+  readonly playerStats: PlayerStats;
   readonly resources: ReadonlyResourceBag;
   readonly materialCapacity: number;
   readonly buildRadius: number;
@@ -129,6 +132,7 @@ export interface GameRendererSnapshot {
   readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
+  readonly crescentAttacks: readonly CrescentAttackState[];
   readonly floorDrops: readonly FloorDropState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];

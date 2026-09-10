@@ -103,6 +103,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <button type="button" class="hud-circle-button" data-testid="skill-tree-toggle" aria-label="Skill Tree" aria-controls="skill-tree-panel" aria-expanded="false" title="Skill Tree">
         <span aria-hidden="true">✦</span>
       </button>
+      <button type="button" class="hud-circle-button" data-testid="stats-toggle" aria-label="Stats" aria-controls="stats-panel" aria-expanded="false" title="Stats">
+        <span aria-hidden="true">◈</span>
+      </button>
     </nav>
     <div class="hud-quick-stats" data-testid="quick-stats" aria-label="Current health and level">
       <span data-testid="quick-health"></span>
@@ -143,6 +146,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <header class="panel-heading"><h2>Skill Tree</h2><button type="button" class="panel-close" data-testid="close-skill-tree" aria-label="Close Skill Tree">×</button></header>
       <p data-testid="skill-tree-summary" class="subtle"></p>
       <ul data-testid="skill-tree-skills" class="effects"></ul>
+    </section>
+    <section id="stats-panel" data-testid="stats-panel" class="side-panel panel stats-panel" aria-label="Stats" hidden>
+      <header class="panel-heading"><h2>Stats</h2><button type="button" class="panel-close" data-testid="close-stats" aria-label="Close Stats">×</button></header>
+      <dl data-testid="stats-list" class="stats-list"></dl>
     </section>
     <section id="build-menu-panel" data-testid="build-menu-panel" class="side-panel panel" aria-label="Build" hidden>
       <header class="panel-heading"><h2>Build</h2><button type="button" class="panel-close" data-testid="close-build-menu" aria-label="Close Build">×</button></header>
@@ -205,18 +212,21 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const buildMenuPanel = byTestId<HTMLElement>("build-menu-panel");
   const resourcesPanel = byTestId<HTMLElement>("resources-panel");
   const skillTreePanel = byTestId<HTMLElement>("skill-tree-panel");
+  const statsPanel = byTestId<HTMLElement>("stats-panel");
   const statusPanelToggle = byTestId<HTMLButtonElement>(
     "character-status-toggle",
   );
   const buildMenuToggle = byTestId<HTMLButtonElement>("build-menu-toggle");
   const resourcesToggle = byTestId<HTMLButtonElement>("resources-toggle");
   const skillTreeToggle = byTestId<HTMLButtonElement>("skill-tree-toggle");
+  const statsToggle = byTestId<HTMLButtonElement>("stats-toggle");
   const closeStatusPanel = byTestId<HTMLButtonElement>(
     "close-character-status",
   );
   const closeBuildMenu = byTestId<HTMLButtonElement>("close-build-menu");
   const closeResources = byTestId<HTMLButtonElement>("close-resources");
   const closeSkillTree = byTestId<HTMLButtonElement>("close-skill-tree");
+  const closeStats = byTestId<HTMLButtonElement>("close-stats");
 
   const setPanelVisibility = (
     panel: HTMLElement,
@@ -230,6 +240,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let buildMenuVisible = false;
   let resourcesPanelVisible = false;
   let skillTreePanelVisible = false;
+  let statsPanelVisible = false;
   let placementMode: PlacementMode = null;
   let placementFeedback = "";
   let disposed = false;
@@ -254,6 +265,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const setSkillTreePanelVisible = (visible: boolean): void => {
     skillTreePanelVisible = visible;
     setPanelVisibility(skillTreePanel, skillTreeToggle, visible);
+  };
+  const setStatsPanelVisible = (visible: boolean): void => {
+    statsPanelVisible = visible;
+    setPanelVisibility(statsPanel, statsToggle, visible);
   };
   const setPlacementMode = (mode: PlacementMode): void => {
     placementMode = mode;
@@ -281,13 +296,28 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   resourcesToggle.addEventListener("click", () => {
     const visible = !resourcesPanelVisible;
     setResourcesPanelVisible(visible);
-    if (visible) setSkillTreePanelVisible(false);
+    if (visible) {
+      setSkillTreePanelVisible(false);
+      setStatsPanelVisible(false);
+    }
   });
   skillTreeToggle.addEventListener("click", () => {
     const visible = !skillTreePanelVisible;
     setSkillTreePanelVisible(visible);
-    if (visible) setResourcesPanelVisible(false);
+    if (visible) {
+      setResourcesPanelVisible(false);
+      setStatsPanelVisible(false);
+    }
   });
+  statsToggle.addEventListener("click", () => {
+    const visible = !statsPanelVisible;
+    setStatsPanelVisible(visible);
+    if (visible) {
+      setResourcesPanelVisible(false);
+      setSkillTreePanelVisible(false);
+    }
+  });
+  closeStats.addEventListener("click", () => setStatsPanelVisible(false));
   closeStatusPanel.addEventListener("click", () =>
     setStatusPanelVisible(false),
   );
@@ -310,6 +340,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setBuildMenuVisible(false);
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
+    setStatsPanelVisible(false);
   };
   for (const kind of buildingKinds) {
     const button = document.createElement("button");
@@ -346,6 +377,42 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     },
   });
   const effects = new RetainedEffects(byTestId<HTMLUListElement>("effects"));
+  const skillTree = new RetainedEffects(
+    byTestId<HTMLUListElement>("skill-tree-skills"),
+  );
+  const resourceChips = (
+    [
+      ["wood", "Wood"],
+      ["stone", "Stone"],
+      ["scrap", "Metal / Scrap"],
+      ["essence", "Essence"],
+      ["bossCore", "Boss Core"],
+    ] as const
+  ).map(([kind, label]) => {
+    const element = document.createElement("span");
+    element.className = "resource-chip";
+    element.title = label;
+    byTestId("resources").append(element);
+    return { kind, label, element };
+  });
+  const statRows = (
+    [
+      ["strength", "Strength"],
+      ["dexterity", "Dexterity"],
+      ["agility", "Agility"],
+      ["luck", "Luck"],
+      ["vitality", "Vitality"],
+      ["magic", "Magic"],
+      ["defense", "Defense"],
+      ["magicDefense", "Magic Defense"],
+    ] as const
+  ).map(([kind, label]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const value = document.createElement("dd");
+    byTestId("stats-list").append(term, value);
+    return { kind, value };
+  });
 
   return {
     worldHost,
@@ -404,28 +471,17 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           ? "Projectile: 1 in flight"
           : `Projectile: ${snapshot.projectileCount} in flight`,
       );
-      const resources = byTestId<HTMLDivElement>("resources");
-      resources.replaceChildren(
-        ...(
-          [
-            ["wood", "Wood"],
-            ["stone", "Stone"],
-            ["scrap", "Metal / Scrap"],
-            ["essence", "Essence"],
-            ["bossCore", "Boss Core"],
-          ] as const
-        ).map(([kind, label]) => {
-          const resource = document.createElement("span");
-          resource.className = "resource-chip";
-          resource.setAttribute(
-            "aria-label",
-            `${label}: ${snapshot.resources[kind]}`,
-          );
-          resource.title = label;
-          resource.textContent = `${resourcePlaceholderIcons[kind]} ${snapshot.resources[kind]}`;
-          return resource;
-        }),
-      );
+      for (const { kind, label, element } of resourceChips) {
+        setAttribute(
+          element,
+          "aria-label",
+          `${label}: ${snapshot.resources[kind]}`,
+        );
+        text(
+          element,
+          `${resourcePlaceholderIcons[kind]} ${snapshot.resources[kind]}`,
+        );
+      }
       text(
         byTestId("resource-capacity"),
         `Capacity ${snapshot.materialCapacity} each; Boss Core is exempt.`,
@@ -449,13 +505,12 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       buildingRows.render(snapshot.buildings);
       effects.render(snapshot.effects);
       const skillTreeSummary = byTestId<HTMLElement>("skill-tree-summary");
-      const skillTreeSkills = byTestId<HTMLUListElement>("skill-tree-skills");
       if (snapshot.classProgression.playerClass === null) {
         text(
           skillTreeSummary,
           `Level ${snapshot.classProgression.level} · choose a class when the class choice appears.`,
         );
-        skillTreeSkills.replaceChildren();
+        skillTree.render([]);
       } else {
         const playerClass = snapshot.classProgression.playerClass;
         const selectedSkillIds = new Set(snapshot.classProgression.skillIds);
@@ -463,22 +518,24 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           skillTreeSummary,
           `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/4 class skills selected.`,
         );
-        skillTreeSkills.replaceChildren(
-          ...classSkillDefinitions
+        skillTree.render(
+          classSkillDefinitions
             .filter((skill) => skill.playerClass === playerClass)
             .map((skill) => {
-              const item = document.createElement("li");
               const selected = selectedSkillIds.has(skill.id);
-              item.textContent = `T${skill.tier} · ${skill.label}: ${selected ? "selected" : skill.description}`;
-              return item;
+              return `T${skill.tier} · ${skill.label}: ${selected ? "selected" : skill.description}`;
             }),
         );
       }
+      for (const { kind, value } of statRows)
+        text(value, String(snapshot.playerStats[kind]));
       const hasClassChoice =
         snapshot.pendingClassChoices.length > 0 ||
         snapshot.pendingClassSkillChoices.length > 0;
-      upgradeModal.hidden =
+      const hideUpgrades =
         hasClassChoice || snapshot.pendingUpgradeChoices.length === 0;
+      if (upgradeModal.hidden !== hideUpgrades)
+        upgradeModal.hidden = hideUpgrades;
       const choiceKey = snapshot.pendingUpgradeChoices.join("|");
       if (upgradeChoices.dataset.choiceKey !== choiceKey) {
         upgradeChoices.replaceChildren();
@@ -492,7 +549,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         }
         upgradeChoices.dataset.choiceKey = choiceKey;
       }
-      classModal.hidden = !hasClassChoice;
+      if (classModal.hidden !== !hasClassChoice)
+        classModal.hidden = !hasClassChoice;
       const classChoiceKey = [
         ...snapshot.pendingClassChoices,
         ...snapshot.pendingClassSkillChoices,
@@ -541,6 +599,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       setPlacementMode(null);
       buildingRows.dispose();
       effects.dispose();
+      skillTree.dispose();
       saveButton.removeEventListener("click", intents.save);
       root.replaceChildren();
     },

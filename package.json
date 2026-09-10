@@ -14,7 +14,7 @@
     "test:soak": "vitest run src/tests/domain/session-soak.test.ts src/tests/domain/session-runtime-bounds.test.ts src/tests/domain/session-world-runtime.test.ts",
     "check:architecture": "node src/tests/architecture-guard.mjs",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "preview": "node scripts/agent/browser-preview.mjs",
     "verify": "npm run format:check && npm run typecheck && npm run test && npm run check:architecture && npm run build",
     "test:browser": "VITE_BASE_PATH=/ npm run build && VITE_BASE_PATH=/ PLAYWRIGHT_BASE_PATH=/ playwright test && VITE_BASE_PATH=/Wanderer/ npm run build && VITE_BASE_PATH=/Wanderer/ PLAYWRIGHT_BASE_PATH=/Wanderer/ playwright test",
     "format": "node scripts/agent/format.mjs --write",

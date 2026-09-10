@@ -4,6 +4,7 @@ import type {
   ClassSkillId,
   EnemyKind,
   PlayerClass,
+  PlayerStats,
   ResourceKind,
   ReadonlyResourceBag,
   UpgradeId,
@@ -56,7 +57,12 @@ export interface UpgradeDefinition {
 export type ClassSkillEffect =
   | UpgradeEffect
   | { readonly kind: "area-radius"; readonly amount: number }
-  | { readonly kind: "secondary-targets"; readonly amount: number };
+  | { readonly kind: "arc-cosine"; readonly amount: number }
+  | { readonly kind: "secondary-targets"; readonly amount: number }
+  | {
+      readonly kind: "secondary-damage-multiplier";
+      readonly amount: number;
+    };
 
 export interface ClassDefinition {
   readonly id: PlayerClass;
@@ -70,6 +76,7 @@ export interface ClassDefinition {
   readonly areaRadius: number;
   readonly arcCosine: number;
   readonly secondaryTargets: number;
+  readonly passiveStats: PlayerStats;
 }
 
 export interface ClassSkillDefinition {
@@ -344,10 +351,23 @@ const authoredClassDefinitions = {
     damageMultiplier: 1.2,
     attackIntervalSeconds: 0.45,
     attackRange: 2.4,
-    secondaryDamageMultiplier: 0.7,
-    areaRadius: 0,
+    secondaryDamageMultiplier: 0.5,
+    areaRadius: 2.4,
     arcCosine: 0.5,
-    secondaryTargets: 2,
+    // The weaponless crescent damages every valid enemy in its forward arc.
+    // Infinity is an explicit authored "no cap" policy; finite class values
+    // remain bounded for projectile and splash attacks.
+    secondaryTargets: Number.POSITIVE_INFINITY,
+    passiveStats: {
+      strength: 6,
+      dexterity: 0,
+      agility: 0,
+      luck: 0,
+      vitality: 6,
+      magic: 0,
+      defense: 3,
+      magicDefense: 0,
+    },
   },
   wizard: {
     id: "wizard",
@@ -361,6 +381,16 @@ const authoredClassDefinitions = {
     areaRadius: 1.5,
     arcCosine: 1,
     secondaryTargets: 8,
+    passiveStats: {
+      strength: 0,
+      dexterity: 0,
+      agility: 3,
+      luck: 0,
+      vitality: 0,
+      magic: 6,
+      defense: 0,
+      magicDefense: 3,
+    },
   },
   archer: {
     id: "archer",
@@ -374,6 +404,16 @@ const authoredClassDefinitions = {
     areaRadius: 0,
     arcCosine: 1,
     secondaryTargets: 0,
+    passiveStats: {
+      strength: 0,
+      dexterity: 6,
+      agility: 6,
+      luck: 3,
+      vitality: 0,
+      magic: 0,
+      defense: 0,
+      magicDefense: 0,
+    },
   },
 } satisfies Record<PlayerClass, ClassDefinition>;
 
@@ -402,8 +442,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 1,
     label: "Wide Slash",
-    description: "Your slash hits one additional enemy in its arc.",
-    effect: { kind: "secondary-targets", amount: 1 },
+    description: "+0.6m crescent reach.",
+    effect: { kind: "area-radius", amount: 0.6 },
   },
   "knight-heavy-blade": {
     id: "knight-heavy-blade",
@@ -434,8 +474,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 3,
     label: "Crescent Sweep",
-    description: "Your slash hits one additional enemy in its arc.",
-    effect: { kind: "secondary-targets", amount: 1 },
+    description: "Widen the crescent from 120° to 150°.",
+    effect: { kind: "arc-cosine", amount: -0.25 },
   },
   "knight-bulwark": {
     id: "knight-bulwark",
@@ -450,8 +490,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 4,
     label: "Whirlwind",
-    description: "Your slash hits two additional enemies in its arc.",
-    effect: { kind: "secondary-targets", amount: 2 },
+    description: "Slash 30% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.7 },
   },
   "wizard-flame-orb": {
     id: "wizard-flame-orb",

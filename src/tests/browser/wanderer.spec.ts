@@ -21,6 +21,42 @@ test.beforeEach(async ({ page }, testInfo) => {
     await installIncidentalChoiceHandlers(page);
 });
 
+const primeClassChoice = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wanderer.save.primary",
+      JSON.stringify({
+        schemaVersion: 2,
+        world: {
+          seed: "wanderer-known-seed",
+          generatorVersion: "wanderer-web-v2",
+        },
+        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+        resources: {
+          wood: 120,
+          stone: 120,
+          scrap: 120,
+          essence: 20,
+          bossCore: 0,
+        },
+        buildings: [],
+        defeatedBossIds: [],
+        upgrades: [],
+        nextBuildingSerial: 1,
+        committedAt: 0,
+        savePointId: "campfire:home",
+        savePointPosition: { x: 0, y: 0 },
+        classProgression: {
+          experience: 30,
+          level: 1,
+          playerClass: null,
+          skillIds: [],
+        },
+      }),
+    );
+  });
+};
+
 const checkWithPendingClassResolution = async (
   _page: Page,
   target: Locator,
@@ -110,6 +146,42 @@ test(
   },
 );
 
+test(
+  "earned experience opens a class choice and the selected class is visible",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-wizard").click();
+    await expect(classModal).toBeHidden();
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+  },
+);
+
+test(
+  "Knight attacks render as crescents instead of projectiles",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-knight").click();
+    const canvas = page.getByTestId("world-canvas");
+    await expect(canvas).toHaveAttribute(
+      "data-crescent-attack-count",
+      /[1-9]/,
+      {
+        timeout: 8_000,
+      },
+    );
+    await expect(canvas).toHaveAttribute("data-projectile-count", "0");
+  },
+);
+
 test("the icon HUD exposes compact resources and the current skill tree", async ({
   page,
 }) => {
@@ -132,6 +204,22 @@ test("the icon HUD exposes compact resources and the current skill tree", async 
   await expect(page.getByTestId("skill-tree-panel")).toBeVisible();
   await expect(page.getByTestId("skill-tree-summary")).toContainText("Level 0");
   await expect(page.getByTestId("quick-stats")).toContainText("L0");
+});
+
+test("the Stats button shows only the eight character stats", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const toggle = page.getByTestId("stats-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Stats");
+  await expect(toggle).toHaveAttribute("aria-controls", "stats-panel");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(page.getByTestId("stats-panel")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("stats-list")).toHaveText(
+    /Strength.*Dexterity.*Agility.*Luck.*Vitality.*Magic.*Defense.*Magic Defense/s,
+  );
 });
 
 const clickWithPendingUpgradeResolution = async (

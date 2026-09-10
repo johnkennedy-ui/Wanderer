@@ -12,6 +12,7 @@ export type RuntimeDiagnosticsInput = Pick<
   | "resources"
   | "enemies"
   | "projectiles"
+  | "crescentAttacks"
   | "floorDrops"
   | "defeatedBossIds"
   | "upgrades"
@@ -54,6 +55,11 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       targetPosition: copyVector(projectile.targetPosition),
       chainTargetIds: [...projectile.chainTargetIds],
     })),
+    crescentAttacks: state.crescentAttacks.map((attack) => ({
+      ...attack,
+      origin: copyVector(attack.origin),
+      direction: copyVector(attack.direction),
+    })),
     floorDrops: state.floorDrops.map((drop) => ({
       ...drop,
       position: copyVector(drop.position),
@@ -87,6 +93,7 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       activeEnemies: enemies.filter((enemy) => !enemy.defeated).length,
       retainedEnemyDeltas: enemies.length,
       projectiles: state.projectiles.length,
+      crescentAttacks: state.crescentAttacks.length,
       floorDrops: state.floorDrops.length,
       cachedChunks: state.chunkCache?.size ?? 0,
     },

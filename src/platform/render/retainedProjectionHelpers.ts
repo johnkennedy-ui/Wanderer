@@ -21,6 +21,7 @@ export class RetainedProjection {
   private readonly auras: MarkerMap = new Map();
   private readonly enemies: MarkerMap = new Map();
   private readonly projectiles: MarkerMap = new Map();
+  private readonly crescents: MarkerMap = new Map();
   private readonly drops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
   private meshesRemoved = 0;
@@ -136,6 +137,21 @@ export class RetainedProjection {
       );
     }
     this.removeMissing(this.projectiles, projectiles);
+    const crescents = new Set<string>();
+    for (const attack of snapshot.crescentAttacks) {
+      crescents.add(attack.id);
+      const mesh = this.marker(
+        this.crescents,
+        attack.id,
+        attack.origin,
+        this.resources.crescent(attack.radius, attack.arcCosine),
+        this.resources.knightCrescentMaterial(),
+        0.08,
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = Math.atan2(attack.direction.y, attack.direction.x);
+    }
+    this.removeMissing(this.crescents, crescents);
     const drops = new Set<string>();
     for (const drop of snapshot.floorDrops) {
       drops.add(drop.id);
@@ -176,6 +192,7 @@ export class RetainedProjection {
         auras: this.auras.size,
         enemies: this.enemies.size,
         projectiles: this.projectiles.size,
+        crescents: this.crescents.size,
         drops: this.drops.size,
       }),
     });
@@ -191,6 +208,7 @@ export class RetainedProjection {
       this.auras,
       this.enemies,
       this.projectiles,
+      this.crescents,
       this.drops,
     ]) {
       this.meshesRemoved += map.size;
