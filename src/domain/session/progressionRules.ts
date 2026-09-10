@@ -31,6 +31,14 @@ export const playerLevelForExperience = (
   return Math.min(5, reached) as 0 | 1 | 2 | 3 | 4 | 5;
 };
 
+/** Only the mobile martial classes retain auto-attacks while moving. */
+export const movingAttackSpeedMultiplierFor = (
+  progression: ClassProgression,
+): number =>
+  progression.playerClass === "knight" || progression.playerClass === "archer"
+    ? 0.5
+    : 0;
+
 export const pendingClassSkillChoicesFor = (
   progression: ClassProgression,
 ): readonly ClassSkillId[] => {

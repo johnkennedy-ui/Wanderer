@@ -72,6 +72,30 @@ test("earned experience opens a class choice and the selected class is visible",
   await expect(page.getByTestId("class-progression")).toContainText("Wizard");
 });
 
+test("the icon HUD exposes compact resources and the current skill tree", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+
+  const storage = page.getByTestId("build-Storage");
+  await expect(storage).toHaveAttribute("aria-label", "Place Storage");
+  await expect(storage).toHaveText("▣");
+
+  const resourcesToggle = page.getByTestId("resources-toggle");
+  await expect(resourcesToggle).toHaveAttribute("aria-label", "Resources");
+  await resourcesToggle.click();
+  await expect(page.getByTestId("resources-panel")).toBeVisible();
+  await expect(page.getByTestId("resources")).toContainText("◫");
+  await expect(page.getByTestId("resource-capacity")).toContainText("Capacity");
+
+  const skillTreeToggle = page.getByTestId("skill-tree-toggle");
+  await expect(skillTreeToggle).toHaveAttribute("aria-label", "Skill Tree");
+  await skillTreeToggle.click();
+  await expect(page.getByTestId("skill-tree-panel")).toBeVisible();
+  await expect(page.getByTestId("skill-tree-summary")).toContainText("Level 0");
+  await expect(page.getByTestId("quick-stats")).toContainText("L0");
+});
+
 const clickWithPendingUpgradeResolution = async (
   page: Page,
   target: Locator,

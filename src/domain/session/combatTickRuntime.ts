@@ -59,6 +59,8 @@ const copyProjectile = (projectile: RuntimeProjectile): RuntimeProjectile => ({
 
 export interface AutoCombatPhaseInput {
   readonly delta: number;
+  /** A moving class may accumulate attack time at a reduced, deterministic rate. */
+  readonly attackSpeedMultiplier?: number;
   readonly playerPosition: Vector2;
   readonly enemies: ReadonlyMap<string, RuntimeEnemy>;
   readonly buildings: readonly BuildingState[];
@@ -76,9 +78,10 @@ export interface AutoCombatPhaseResult {
   readonly combatStatus: string;
 }
 
-/** Advances stationary auto-combat and allocates at most one projectile serial. */
+/** Advances auto-combat and allocates at most one projectile serial. */
 export const advanceAutoCombatPhase = ({
   delta,
+  attackSpeedMultiplier = 1,
   playerPosition,
   enemies,
   buildings,
@@ -98,7 +101,7 @@ export const advanceAutoCombatPhase = ({
   const decision = projectileLaunchDecision({
     targets,
     attackElapsed,
-    delta,
+    delta: delta * attackSpeedMultiplier,
     attackIntervalSeconds: stats.attackIntervalSeconds,
   });
   if (decision.kind === "no-target")
