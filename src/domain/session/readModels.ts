@@ -8,12 +8,14 @@ import type {
   BuildingState,
   ClassProgression,
   ClassSkillId,
+  CrescentAttackState,
   ChunkRecipe,
   EnemyKind,
   FloorDropState,
   InputSource,
   PlayerClass,
   PlayerState,
+  PlayerStats,
   ReadonlyResourceBag,
   UpgradeId,
   Vector2,
@@ -45,15 +47,26 @@ export interface ReadModelProjectileInput {
   readonly style?: "basic" | "slash" | "magic" | "arrow";
 }
 
+export interface ReadModelCrescentAttackInput {
+  readonly id: string;
+  readonly origin: Vector2;
+  readonly direction: Vector2;
+  readonly radius: number;
+  readonly arcCosine: number;
+  readonly elapsed: number;
+}
+
 /** Explicit facts from which the two narrow presentation views are built. */
 export interface PresentationProjectionInput {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
+  readonly playerStats: PlayerStats;
   readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly resources: ReadonlyResourceBag;
   readonly buildings: readonly BuildingState[];
   readonly enemies: ReadonlyMap<string, ReadModelEnemyInput>;
   readonly projectiles: readonly ReadModelProjectileInput[];
+  readonly crescentAttacks: readonly ReadModelCrescentAttackInput[];
   readonly floorDrops: readonly FloorDropState[];
   readonly visibleChunks: readonly ChunkRecipe[];
   readonly materialCapacity: number;
@@ -88,6 +101,7 @@ export const projectGamePresentation = (
     hp: input.player.hp,
     maxHp: input.player.maxHp,
   };
+  const playerStats = { ...input.playerStats };
   const playerHitRecovery = { ...input.playerHitRecovery };
   const resources = cloneResources(input.resources);
   const buildings = input.buildings.map((building) => ({
@@ -130,6 +144,15 @@ export const projectGamePresentation = (
       style: projectile.style ?? "basic",
     };
   });
+  const crescentAttacks: readonly CrescentAttackState[] =
+    input.crescentAttacks.map((attack) => ({
+      id: attack.id,
+      origin: copyVector(attack.origin),
+      direction: copyVector(attack.direction),
+      radius: attack.radius,
+      arcCosine: attack.arcCosine,
+      progress: Math.min(1, attack.elapsed / 0.18),
+    }));
   const floorDrops = input.floorDrops
     .filter((drop) =>
       visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
@@ -142,6 +165,7 @@ export const projectGamePresentation = (
   const ui = {
     world,
     player,
+    playerStats,
     resources,
     materialCapacity: input.materialCapacity,
     buildRadius: input.buildRadius,
@@ -166,6 +190,7 @@ export const projectGamePresentation = (
     playerHitRecovery,
     enemies,
     projectiles,
+    crescentAttacks,
     floorDrops,
     visibleBuildings,
     visibleChunks: input.visibleChunks,

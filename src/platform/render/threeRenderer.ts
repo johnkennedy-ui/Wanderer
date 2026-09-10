@@ -102,6 +102,34 @@ const healingHutAura = (radius: number): THREE.Mesh =>
     }),
   );
 
+const knightCrescent = (
+  radius: number,
+  arcCosine: number,
+  direction: Vector2,
+): THREE.Mesh => {
+  const halfArc = Math.acos(arcCosine);
+  const mesh = new THREE.Mesh(
+    new THREE.RingGeometry(
+      Math.max(0.45, radius - 0.32),
+      radius,
+      32,
+      1,
+      -halfArc,
+      halfArc * 2,
+    ),
+    new THREE.MeshBasicMaterial({
+      color: 0xd8dde8,
+      transparent: true,
+      opacity: 0.86,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.rotation.z = Math.atan2(direction.y, direction.x);
+  return mesh;
+};
+
 /** Disposable Three.js projection. It only receives snapshots; it cannot command the session. */
 export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const canvas = document.createElement("canvas");
@@ -242,6 +270,16 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         mesh.position.y = 0.72;
         projection.add(mesh);
       }
+      for (const attack of snapshot.crescentAttacks) {
+        const mesh = knightCrescent(
+          attack.radius,
+          attack.arcCosine,
+          attack.direction,
+        );
+        mesh.position.copy(toWorld(attack.origin));
+        mesh.position.y = 0.08;
+        projection.add(mesh);
+      }
       for (const drop of snapshot.floorDrops) {
         const mesh = new THREE.Mesh(
           new THREE.DodecahedronGeometry(0.22, 0),
@@ -280,6 +318,10 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
       positionPlayerHealthLabel(snapshot);
       canvas.dataset.floorDropCount = String(snapshot.floorDrops.length);
+      canvas.dataset.projectileCount = String(snapshot.projectiles.length);
+      canvas.dataset.crescentAttackCount = String(
+        snapshot.crescentAttacks.length,
+      );
       canvas.dataset.playerHitRecovery = snapshot.playerHitRecovery.active
         ? "active"
         : "inactive";

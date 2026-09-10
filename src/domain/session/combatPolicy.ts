@@ -135,21 +135,26 @@ export const classSecondaryTargetIdsFor = <Target extends CombatTarget>({
 }: ClassSecondaryTargetInput<Target>): readonly string[] => {
   if (maximumTargets <= 0) return [];
   const others = targets.filter((target) => target.id !== primaryTarget.id);
+  const applyTargetLimit = (eligibleTargets: readonly Target[]) =>
+    Number.isFinite(maximumTargets)
+      ? eligibleTargets.slice(0, maximumTargets)
+      : eligibleTargets;
   if (style === "magic")
-    return others
-      .filter(
+    return applyTargetLimit(
+      others.filter(
         (target) =>
           distance(target.position, primaryTarget.position) <= areaRadius,
-      )
-      .slice(0, maximumTargets)
-      .map((target) => target.id);
+      ),
+    ).map((target) => target.id);
   if (style === "slash") {
     const direction = normalize({
       x: primaryTarget.position.x - playerPosition.x,
       y: primaryTarget.position.y - playerPosition.y,
     });
-    return others
-      .filter((target) => {
+    return applyTargetLimit(
+      others.filter((target) => {
+        if (distance(playerPosition, target.position) > areaRadius)
+          return false;
         const candidate = normalize({
           x: target.position.x - playerPosition.x,
           y: target.position.y - playerPosition.y,
@@ -157,11 +162,10 @@ export const classSecondaryTargetIdsFor = <Target extends CombatTarget>({
         return (
           direction.x * candidate.x + direction.y * candidate.y >= arcCosine
         );
-      })
-      .slice(0, maximumTargets)
-      .map((target) => target.id);
+      }),
+    ).map((target) => target.id);
   }
-  return others.slice(0, maximumTargets).map((target) => target.id);
+  return applyTargetLimit(others).map((target) => target.id);
 };
 
 export interface ProjectileFlightInput {

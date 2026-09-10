@@ -8,6 +8,42 @@ import {
 
 const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
 
+const primeClassChoice = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wanderer.save.primary",
+      JSON.stringify({
+        schemaVersion: 2,
+        world: {
+          seed: "wanderer-known-seed",
+          generatorVersion: "wanderer-web-v2",
+        },
+        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+        resources: {
+          wood: 120,
+          stone: 120,
+          scrap: 120,
+          essence: 20,
+          bossCore: 0,
+        },
+        buildings: [],
+        defeatedBossIds: [],
+        upgrades: [],
+        nextBuildingSerial: 1,
+        committedAt: 0,
+        savePointId: "campfire:home",
+        savePointPosition: { x: 0, y: 0 },
+        classProgression: {
+          experience: 30,
+          level: 1,
+          playerClass: null,
+          skillIds: [],
+        },
+      }),
+    );
+  });
+};
+
 const choosePendingClassChoicesIfOpen = async (
   page: Page,
 ): Promise<boolean> => {
@@ -63,6 +99,7 @@ const checkWithPendingClassResolution = async (
 test("earned experience opens a class choice and the selected class is visible", async ({
   page,
 }) => {
+  await primeClassChoice(page);
   await page.goto(applicationPath);
   const classModal = page.getByTestId("class-modal");
   await expect(classModal).toBeVisible({ timeout: 8_000 });
@@ -70,6 +107,21 @@ test("earned experience opens a class choice and the selected class is visible",
   await expect(classModal).toBeHidden();
   await openStatus(page);
   await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+});
+
+test("Knight attacks render as crescents instead of projectiles", async ({
+  page,
+}) => {
+  await primeClassChoice(page);
+  await page.goto(applicationPath);
+  const classModal = page.getByTestId("class-modal");
+  await expect(classModal).toBeVisible({ timeout: 8_000 });
+  await classModal.getByTestId("class-knight").click();
+  const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-crescent-attack-count", /[1-9]/, {
+    timeout: 8_000,
+  });
+  await expect(canvas).toHaveAttribute("data-projectile-count", "0");
 });
 
 test("the icon HUD exposes compact resources and the current skill tree", async ({
@@ -94,6 +146,22 @@ test("the icon HUD exposes compact resources and the current skill tree", async 
   await expect(page.getByTestId("skill-tree-panel")).toBeVisible();
   await expect(page.getByTestId("skill-tree-summary")).toContainText("Level 0");
   await expect(page.getByTestId("quick-stats")).toContainText("L0");
+});
+
+test("the Stats button shows only the eight character stats", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const toggle = page.getByTestId("stats-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Stats");
+  await expect(toggle).toHaveAttribute("aria-controls", "stats-panel");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(page.getByTestId("stats-panel")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("stats-list")).toHaveText(
+    /Strength.*Dexterity.*Agility.*Luck.*Vitality.*Magic.*Defense.*Magic Defense/s,
+  );
 });
 
 const clickWithPendingUpgradeResolution = async (
@@ -222,8 +290,8 @@ test("initial browser load uses compact circular actions with accessible hidden 
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
   await expect(page.getByTestId("save-button")).toBeEnabled();
-  await expect(page.getByTestId("resources")).toContainText("Wood");
-  await expect(page.getByTestId("resources")).toContainText("Boss Core");
+  await expect(page.locator('[aria-label="Wood: 120"]')).toHaveCount(1);
+  await expect(page.locator('[aria-label="Boss Core: 0"]')).toHaveCount(1);
   await expect(page.getByTestId("boss-route-cue")).toContainText(
     "boss is 6m east of the home Campfire",
   );
@@ -234,7 +302,8 @@ test("initial browser load uses compact circular actions with accessible hidden 
   await openBuildMenu(page);
   await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
   await expect(page.getByTestId("build-radius")).toContainText("3m/4m/5m");
-  await expect(page.getByTestId("build-Healer")).toHaveText(
+  await expect(page.getByTestId("build-Healer")).toHaveAttribute(
+    "aria-label",
     "Place Healing Hut",
   );
 });
@@ -293,7 +362,7 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
   await expect(canvas).toHaveAttribute("data-floor-drop-count", /[1-9]/, {
     timeout: 4_000,
   });
-  await expect(page.getByTestId("resources")).toContainText("Wood 120");
+  await expect(page.locator('[aria-label="Wood: 120"]')).toHaveCount(1);
   await expect(page.getByTestId("save-message")).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
@@ -480,8 +549,8 @@ test("Storage exposes an enforced common-material capacity while Boss Core is ex
     page.getByTestId("build-Storage"),
   );
   await tapCanvas(page, 0.5, 0.5);
-  await expect(page.getByTestId("resources")).toContainText(
-    "capacity 180 each",
+  await expect(page.getByTestId("resource-capacity")).toContainText(
+    "Capacity 180 each",
   );
   await expect(page.getByTestId("effects")).toContainText(
     "Boss Core is exempt",
@@ -657,7 +726,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await expect(modal).toBeHidden();
   await openBuildMenu(page);
   await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(resources).toContainText("Boss Core");
+  await expect(page.locator('[aria-label^="Boss Core:"]')).toHaveCount(1);
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
@@ -667,6 +736,6 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
-  await expect(resources).toContainText("Boss Core 0");
+  await expect(page.locator('[aria-label="Boss Core: 0"]')).toHaveCount(1);
   await expect(modal).toBeHidden();
 });
