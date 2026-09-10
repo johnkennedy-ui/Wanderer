@@ -6,105 +6,109 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
+import { decodeSave } from "../../domain/save";
+import {
+  choosePendingClassChoicesIfOpen,
+  installIncidentalChoiceHandlers,
+} from "./m5-test-helpers";
+
 const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
 
-const choosePendingClassChoicesIfOpen = async (
-  page: Page,
-): Promise<boolean> => {
-  const classModal = page.getByTestId("class-modal");
-  let selected = false;
-  for (let selection = 0; selection < 4; selection += 1) {
-    if (!(await classModal.isVisible())) return selected;
-    const wizard = classModal.getByTestId("class-wizard");
-    if ((await wizard.count()) === 1) await wizard.click();
-    else await classModal.getByRole("button").first().click();
-    selected = true;
-    await page.waitForTimeout(25);
-  }
-  return selected;
-};
-
-const choosePendingUpgradeIfOpen = async (page: Page): Promise<boolean> => {
-  const modal = page.getByTestId("upgrade-modal");
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (await choosePendingClassChoicesIfOpen(page)) continue;
-    if (!(await modal.isVisible())) return false;
-    try {
-      await modal.getByRole("button").first().click({ timeout: 1_000 });
-      await expect(modal).toBeHidden({ timeout: 1_000 });
-      return true;
-    } catch {
-      await page.waitForTimeout(25);
-    }
-  }
-  return false;
-};
-
-const hasPendingChoice = async (page: Page): Promise<boolean> =>
-  (await page.getByTestId("class-modal").isVisible()) ||
-  (await page.getByTestId("upgrade-modal").isVisible());
+// Handlers run at Playwright actionability/assertion boundaries, including
+// direct spec actions. They never consume either modal under acceptance test.
+test.beforeEach(async ({ page }, testInfo) => {
+  if (!testInfo.tags.includes("@manual-choices"))
+    await installIncidentalChoiceHandlers(page);
+});
 
 const checkWithPendingClassResolution = async (
-  page: Page,
+  _page: Page,
   target: Locator,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    await choosePendingUpgradeIfOpen(page);
-    try {
-      await target.check({ timeout: 5_000 });
-      return;
-    } catch (error) {
-      if (!(await hasPendingChoice(page))) throw error;
-    }
-  }
-  throw new Error("A pending class choice kept the requested control blocked.");
+  await target.check({ timeout: 5_000 });
 };
 
-test("earned experience opens a class choice and the selected class is visible", async ({
-  page,
-}) => {
-  await page.addInitScript(
-    ({ key, value }) => window.localStorage.setItem(key, value),
-    {
-      key: "wanderer.save.primary",
-      value: JSON.stringify({
-        schemaVersion: 2,
-        world: {
-          seed: "wanderer-known-seed",
-          generatorVersion: "wanderer-web-v1",
-        },
-        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
-        resources: {
-          wood: 120,
-          stone: 120,
-          scrap: 120,
-          essence: 20,
-          bossCore: 0,
-        },
-        buildings: [],
-        defeatedBossIds: [],
-        upgrades: [],
-        nextBuildingSerial: 1,
-        committedAt: 1700000000000,
-        savePointId: "campfire:home",
-        savePointPosition: { x: 0, y: 0 },
-        classProgression: {
-          experience: 30,
-          level: 1,
-          playerClass: null,
-          skillIds: [],
-        },
-      }),
-    },
-  );
-  await page.goto(applicationPath);
-  const classModal = page.getByTestId("class-modal");
-  await expect(classModal).toBeVisible({ timeout: 8_000 });
-  await classModal.getByTestId("class-wizard").click();
-  await expect(classModal).toBeHidden();
-  await openStatus(page);
-  await expect(page.getByTestId("class-progression")).toContainText("Wizard");
-});
+test(
+  "gameplay earns the class threshold from a valid 29 XP level-0 save fixture",
+  {
+    tag: "@manual-choices",
+  },
+  async ({ page }) => {
+    // A supported below-threshold save, NOT a fresh 0-to-30 claim and NOT an
+    // already-earned class. No runtime state is written after application boot.
+    const saved = JSON.stringify({
+      schemaVersion: 2,
+      world: {
+        seed: "wanderer-known-seed",
+        generatorVersion: "wanderer-web-v1",
+      },
+      player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+      resources: {
+        wood: 120,
+        stone: 120,
+        scrap: 120,
+        essence: 20,
+        bossCore: 0,
+      },
+      buildings: [],
+      defeatedBossIds: [],
+      upgrades: [],
+      nextBuildingSerial: 1,
+      committedAt: 1700000000000,
+      savePointId: "campfire:home",
+      savePointPosition: { x: 0, y: 0 },
+      classProgression: {
+        experience: 29,
+        level: 0,
+        playerClass: null,
+        skillIds: [],
+      },
+    });
+    const decoded = decodeSave(saved);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error(decoded.message);
+    expect(decoded.document.classProgression).toEqual({
+      experience: 29,
+      level: 0,
+      playerClass: null,
+      skillIds: [],
+    });
+    await page.addInitScript(
+      ({ key, value }) => window.localStorage.setItem(key, value),
+      { key: "wanderer.save.primary", value: saved },
+    );
+    await page.goto(applicationPath, { waitUntil: "commit" });
+    // Start observing at navigation commit rather than waiting for every asset.
+    // Observe the visible, below-threshold HUD before waiting for real combat.
+    // Missing this precondition fails; the test never reloads/retries until green.
+    await expect(
+      page.locator('[data-testid="quick-level"]:visible'),
+    ).toHaveText("✦ L0 · 29 XP");
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    const earned = /L(\d+) · (\d+) XP/.exec(
+      await page.getByTestId("quick-level").innerText(),
+    );
+    if (earned === null) throw new Error("Missing public earned-XP witness");
+    expect(Number(earned[1])).toBeGreaterThanOrEqual(1);
+    expect(Number(earned[2])).toBeGreaterThanOrEqual(30);
+    await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+      "data-floor-drop-count",
+      /[1-9]/,
+    );
+    await classModal.getByTestId("class-wizard").click();
+    await expect(classModal.getByTestId("class-wizard")).toHaveCount(0);
+    await expect(classModal).toBeHidden();
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+    await expect(page.getByTestId("save-message")).toContainText(
+      "Recovered last explicit campfire save",
+    );
+    expect(
+      await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+    ).toBe(saved);
+  },
+);
 
 test("the icon HUD exposes compact resources and the current skill tree", async ({
   page,
@@ -131,33 +135,20 @@ test("the icon HUD exposes compact resources and the current skill tree", async 
 });
 
 const clickWithPendingUpgradeResolution = async (
-  page: Page,
+  _page: Page,
   target: Locator,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await choosePendingUpgradeIfOpen(page);
-    try {
-      await target.click({ timeout: 5_000 });
-      return;
-    } catch (error) {
-      if (!(await hasPendingChoice(page))) throw error;
-    }
-  }
-  throw new Error(
-    "A pending class or Boss Core choice kept the action blocked.",
-  );
+  await target.click({ timeout: 5_000 });
 };
 
 const openStatus = async (page: Page): Promise<void> => {
   const toggle = page.getByTestId("character-status-toggle");
-  await choosePendingUpgradeIfOpen(page);
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await toggle.click();
   await expect(page.getByTestId("character-status-panel")).toBeVisible();
 };
 
 const openBuildMenu = async (page: Page): Promise<void> => {
-  await choosePendingClassChoicesIfOpen(page);
   const toggle = page.getByTestId("build-menu-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await clickWithPendingUpgradeResolution(page, toggle);
@@ -173,45 +164,9 @@ const tapCanvas = async (
   const canvas = page.getByTestId("world-canvas");
   const box = await canvas.boundingBox();
   if (box === null) throw new Error("World canvas was not laid out");
-  const clientX = box.x + box.width * xRatio;
-  const clientY = box.y + box.height * yRatio;
-  if (useTouchPointer) {
-    await choosePendingUpgradeIfOpen(page);
-    await canvas.dispatchEvent("pointerdown", {
-      pointerId: 41,
-      pointerType: "touch",
-      isPrimary: true,
-      button: 0,
-      buttons: 1,
-      clientX,
-      clientY,
-    });
-    await canvas.dispatchEvent("pointerup", {
-      pointerId: 41,
-      pointerType: "touch",
-      isPrimary: true,
-      button: 0,
-      buttons: 0,
-      clientX,
-      clientY,
-    });
-    return;
-  }
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await choosePendingUpgradeIfOpen(page);
-    try {
-      await canvas.click({
-        position: { x: box.width * xRatio, y: box.height * yRatio },
-        timeout: 5_000,
-      });
-      return;
-    } catch (error) {
-      if (!(await hasPendingChoice(page))) throw error;
-    }
-  }
-  throw new Error(
-    "A pending class or Boss Core choice kept the world canvas blocked.",
-  );
+  const position = { x: box.width * xRatio, y: box.height * yRatio };
+  if (useTouchPointer) await canvas.tap({ position, timeout: 5_000 });
+  else await canvas.click({ position, timeout: 5_000 });
 };
 
 test("initial browser load uses compact circular actions with accessible hidden panels", async ({
@@ -310,7 +265,6 @@ test("enabled primary canvas taps travel to a destination when no build mode is 
   if (initialPosition === null)
     throw new Error("World position text was not available");
 
-  await choosePendingClassChoicesIfOpen(page);
   await checkWithPendingClassResolution(page, toggle);
   await clickWithPendingUpgradeResolution(
     page,
@@ -376,7 +330,6 @@ test("a Healing Hut is selected and placed through the canvas without moving the
   if (beforePosition === null || beforeResources === null)
     throw new Error("Initial player state was not available");
 
-  await choosePendingClassChoicesIfOpen(page);
   await checkWithPendingClassResolution(
     page,
     page.getByTestId("tap-to-move-toggle"),
@@ -513,7 +466,6 @@ test("Storage exposes an enforced common-material capacity while Boss Core is ex
 }) => {
   await page.goto(applicationPath);
   await openStatus(page);
-  await choosePendingClassChoicesIfOpen(page);
   await openBuildMenu(page);
   await clickWithPendingUpgradeResolution(
     page,
@@ -626,7 +578,6 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 }) => {
   await page.goto(applicationPath);
   await openStatus(page);
-  await choosePendingClassChoicesIfOpen(page);
   await clickWithPendingUpgradeResolution(
     page,
     page.getByTestId("save-button"),
@@ -651,66 +602,70 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
   );
 });
 
-test("public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly", async ({
-  page,
-}) => {
-  test.setTimeout(60_000);
-  await page.goto(applicationPath);
-  await openStatus(page);
-  const saveMessage = page.getByTestId("save-message");
-  const position = page.getByTestId("position");
-  const combat = page.getByTestId("combat-status");
-  const modal = page.getByTestId("upgrade-modal");
-  const resources = page.getByTestId("resources");
+test(
+  "public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.goto(applicationPath);
+    await openStatus(page);
+    const saveMessage = page.getByTestId("save-message");
+    const position = page.getByTestId("position");
+    const combat = page.getByTestId("combat-status");
+    const modal = page.getByTestId("upgrade-modal");
+    const resources = page.getByTestId("resources");
 
-  await expect(saveMessage).toContainText(
-    "Fresh runtime: no committed save loaded.",
-  );
-  await page.keyboard.down("d");
-  await expect(position).toContainText("input: keyboard");
-  await page.waitForTimeout(1_000);
-  await page.keyboard.up("d");
-  await expect(combat).toContainText("Auto-attacking");
+    await expect(saveMessage).toContainText(
+      "Fresh runtime: no committed save loaded.",
+    );
+    await page.keyboard.down("d");
+    await expect(position).toContainText("input: keyboard");
+    await page.waitForTimeout(1_000);
+    await page.keyboard.up("d");
+    await expect(combat).toContainText("Auto-attacking");
 
-  await expect
-    .poll(
-      async () => {
-        await choosePendingClassChoicesIfOpen(page);
-        return modal.isVisible();
-      },
-      { timeout: 30_000, intervals: [100, 250, 500] },
-    )
-    .toBe(true);
-  const choices = modal.getByRole("button");
-  await expect(choices).toHaveCount(3);
-  const choiceIds = await choices.evaluateAll((buttons) =>
-    buttons.map((button) => button.dataset.testid),
-  );
-  expect(new Set(choiceIds).size).toBe(3);
-  await page.mouse.click(8, 8);
-  await expect(modal).toBeVisible();
-  const selectedUpgradeLabel = (await choices.first().innerText()).split(
-    ":",
-  )[0];
+    await expect
+      .poll(
+        async () => {
+          await choosePendingClassChoicesIfOpen(page);
+          return modal.isVisible();
+        },
+        { timeout: 30_000, intervals: [100, 250, 500] },
+      )
+      .toBe(true);
+    const choices = modal.getByRole("button");
+    await expect(choices).toHaveCount(3);
+    const choiceIds = await choices.evaluateAll((buttons) =>
+      buttons.map((button) => button.dataset.testid),
+    );
+    expect(new Set(choiceIds).size).toBe(3);
+    await page.mouse.click(8, 8);
+    await expect(modal).toBeVisible();
+    const selectedUpgradeLabel = (await choices.first().innerText()).split(
+      ":",
+    )[0];
 
-  await choices.first().click();
-  await expect(modal).toBeHidden();
-  await openBuildMenu(page);
-  await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(resources.getByTitle("Boss Core", { exact: true })).toHaveCount(
-    1,
-  );
-  await expect(saveMessage).toContainText(
-    "Fresh runtime: no committed save loaded.",
-  );
+    await choices.first().click();
+    await expect(modal).toBeHidden();
+    await openBuildMenu(page);
+    await expect(page.getByTestId("effects")).toContainText(
+      selectedUpgradeLabel,
+    );
+    await expect(
+      resources.getByTitle("Boss Core", { exact: true }),
+    ).toHaveCount(1);
+    await expect(saveMessage).toContainText(
+      "Fresh runtime: no committed save loaded.",
+    );
 
-  await page.reload();
-  await openStatus(page);
-  await expect(saveMessage).toContainText(
-    "Fresh runtime: no committed save loaded.",
-  );
-  await expect(
-    resources.getByTitle("Boss Core", { exact: true }),
-  ).toHaveAttribute("aria-label", "Boss Core: 0");
-  await expect(modal).toBeHidden();
-});
+    await page.reload();
+    await openStatus(page);
+    await expect(saveMessage).toContainText(
+      "Fresh runtime: no committed save loaded.",
+    );
+    await expect(
+      resources.getByTitle("Boss Core", { exact: true }),
+    ).toHaveAttribute("aria-label", "Boss Core: 0");
+    await expect(modal).toBeHidden();
+  },
+);

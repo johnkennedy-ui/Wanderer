@@ -15,60 +15,71 @@ export const openBuild = async (page: Page): Promise<void> => {
   await expect(page.getByTestId("build-menu-panel")).toBeVisible();
 };
 
+/** Resolve distinct public choices, never retry a failed selection. The class
+ * container is reused for consecutive skill tiers, so identity/key progress,
+ * not container disappearance, is the completion witness. */
+export const choosePendingClassChoicesIfOpen = async (
+  page: Page,
+): Promise<void> => {
+  const modal = page.getByTestId("class-modal");
+  const choices = page.getByTestId("class-choices");
+  const seen = new Set<string>();
+  while (await modal.isVisible()) {
+    const key = await choices.getAttribute("data-choice-key");
+    if (!key || seen.has(key))
+      throw new Error("Class choice did not progress to a distinct public key");
+    seen.add(key);
+    const wizard = modal.getByTestId("class-wizard");
+    const button =
+      (await wizard.count()) === 1 ? wizard : modal.getByRole("button").first();
+    const id = await button.getAttribute("data-testid");
+    const label = (await button.innerText()).split(":")[0];
+    if (!id || !label) throw new Error("Class choice lacks public identity");
+    await button.click();
+    await expect(modal.getByTestId(id)).toHaveCount(0);
+    await expect(choices).not.toHaveAttribute("data-choice-key", key);
+    await expect(page.getByTestId("effects")).toContainText(label);
+  }
+};
+
+/** Only opt in where modals are incidental. Predictable class/boss acceptance
+ * tests keep their own selections. No visibility-check/action retry wrapper,
+ * arbitrary global choice cap, hidden click or swallowed failure. */
+export const installIncidentalChoiceHandlers = async (
+  page: Page,
+): Promise<void> => {
+  await page.addLocatorHandler(
+    page.getByTestId("class-modal"),
+    async () => choosePendingClassChoicesIfOpen(page),
+    { noWaitAfter: true },
+  );
+  await page.addLocatorHandler(
+    page.getByTestId("upgrade-modal"),
+    async (modal) => {
+      const choices = page.getByTestId("upgrade-choices");
+      const key = await choices.getAttribute("data-choice-key");
+      if (!key) throw new Error("Boss choice lacks public key");
+      await expect(modal.getByRole("button")).toHaveCount(3);
+      const button = modal.getByRole("button").first();
+      const id = await button.getAttribute("data-testid");
+      const label = (await button.innerText()).split(":")[0];
+      if (!id || !label) throw new Error("Boss choice lacks public identity");
+      await button.click();
+      await expect(modal.getByTestId(id)).toHaveCount(0);
+      await expect(choices).not.toHaveAttribute("data-choice-key", key);
+      await expect(page.getByTestId("effects")).toContainText(label);
+    },
+    { noWaitAfter: true },
+  );
+};
+
 export const openM5World = async (page: Page): Promise<void> => {
+  await installIncidentalChoiceHandlers(page);
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? "/");
   await expect(page.getByTestId("world-canvas")).toBeVisible();
-  await openStatus(page);
-  // Complete the real pursuit route, not just a currently open modal. Polls
-  // observe progress; no click retries, sleeps or gameplay injection.
-  await page.keyboard.down("d");
-  try {
-    await expect
-      .poll(async () => {
-        const match = /^Position: (-?\d+(?:\.\d+)?),/.exec(
-          await page.getByTestId("position").innerText(),
-        );
-        return match === null ? Number.NaN : Number(match[1]);
-      })
-      .toBeGreaterThanOrEqual(3);
-  } finally {
-    await page.keyboard.up("d");
-  }
-  const classModal = page.getByTestId("class-modal");
-  const bossModal = page.getByTestId("upgrade-modal");
-  // At most one class and four distinct earned tiers precede the boss choice.
-  // This is bounded progression through different choices, not retrying an action.
-  for (let choice = 0; choice < 6; choice += 1) {
-    await expect(
-      page.locator(
-        '[data-testid="class-modal"]:visible, [data-testid="upgrade-modal"]:visible',
-      ),
-    ).toHaveCount(1, { timeout: 30_000 });
-    if (await classModal.isVisible()) {
-      await expect(bossModal).toBeHidden();
-      const wizard = classModal.getByTestId("class-wizard");
-      const button =
-        (await wizard.count()) === 1
-          ? wizard
-          : classModal.getByRole("button").first();
-      const chosen = await button.getAttribute("data-testid");
-      if (chosen === null)
-        throw new Error("Class choice lacks public identity");
-      await button.click();
-      await expect(classModal.getByTestId(chosen)).toHaveCount(0);
-      continue;
-    }
-    await expect(bossModal.getByRole("button")).toHaveCount(3);
-    await bossModal.getByRole("button").first().click();
-    await expect(bossModal).toBeHidden();
-    await expect(classModal).toBeHidden();
-    await openStatus(page);
-    await page.getByTestId("close-character-status").click();
-    return;
-  }
-  throw new Error(
-    "Real boss-route modal precondition did not finish within the class/tier bound",
-  );
+  // These are fresh placement/retention scenarios, not a second boss-route
+  // test. Live combat remains enabled. Fixed-input zero writes is separately
+  // exercised against the real DOM consumer, including an explicit XP value.
 };
 
 /** Project a desired world point to a trusted canvas click using the released

@@ -88,15 +88,73 @@ gates. See the M4 document for finite measurements and limitations.
 - `src/tests/ui/game-ui.test.ts`: keyed building rows, targeted updates, current
   placement callbacks, removal/disposal, effect signatures and current HUD/class
   flow. Narrow DOM doubles complement, rather than replace, browser checks.
-- `src/tests/browser/m5-rendering.spec.ts`: trusted current canvas placement,
-  row/effect identity and mutation observation, Healing Hut changes, stable
-  canvas/label, cancellation/reset and no implicit save. Public progression
-  choices are resolved before obstructed actions; old coordinate inputs are not
-  restored. Existing browser cases retain their names and semantic expectations,
-  using current icon-control names, resource chip labels and the capacity field.
+- `src/tests/browser/m5-rendering.spec.ts`: **live built-app** trusted current
+  canvas placement, retained rows/buttons through upgrades and next-tap relocation,
+  whole unaffected row text (including all three controls), departed-row removal,
+  Healing Hut row/aura/listener identity and 3/4/5m presentation, maximum-level
+  disabling, overlap rejection, cancellation, selected demolition, pending-action
+  reset, stable canvas/health label and no implicit save. Whole-row comparisons
+  consistently use whitespace-normalized `textContent`, not layout-dependent
+  `innerText` against `textContent`. Explicit Playwright handle cleanup remains.
+- `src/tests/browser/m5-dom-consumer.spec.ts`: **standalone real-DOM consumer**,
+  not the live app or a `dist/` integration substitute. The exact checked-out
+  `RetainedBuildingRows` / `RetainedEffects` and their existing runtime dependencies
+  are transpiled in memory with the already-declared TypeScript package and loaded
+  as page-local ES modules. There are no DOM doubles, copied implementations, new
+  dependencies, runtime hooks or build/config changes. After warmup, exactly eight
+  animation-frame renders receive independently recorded identical complete
+  building/effect values (including explicit XP), using fresh arrays each time.
+  The assertion remains **zero mutations**, equal node counts and exact row,
+  control and effect node identities. An XP-change positive control must cause
+  observed writes/effect replacement while retaining rows. Consumers are disposed;
+  source hashes and full frame-input/observation evidence are attached by the test.
+  This isolates the identical-input property from legitimately changing live XP;
+  it does not establish eight unchanged simulation frames in a running game.
+- `src/tests/browser/wanderer.spec.ts`: the honestly named **valid 29 XP / level-0
+  save fixture** is decoded by the production save parser, then loaded before boot.
+  The first visible HUD witness must still show 29 XP / L0. Normal stationary
+  gameplay must earn the crossing to at least 30 XP / L1, show a floor drop and
+  expose the class choice within the existing 8s bound; the selected Wizard must
+  be visible and the committed save bytes unchanged. There is no after-boot state
+  injection, preloaded earned threshold, XP filtering, clock manipulation or
+  replay-until-green. Navigation waits only for commit so observation can begin
+  before the first kill; missing the initial below-threshold witness is a failure.
+  This is causal **loaded-near-threshold gameplay**, NOT fresh 0-to-30 progression.
+  Other default fresh UI/input, genuine combat/drop/hit, generator-v1 save/load,
+  corrupt-save, manual-save/reload and real public keyboard boss-route cases remain
+  separate. Touch canvas cases now use actionability-checked public `locator.tap`
+  rather than dispatching pointer events through a possibly obstructed canvas.
+- `src/tests/browser/m5-test-helpers.ts`: incidental asynchronous class/boss
+  choices use installed Playwright `addLocatorHandler` actionability/assertion
+  boundaries. Each selection must lose its button identity, change its public
+  choice key and appear in effects. Consecutive class tiers may retain the visible
+  container; no four-choice cap, click-retry loop, swallowed error or hidden click
+  is used. Class and boss acceptance tests opt out of incidental handlers; the
+  boss test explicitly handles only intervening class choices, never its boss
+  selection. Input-test hold durations, 5s target-action bounds and existing
+  test/expect watchdogs remain.
 - `npm run test:soak`: the fixed schedule, deterministic repeat, durable
   roundtrip and state bounds remain; cache maxima and `M5_SOAK_EVIDENCE` extend
   diagnostics. Historical M4 measurements above remain historical, not new goldens.
+
+### M5 correction timing and evidence boundary
+
+The supplied four decoded terminal traces (root/Pages row and hut scenarios)
+showed successful late relocation/demolition/reset actions cumulatively exhausting
+60s. They do not prove a Playwright handle-disposal fault, a production cleanup
+fault, or that changing trace settings fixes the scenarios. The redundant boss
+pursuit precondition is removed only from the fresh M5 placement/retention cases;
+the separate real boss-route acceptance case remains. The exact-input property is
+moved to its own consumer case, not weakened to tolerate writes. No watchdog is
+increased. The existing one-XP-per-kill, 0.5s basic attack and 30-XP threshold do not
+support the old self-imposed simple fresh 0-to-30-in-8s premise; the explicitly
+permitted 29-XP fixture needs an actual gameplay-earned crossing instead.
+
+These are candidate coverage descriptions, **not passing browser results**.
+The correction worker does not run browsers/builds or duplicate the separate
+source-fixed full-vs-lean trace experiment. Root must freeze and independently
+validate this exact candidate on root/Pages desktop/touch. Standalone consumer
+results must be reported separately from built-app gameplay/visual evidence.
 
 Run changed-file formatting, typecheck, focused/full tests, architecture, soak,
 fixture hashes, reproducible builds, and both root/Pages desktop/touch browser
