@@ -43,6 +43,12 @@ export interface RuntimeEnemy {
   respawnAt: number | null;
   defeated: boolean;
   attackElapsed: number;
+  /** Runtime-only wave ownership; omitted for generator-owned enemies. */
+  waveIndex?: number;
+  /** Wave normal enemies disappear at this time; wave bosses persist. */
+  waveExpiresAt?: number;
+  readonly isWaveBoss?: boolean;
+  readonly bossName?: string;
 }
 
 /** Runtime-only projectile state. It is intentionally excluded from saves. */

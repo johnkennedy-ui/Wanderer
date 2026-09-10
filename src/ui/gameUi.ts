@@ -119,6 +119,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <span data-testid="health"></span>
         <span data-testid="class-progression"></span>
         <span data-testid="combat-status"></span>
+        <span data-testid="wave-status" aria-live="polite"></span>
         <span data-testid="projectile-status"></span>
       </div>
       <p class="message" data-testid="message" aria-live="polite"></p>
@@ -408,6 +409,14 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         `✦ L${snapshot.classProgression.level} · ${snapshot.classProgression.experience} XP`,
       );
       text(byTestId("combat-status"), snapshot.combatStatus);
+      text(
+        byTestId("wave-status"),
+        snapshot.wave.active
+          ? `Wave ${snapshot.wave.waveIndex} active · ${Math.ceil(snapshot.wave.secondsRemaining)}s remaining · ${snapshot.wave.bossName ?? "large boss"}`
+          : snapshot.wave.bossActive
+            ? `Wave ${snapshot.wave.waveIndex} boss remains: ${snapshot.wave.bossName}`
+            : `Next wave in ${Math.ceil(snapshot.wave.nextWaveInSeconds)}s`,
+      );
       text(
         byTestId("projectile-status"),
         snapshot.projectileCount === 1

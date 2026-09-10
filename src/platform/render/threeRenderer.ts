@@ -248,12 +248,18 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       }
       for (const enemy of snapshot.enemies) {
         const presentation = enemyPresentation[enemy.kind];
+        const scale = enemy.isWaveBoss ? gameplayTuning.waveBossVisualScale : 1;
         const mesh = cylinder(
-          presentation.radius,
-          presentation.height,
+          presentation.radius * scale,
+          presentation.height * scale,
           presentation.color,
         );
-        mesh.position.y = presentation.height / 2;
+        if (enemy.isWaveBoss) {
+          const material = mesh.material as THREE.MeshStandardMaterial;
+          material.emissive.setHex(0xff6d00);
+          material.emissiveIntensity = 0.65;
+        }
+        mesh.position.y = (presentation.height * scale) / 2;
         addMarker(mesh, enemy.position);
       }
       for (const projectile of snapshot.projectiles) {
