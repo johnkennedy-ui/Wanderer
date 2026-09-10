@@ -35,9 +35,16 @@ test("M5 real DOM retains rows/effects through updates and current next-tap relo
     .elementHandle();
   if (first === null || second === null || move === null)
     throw new Error("Missing retained building rows/buttons");
-  const secondText = await rows.nth(1).innerText();
+  const secondLabel = await rows.nth(1).locator("span").first().innerText();
+  await page.getByTestId("close-build-menu").click();
   await openStatus(page);
   await expect(page.getByTestId("effects")).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   // Observe actual simulation frames, retaining all authored M5 zero-write and
   // DOM identity assertions. No globals or gameplay state are injected.
   const stable = await list.evaluate(async (element) => {
@@ -74,12 +81,13 @@ test("M5 real DOM retains rows/effects through updates and current next-tap relo
   });
   expect(stable).toEqual({ writes: 0, rowsStable: true, effectsStable: true });
   await page.getByTestId("close-character-status").click();
+  await openBuild(page);
   await rows
     .nth(0)
     .getByRole("button", { name: "Upgrade", exact: true })
     .click();
   await expect(rows.nth(0)).toContainText("Campfire L2");
-  await expect(rows.nth(1)).toHaveText(secondText);
+  await expect(rows.nth(1).locator("span").first()).toHaveText(secondLabel);
   expect(await first.evaluate((node) => node.isConnected)).toBe(true);
   expect(await second.evaluate((node) => node.isConnected)).toBe(true);
   expect(await move.evaluate((node) => node.isConnected)).toBe(true);
@@ -104,7 +112,7 @@ test("M5 real DOM retains rows/effects through updates and current next-tap relo
   await expect(rows).toHaveCount(1);
   expect(await first.evaluate((node) => node.isConnected)).toBe(false);
   expect(await second.evaluate((node) => node.isConnected)).toBe(true);
-  await expect(rows.nth(0)).toHaveText(secondText);
+  await expect(rows.nth(0).locator("span").first()).toHaveText(secondLabel);
   expect(
     await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
   ).toBeNull();

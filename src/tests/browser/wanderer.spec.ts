@@ -63,6 +63,40 @@ const checkWithPendingClassResolution = async (
 test("earned experience opens a class choice and the selected class is visible", async ({
   page,
 }) => {
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    {
+      key: "wanderer.save.primary",
+      value: JSON.stringify({
+        schemaVersion: 2,
+        world: {
+          seed: "wanderer-known-seed",
+          generatorVersion: "wanderer-web-v1",
+        },
+        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+        resources: {
+          wood: 120,
+          stone: 120,
+          scrap: 120,
+          essence: 20,
+          bossCore: 0,
+        },
+        buildings: [],
+        defeatedBossIds: [],
+        upgrades: [],
+        nextBuildingSerial: 1,
+        committedAt: 1700000000000,
+        savePointId: "campfire:home",
+        savePointPosition: { x: 0, y: 0 },
+        classProgression: {
+          experience: 30,
+          level: 1,
+          playerClass: null,
+          skillIds: [],
+        },
+      }),
+    },
+  );
   await page.goto(applicationPath);
   const classModal = page.getByTestId("class-modal");
   await expect(classModal).toBeVisible({ timeout: 8_000 });
