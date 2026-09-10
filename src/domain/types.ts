@@ -117,6 +117,31 @@ export const playerClasses = Object.freeze([
 
 export type PlayerClass = (typeof playerClasses)[number];
 
+export const playerStatKinds = Object.freeze([
+  "strength",
+  "dexterity",
+  "agility",
+  "luck",
+  "vitality",
+  "magic",
+  "defense",
+  "magicDefense",
+] as const);
+
+export type PlayerStatKind = (typeof playerStatKinds)[number];
+export type PlayerStats = Readonly<Record<PlayerStatKind, number>>;
+
+export const emptyPlayerStats = (): PlayerStats => ({
+  strength: 0,
+  dexterity: 0,
+  agility: 0,
+  luck: 0,
+  vitality: 0,
+  magic: 0,
+  defense: 0,
+  magicDefense: 0,
+});
+
 export const classSkillIds = Object.freeze([
   "knight-iron-guard",
   "knight-wide-slash",

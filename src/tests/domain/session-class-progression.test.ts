@@ -8,9 +8,11 @@ import {
 import { decodeSave } from "../../domain/persistence/decodeSave";
 import { advanceAutoCombatPhase } from "../../domain/session/combatTickRuntime";
 import {
+  combatStatsFor,
   movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
+  playerStatsFor,
 } from "../../domain/session/progressionRules";
 import type { ClassProgression } from "../../domain/types";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
@@ -92,6 +94,38 @@ describe("class progression", () => {
     ]);
   });
 
+  it("projects the authored class passives and applies their current combat roles", () => {
+    expect(playerStatsFor(progression("knight"))).toEqual({
+      strength: 6,
+      dexterity: 0,
+      agility: 0,
+      luck: 0,
+      vitality: 6,
+      magic: 0,
+      defense: 3,
+      magicDefense: 0,
+    });
+    expect(playerStatsFor(progression("archer"))).toMatchObject({
+      dexterity: 6,
+      agility: 6,
+      luck: 3,
+    });
+    expect(playerStatsFor(progression("wizard"))).toMatchObject({
+      magic: 6,
+      agility: 3,
+      magicDefense: 3,
+    });
+
+    const knight = combatStatsFor([], new Set(), progression("knight"));
+    const archer = combatStatsFor([], new Set(), progression("archer"));
+    const wizard = combatStatsFor([], new Set(), progression("wizard"));
+    expect(knight.attackDamage).toBe(20.4);
+    expect(archer.attackDamage).toBe(18);
+    expect(archer.moveSpeed).toBe(3.3);
+    expect(wizard.attackDamage).toBeCloseTo(19.8, 8);
+    expect(wizard.moveSpeed).toBe(3.15);
+  });
+
   it("selects a class once, chooses one skill per tier, and persists only through campfire save", () => {
     const base = savedAtHome();
     const session = new GameSession({
@@ -126,6 +160,21 @@ describe("class progression", () => {
     expect(reloaded.presentation().ui.classProgression).toEqual(
       request?.document.classProgression,
     );
+  });
+
+  it("applies Knight vitality once when the class is selected", () => {
+    const base = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...base,
+        classProgression: progression(null, 1, []),
+      },
+    });
+    expect(session.chooseClass("knight")).toBe(true);
+    expect(session.presentation().ui.player).toMatchObject({
+      hp: 130,
+      maxHp: 130,
+    });
   });
 
   it("gives Knight arcs, Wizard splash, and Archer a single long-range arrow", () => {

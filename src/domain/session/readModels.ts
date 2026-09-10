@@ -14,6 +14,7 @@ import type {
   InputSource,
   PlayerClass,
   PlayerState,
+  PlayerStats,
   ReadonlyResourceBag,
   UpgradeId,
   Vector2,
@@ -49,6 +50,7 @@ export interface ReadModelProjectileInput {
 export interface PresentationProjectionInput {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
+  readonly playerStats: PlayerStats;
   readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly resources: ReadonlyResourceBag;
   readonly buildings: readonly BuildingState[];
@@ -88,6 +90,7 @@ export const projectGamePresentation = (
     hp: input.player.hp,
     maxHp: input.player.maxHp,
   };
+  const playerStats = { ...input.playerStats };
   const playerHitRecovery = { ...input.playerHitRecovery };
   const resources = cloneResources(input.resources);
   const buildings = input.buildings.map((building) => ({
@@ -142,6 +145,7 @@ export const projectGamePresentation = (
   const ui = {
     world,
     player,
+    playerStats,
     resources,
     materialCapacity: input.materialCapacity,
     buildRadius: input.buildRadius,

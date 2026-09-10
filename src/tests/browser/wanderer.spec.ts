@@ -96,6 +96,22 @@ test("the icon HUD exposes compact resources and the current skill tree", async 
   await expect(page.getByTestId("quick-stats")).toContainText("L0");
 });
 
+test("the Stats button shows only the eight character stats", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const toggle = page.getByTestId("stats-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Stats");
+  await expect(toggle).toHaveAttribute("aria-controls", "stats-panel");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(page.getByTestId("stats-panel")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("stats-list")).toHaveText(
+    /Strength.*Dexterity.*Agility.*Luck.*Vitality.*Magic.*Defense.*Magic Defense/s,
+  );
+});
+
 const clickWithPendingUpgradeResolution = async (
   page: Page,
   target: Locator,

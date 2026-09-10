@@ -4,6 +4,7 @@ import type {
   ClassSkillId,
   EnemyKind,
   PlayerClass,
+  PlayerStats,
   ResourceKind,
   ReadonlyResourceBag,
   UpgradeId,
@@ -70,6 +71,7 @@ export interface ClassDefinition {
   readonly areaRadius: number;
   readonly arcCosine: number;
   readonly secondaryTargets: number;
+  readonly passiveStats: PlayerStats;
 }
 
 export interface ClassSkillDefinition {
@@ -348,6 +350,16 @@ const authoredClassDefinitions = {
     areaRadius: 0,
     arcCosine: 0.5,
     secondaryTargets: 2,
+    passiveStats: {
+      strength: 6,
+      dexterity: 0,
+      agility: 0,
+      luck: 0,
+      vitality: 6,
+      magic: 0,
+      defense: 3,
+      magicDefense: 0,
+    },
   },
   wizard: {
     id: "wizard",
@@ -361,6 +373,16 @@ const authoredClassDefinitions = {
     areaRadius: 1.5,
     arcCosine: 1,
     secondaryTargets: 8,
+    passiveStats: {
+      strength: 0,
+      dexterity: 0,
+      agility: 3,
+      luck: 0,
+      vitality: 0,
+      magic: 6,
+      defense: 0,
+      magicDefense: 3,
+    },
   },
   archer: {
     id: "archer",
@@ -374,6 +396,16 @@ const authoredClassDefinitions = {
     areaRadius: 0,
     arcCosine: 1,
     secondaryTargets: 0,
+    passiveStats: {
+      strength: 0,
+      dexterity: 6,
+      agility: 6,
+      luck: 3,
+      vitality: 0,
+      magic: 0,
+      defense: 0,
+      magicDefense: 0,
+    },
   },
 } satisfies Record<PlayerClass, ClassDefinition>;
 

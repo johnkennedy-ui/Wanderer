@@ -9,6 +9,7 @@ import type {
   FloorDropState,
   InputSource,
   PlayerState,
+  PlayerStats,
   ProjectileState,
   ReadonlyResourceBag,
   UpgradeId,
@@ -100,6 +101,7 @@ export type GameNotice =
 export interface GameUiSnapshot {
   readonly world: WorldIdentity;
   readonly player: PlayerState;
+  readonly playerStats: PlayerStats;
   readonly resources: ReadonlyResourceBag;
   readonly materialCapacity: number;
   readonly buildRadius: number;

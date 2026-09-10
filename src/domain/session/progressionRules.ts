@@ -13,8 +13,11 @@ import type {
   ClassSkillId,
   CombatStats,
   PlayerState,
+  PlayerClass,
+  PlayerStats,
   UpgradeId,
 } from "../types";
+import { emptyPlayerStats } from "../types";
 import { materialCapacityFor } from "./economy";
 
 export interface ProjectileUpgradeEffects {
@@ -38,6 +41,21 @@ export const movingAttackSpeedMultiplierFor = (
   progression.playerClass === "knight" || progression.playerClass === "archer"
     ? 0.5
     : 0;
+
+export const playerStatsFor = (progression: ClassProgression): PlayerStats =>
+  progression.playerClass === null
+    ? emptyPlayerStats()
+    : { ...classDefinitionFor(progression.playerClass).passiveStats };
+
+export const applyClassPassiveToPlayer = (
+  player: PlayerState,
+  playerClass: PlayerClass,
+): PlayerState => {
+  const vitality = classDefinitionFor(playerClass).passiveStats.vitality;
+  return vitality === 0
+    ? { ...player }
+    : applyMaximumHealth(player, vitality * 5);
+};
 
 export const pendingClassSkillChoicesFor = (
   progression: ClassProgression,
@@ -109,6 +127,7 @@ export const combatStatsFor = (
   let classSecondaryDamageMultiplier = 0;
   let classAreaRadius = 0;
   let classArcCosine = 1;
+  const playerStats = playerStatsFor(progression);
 
   if (progression.playerClass !== null) {
     const playerClass = classDefinitionFor(progression.playerClass);
@@ -121,6 +140,12 @@ export const combatStatsFor = (
     classArcCosine = playerClass.arcCosine;
     chainTargets += playerClass.secondaryTargets;
   }
+
+  if (attackStyle === "magic") attackDamage += playerStats.magic;
+  else if (attackStyle === "arrow") attackDamage += playerStats.dexterity;
+  else if (attackStyle === "slash") attackDamage += playerStats.strength;
+  attackIntervalSeconds *= Math.max(0.5, 1 - playerStats.dexterity * 0.01);
+  moveSpeed += playerStats.agility * 0.05;
 
   for (const id of upgrades) {
     const effect = upgradeDefinitionFor(id).effect;

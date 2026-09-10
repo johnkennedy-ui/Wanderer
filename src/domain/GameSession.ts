@@ -54,10 +54,12 @@ import {
   combatStatsFor,
   describeProgressionEffects,
   applyClassSkillToPlayer,
+  applyClassPassiveToPlayer,
   isValidClassSkillChoice,
   movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
+  playerStatsFor,
 } from "./session/progressionRules";
 import {
   playerHitRecoveryPresentationFor,
@@ -247,6 +249,7 @@ export class GameSession {
       return false;
     }
     this.classProgression = { ...this.classProgression, playerClass };
+    this.player = applyClassPassiveToPlayer(this.player, playerClass);
     this.notice = { kind: "class.selected", playerClass };
     return true;
   }
@@ -340,6 +343,7 @@ export class GameSession {
     return projectGamePresentation({
       world: this.world,
       player: this.player,
+      playerStats: playerStatsFor(this.classProgression),
       playerHitRecovery: playerHitRecoveryPresentationFor({
         elapsed: this.elapsed,
         recoveryEndsAt: this.playerHitRecoveryEndsAt,
