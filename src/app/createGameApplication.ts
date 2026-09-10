@@ -15,6 +15,7 @@ import { createBrowserFrameScheduler } from "../platform/lifecycle/browserFrameS
 import { createThreeRenderer } from "../platform/render/threeRenderer";
 import { createAsyncBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
 import { createGameUi } from "../ui/gameUi";
+import { createApplicationLifecycle } from "./applicationLifecycle";
 
 export interface GameApplication {
   dispose(): void;
@@ -109,36 +110,24 @@ export const createGameApplication = async (root: HTMLElement): Promise<GameAppl
     platformMessage = message;
   });
 
-  const frame = (now: number): void => {
-    if (!active) return;
-    session.tick((now - previousFrame) / 1_000);
-    previousFrame = now;
+  const applicationLifecycle = createApplicationLifecycle(
+    lifecycle,
+    scheduler,
+    (deltaSeconds) => {
+    session.tick(deltaSeconds);
     const presentation = session.presentation();
     renderer.render(presentation.renderer);
     ui.render(presentation.ui);
     ui.showTransient(platformMessage);
-    animationFrame = scheduler.request(frame);
-  };
-  const unsubscribeLifecycle = lifecycle.subscribe((isActive) => {
-    active = isActive;
-    if (!active) {
-      if (animationFrame !== null) scheduler.cancel(animationFrame);
-      animationFrame = null;
-      return;
-    }
-    previousFrame = scheduler.now();
-    animationFrame = scheduler.request(frame);
-  });
-  if (active) animationFrame = scheduler.request(frame);
+    },
+  );
 
   return {
     dispose(): void {
       if (disposed) return;
       disposed = true;
       active = false;
-      if (animationFrame !== null) scheduler.cancel(animationFrame);
-      unsubscribeLifecycle();
-      lifecycle.dispose();
+      applicationLifecycle.dispose();
       buildPlacement.dispose();
       tapToMove.dispose();
       stick.dispose();
