@@ -1,6 +1,7 @@
 import { enemyDefinitions } from "../../data/definitions";
+import { distance } from "../math";
 import type { GameNotice } from "../notices";
-import type { FloorDropState, UpgradeId } from "../types";
+import type { FloorDropState, UpgradeId, WeaponRelicDropState } from "../types";
 import { resourceKinds } from "../types";
 import { selectBossUpgradeChoices } from "./bossUpgradeChoices";
 import { advanceProjectileFlight } from "./combatPolicy";
@@ -11,6 +12,7 @@ import {
 import { scaleResourceBag } from "./economy";
 import type { RuntimeEnemy, RuntimeProjectile } from "./sessionState";
 import { copyVector } from "./sessionState";
+import { weaponRelicDropForWaveBoss } from "./weaponRelicPolicy";
 
 const copyEnemy = (enemy: RuntimeEnemy): RuntimeEnemy => ({
   ...enemy,
@@ -35,12 +37,41 @@ const copyFloorDrop = (drop: FloorDropState): FloorDropState => ({
   position: copyVector(drop.position),
 });
 
+const copyWeaponRelicDrop = (
+  drop: WeaponRelicDropState,
+): WeaponRelicDropState => ({ ...drop, position: copyVector(drop.position) });
+
+/** Keeps a relic-enabled magic projectile on a living deterministic target. */
+const retargetHomingProjectile = (
+  projectile: RuntimeProjectile,
+  enemies: ReadonlyMap<string, RuntimeEnemy>,
+): void => {
+  if (projectile.homing !== true) return;
+  const currentTarget = enemies.get(projectile.targetId);
+  if (currentTarget !== undefined && !currentTarget.defeated) {
+    projectile.targetPosition = copyVector(currentTarget.position);
+    return;
+  }
+  const replacement = [...enemies.values()]
+    .filter((enemy) => !enemy.defeated)
+    .sort((left, right) => {
+      const difference =
+        distance(projectile.targetPosition, left.position) -
+        distance(projectile.targetPosition, right.position);
+      return difference === 0 ? left.id.localeCompare(right.id) : difference;
+    })[0];
+  if (replacement === undefined) return;
+  projectile.targetId = replacement.id;
+  projectile.targetPosition = copyVector(replacement.position);
+};
+
 interface EnemyDefeatInput {
   readonly enemy: RuntimeEnemy;
   readonly elapsed: number;
   readonly worldSeed: string;
   readonly upgrades: ReadonlySet<UpgradeId>;
   readonly floorDrops: readonly FloorDropState[];
+  readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly defeatedBossIds: ReadonlySet<string>;
   readonly pendingUpgradeChoices: readonly UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -49,6 +80,7 @@ interface EnemyDefeatInput {
 
 interface EnemyDefeatResult {
   readonly floorDrops: FloorDropState[];
+  readonly weaponRelicDrops: WeaponRelicDropState[];
   readonly defeatedBossIds: Set<string>;
   readonly pendingUpgradeChoices: UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -62,6 +94,7 @@ const defeatEnemy = ({
   worldSeed,
   upgrades,
   floorDrops,
+  weaponRelicDrops,
   defeatedBossIds,
   pendingUpgradeChoices,
   nextFloorDropSerial,
@@ -78,11 +111,31 @@ const defeatEnemy = ({
   });
   enemy.defeated = true;
 
+  if (enemy.kind === "boss" && enemy.isWaveBoss === true) {
+    const weaponRelicDrop = weaponRelicDropForWaveBoss(enemy);
+    return {
+      floorDrops: [...floorDrops.map(copyFloorDrop), ...draftedDrops],
+      weaponRelicDrops:
+        weaponRelicDrop === null
+          ? weaponRelicDrops.map(copyWeaponRelicDrop)
+          : [...weaponRelicDrops.map(copyWeaponRelicDrop), weaponRelicDrop],
+      defeatedBossIds: new Set(defeatedBossIds),
+      pendingUpgradeChoices: [...pendingUpgradeChoices],
+      nextFloorDropSerial: nextFloorDropSerial + 1,
+      notice: {
+        kind: "weapon-relic.dropped",
+        bossName: enemy.bossName ?? "large boss",
+      },
+      experienceEarned: 1,
+    };
+  }
+
   if (enemy.kind === "boss") {
     const nextDefeatedBossIds = new Set(defeatedBossIds).add(enemy.id);
     const pendingUpgradeChoices = selectBossUpgradeChoices(worldSeed, upgrades);
     return {
       floorDrops: [...floorDrops.map(copyFloorDrop), ...draftedDrops],
+      weaponRelicDrops: weaponRelicDrops.map(copyWeaponRelicDrop),
       defeatedBossIds: nextDefeatedBossIds,
       pendingUpgradeChoices,
       nextFloorDropSerial: nextFloorDropSerial + 1,
@@ -100,6 +153,7 @@ const defeatEnemy = ({
     : null;
   return {
     floorDrops: [...floorDrops.map(copyFloorDrop), ...draftedDrops],
+    weaponRelicDrops: weaponRelicDrops.map(copyWeaponRelicDrop),
     defeatedBossIds: new Set(defeatedBossIds),
     pendingUpgradeChoices: [...pendingUpgradeChoices],
     nextFloorDropSerial: nextFloorDropSerial + 1,
@@ -120,6 +174,7 @@ export interface ProjectileCombatPhaseInput {
   readonly enemies: ReadonlyMap<string, RuntimeEnemy>;
   readonly projectiles: readonly RuntimeProjectile[];
   readonly floorDrops: readonly FloorDropState[];
+  readonly weaponRelicDrops?: readonly WeaponRelicDropState[];
   readonly defeatedBossIds: ReadonlySet<string>;
   readonly pendingUpgradeChoices: readonly UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -134,6 +189,7 @@ export interface ProjectileCombatPhaseResult {
   readonly enemies: Map<string, RuntimeEnemy>;
   readonly projectiles: RuntimeProjectile[];
   readonly floorDrops: FloorDropState[];
+  readonly weaponRelicDrops: WeaponRelicDropState[];
   readonly defeatedBossIds: Set<string>;
   readonly pendingUpgradeChoices: UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -150,6 +206,7 @@ export const advanceProjectileCombatPhase = ({
   enemies: currentEnemies,
   projectiles: currentProjectiles,
   floorDrops: currentFloorDrops,
+  weaponRelicDrops: currentWeaponRelicDrops = [],
   defeatedBossIds: currentDefeatedBossIds,
   pendingUpgradeChoices: currentPendingUpgradeChoices,
   nextFloorDropSerial: currentFloorDropSerial,
@@ -162,6 +219,7 @@ export const advanceProjectileCombatPhase = ({
   const projectiles: RuntimeProjectile[] = [];
   const completed: RuntimeProjectile[] = [];
   let floorDrops = currentFloorDrops.map(copyFloorDrop);
+  let weaponRelicDrops = currentWeaponRelicDrops.map(copyWeaponRelicDrop);
   let defeatedBossIds = new Set(currentDefeatedBossIds);
   let pendingUpgradeChoices = [...currentPendingUpgradeChoices];
   let nextFloorDropSerial = currentFloorDropSerial;
@@ -171,6 +229,7 @@ export const advanceProjectileCombatPhase = ({
 
   for (const current of currentProjectiles) {
     const projectile = copyProjectile(current);
+    retargetHomingProjectile(projectile, enemies);
     const flight = advanceProjectileFlight({
       elapsed: projectile.elapsed,
       delta,
@@ -199,12 +258,14 @@ export const advanceProjectileCombatPhase = ({
         worldSeed,
         upgrades,
         floorDrops,
+        weaponRelicDrops,
         defeatedBossIds,
         pendingUpgradeChoices,
         nextFloorDropSerial,
         floorDropOffsetDistance,
       });
       floorDrops = defeat.floorDrops;
+      weaponRelicDrops = defeat.weaponRelicDrops;
       defeatedBossIds = defeat.defeatedBossIds;
       pendingUpgradeChoices = defeat.pendingUpgradeChoices;
       nextFloorDropSerial = defeat.nextFloorDropSerial;
@@ -223,6 +284,7 @@ export const advanceProjectileCombatPhase = ({
     enemies,
     projectiles,
     floorDrops,
+    weaponRelicDrops,
     defeatedBossIds,
     pendingUpgradeChoices,
     nextFloorDropSerial,

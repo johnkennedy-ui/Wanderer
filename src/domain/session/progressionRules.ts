@@ -5,6 +5,7 @@ import {
   classSkillDefinitions,
   gameplayTuning,
   upgradeDefinitionFor,
+  weaponRelicDefinitionFor,
   type UpgradeEffect,
 } from "../../data/definitions";
 import type {
@@ -24,6 +25,86 @@ export interface ProjectileUpgradeEffects {
   readonly chainDamageMultiplier: number;
   readonly hitHeal: number;
 }
+
+export interface WeaponRelicEffects {
+  readonly rank: number;
+  readonly label: string | null;
+  readonly description: string | null;
+  readonly projectileCount: number;
+  readonly projectileDamageMultiplier: number;
+  readonly projectileHoming: boolean;
+  readonly crescentRadiusBonus: number;
+  readonly crescentDamageMultiplier: number;
+}
+
+const noWeaponRelicEffects = (): WeaponRelicEffects => ({
+  rank: 0,
+  label: null,
+  description: null,
+  projectileCount: 1,
+  projectileDamageMultiplier: 1,
+  projectileHoming: false,
+  crescentRadiusBonus: 0,
+  crescentDamageMultiplier: 1,
+});
+
+/** Returns data-authored, unbounded rank effects for the selected class relic. */
+export const weaponRelicEffectsFor = (
+  progression: ClassProgression,
+): WeaponRelicEffects => {
+  const rank = progression.weaponRank ?? 0;
+  if (progression.playerClass === null || rank <= 0)
+    return noWeaponRelicEffects();
+  const definition = weaponRelicDefinitionFor(progression.playerClass);
+  const additionalRanks = Math.max(0, rank - 1);
+  switch (progression.playerClass) {
+    case "knight":
+      return {
+        rank,
+        label: definition.label,
+        description: definition.abilityDescription,
+        projectileCount: 1,
+        projectileDamageMultiplier: 1,
+        projectileHoming: false,
+        crescentRadiusBonus:
+          gameplayTuning.weaponRelicKnightRankOneRadiusBonus +
+          additionalRanks *
+            gameplayTuning.weaponRelicKnightRadiusBonusPerAdditionalRank,
+        crescentDamageMultiplier:
+          gameplayTuning.weaponRelicKnightRankOneDamageMultiplier +
+          additionalRanks *
+            gameplayTuning.weaponRelicKnightDamageMultiplierPerAdditionalRank,
+      };
+    case "wizard":
+      return {
+        rank,
+        label: definition.label,
+        description: definition.abilityDescription,
+        projectileCount: 1,
+        projectileDamageMultiplier:
+          1 +
+          additionalRanks *
+            gameplayTuning.weaponRelicWizardDamageMultiplierPerAdditionalRank,
+        projectileHoming: true,
+        crescentRadiusBonus: 0,
+        crescentDamageMultiplier: 1,
+      };
+    case "archer":
+      return {
+        rank,
+        label: definition.label,
+        description: definition.abilityDescription,
+        projectileCount: 2,
+        projectileDamageMultiplier:
+          1 +
+          additionalRanks *
+            gameplayTuning.weaponRelicArcherDamageMultiplierPerAdditionalRank,
+        projectileHoming: false,
+        crescentRadiusBonus: 0,
+        crescentDamageMultiplier: 1,
+      };
+  }
+};
 
 export const playerLevelForExperience = (
   experience: number,
@@ -127,6 +208,7 @@ export const combatStatsFor = (
   let classSecondaryDamageMultiplier = 0;
   let classAreaRadius = 0;
   let classArcCosine = 1;
+  const weaponRelic = weaponRelicEffectsFor(progression);
   const playerStats = playerStatsFor(progression);
 
   if (progression.playerClass !== null) {
@@ -139,6 +221,12 @@ export const combatStatsFor = (
     classAreaRadius = playerClass.areaRadius;
     classArcCosine = playerClass.arcCosine;
     chainTargets += playerClass.secondaryTargets;
+  }
+
+  if (attackStyle === "slash") {
+    attackDamage *= weaponRelic.crescentDamageMultiplier;
+    classAreaRadius += weaponRelic.crescentRadiusBonus;
+    attackRange += weaponRelic.crescentRadiusBonus;
   }
 
   if (attackStyle === "magic") attackDamage += playerStats.magic;
@@ -226,6 +314,9 @@ export const combatStatsFor = (
     classSecondaryDamageMultiplier,
     classAreaRadius,
     classArcCosine,
+    weaponProjectileCount: weaponRelic.projectileCount,
+    weaponProjectileDamageMultiplier: weaponRelic.projectileDamageMultiplier,
+    weaponProjectileHoming: weaponRelic.projectileHoming,
   };
 };
 
@@ -325,5 +416,10 @@ export const describeProgressionEffects = (
     const skill = classSkillDefinitionFor(skillId);
     effects.push(`${skill.label}: ${skill.description}`);
   }
+  const weaponRelic = weaponRelicEffectsFor(progression);
+  if (weaponRelic.rank > 0 && weaponRelic.label !== null)
+    effects.push(
+      `${weaponRelic.label} rank ${weaponRelic.rank}: ${weaponRelic.description}`,
+    );
   return effects;
 };

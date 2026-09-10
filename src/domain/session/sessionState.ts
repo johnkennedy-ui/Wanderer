@@ -13,6 +13,7 @@ import type {
   ResourceBag,
   UpgradeId,
   Vector2,
+  WeaponRelicDropState,
   WorldIdentity,
 } from "../types";
 
@@ -55,13 +56,14 @@ export interface RuntimeEnemy {
 export interface RuntimeProjectile {
   readonly id: string;
   readonly origin: Vector2;
-  readonly targetId: string;
-  readonly targetPosition: Vector2;
+  targetId: string;
+  targetPosition: Vector2;
   readonly damage: number;
   readonly chainTargetIds: readonly string[];
   readonly chainDamage: number;
   readonly hitHeal: number;
   readonly style?: AttackStyle;
+  readonly homing?: boolean;
   elapsed: number;
 }
 
@@ -101,6 +103,7 @@ export interface SessionState {
   projectiles: RuntimeProjectile[];
   crescentAttacks: RuntimeCrescentAttack[];
   floorDrops: FloorDropState[];
+  weaponRelicDrops: WeaponRelicDropState[];
   defeatedBossIds: Set<string>;
   upgrades: Set<UpgradeId>;
   classProgression: ClassProgression;
@@ -142,6 +145,7 @@ export const cloneClassProgression = (
   level: progression?.level ?? 0,
   playerClass: progression?.playerClass ?? null,
   skillIds: [...(progression?.skillIds ?? [])],
+  weaponRank: progression?.weaponRank ?? 0,
 });
 
 export const cloneBuildings = (
@@ -196,6 +200,7 @@ export const createFreshSessionState = (
     projectiles: [],
     crescentAttacks: [],
     floorDrops: [],
+    weaponRelicDrops: [],
     defeatedBossIds: new Set(),
     upgrades: new Set(),
     classProgression: cloneClassProgression(undefined),
@@ -232,6 +237,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   projectiles: [],
   crescentAttacks: [],
   floorDrops: [],
+  weaponRelicDrops: [],
   defeatedBossIds: new Set(saved.defeatedBossIds),
   upgrades: new Set(saved.upgrades),
   classProgression: cloneClassProgression(saved.classProgression),

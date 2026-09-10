@@ -1,6 +1,6 @@
 import { enemyDefinitions } from "../../data/definitions";
 import type { GameNotice } from "../notices";
-import type { FloorDropState, UpgradeId } from "../types";
+import type { FloorDropState, UpgradeId, WeaponRelicDropState } from "../types";
 import { resourceKinds } from "../types";
 import { selectBossUpgradeChoices } from "./bossUpgradeChoices";
 import { floorDropDraftFor } from "./combatResolutionPolicy";
@@ -8,6 +8,7 @@ import { scaleResourceBag } from "./economy";
 import type { MeleeImpact } from "./combatTickRuntime";
 import type { RuntimeEnemy } from "./sessionState";
 import { copyVector } from "./sessionState";
+import { weaponRelicDropForWaveBoss } from "./weaponRelicPolicy";
 
 const copyEnemy = (enemy: RuntimeEnemy): RuntimeEnemy => ({
   ...enemy,
@@ -20,11 +21,16 @@ const copyFloorDrop = (drop: FloorDropState): FloorDropState => ({
   position: copyVector(drop.position),
 });
 
+const copyWeaponRelicDrop = (
+  drop: WeaponRelicDropState,
+): WeaponRelicDropState => ({ ...drop, position: copyVector(drop.position) });
+
 export interface MeleeCombatPhaseInput {
   readonly impacts: readonly MeleeImpact[];
   readonly elapsed: number;
   readonly enemies: ReadonlyMap<string, RuntimeEnemy>;
   readonly floorDrops: readonly FloorDropState[];
+  readonly weaponRelicDrops?: readonly WeaponRelicDropState[];
   readonly defeatedBossIds: ReadonlySet<string>;
   readonly pendingUpgradeChoices: readonly UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -36,6 +42,7 @@ export interface MeleeCombatPhaseInput {
 export interface MeleeCombatPhaseResult {
   readonly enemies: Map<string, RuntimeEnemy>;
   readonly floorDrops: FloorDropState[];
+  readonly weaponRelicDrops: WeaponRelicDropState[];
   readonly defeatedBossIds: Set<string>;
   readonly pendingUpgradeChoices: UpgradeId[];
   readonly nextFloorDropSerial: number;
@@ -49,6 +56,7 @@ export const resolveMeleeCombatPhase = ({
   elapsed,
   enemies: currentEnemies,
   floorDrops: currentFloorDrops,
+  weaponRelicDrops: currentWeaponRelicDrops = [],
   defeatedBossIds: currentDefeatedBossIds,
   pendingUpgradeChoices: currentPendingUpgradeChoices,
   nextFloorDropSerial: currentFloorDropSerial,
@@ -60,6 +68,7 @@ export const resolveMeleeCombatPhase = ({
     [...currentEnemies].map(([id, enemy]) => [id, copyEnemy(enemy)]),
   );
   let floorDrops = currentFloorDrops.map(copyFloorDrop);
+  let weaponRelicDrops = currentWeaponRelicDrops.map(copyWeaponRelicDrop);
   let defeatedBossIds = new Set(currentDefeatedBossIds);
   let pendingUpgradeChoices = [...currentPendingUpgradeChoices];
   let nextFloorDropSerial = currentFloorDropSerial;
@@ -87,7 +96,15 @@ export const resolveMeleeCombatPhase = ({
     enemy.defeated = true;
     nextFloorDropSerial += 1;
     experienceEarned += 1;
-    if (enemy.kind === "boss") {
+    if (enemy.kind === "boss" && enemy.isWaveBoss === true) {
+      const weaponRelicDrop = weaponRelicDropForWaveBoss(enemy);
+      if (weaponRelicDrop !== null)
+        weaponRelicDrops = [...weaponRelicDrops, weaponRelicDrop];
+      notice = {
+        kind: "weapon-relic.dropped",
+        bossName: enemy.bossName ?? "large boss",
+      };
+    } else if (enemy.kind === "boss") {
       defeatedBossIds = new Set(defeatedBossIds).add(enemy.id);
       pendingUpgradeChoices = selectBossUpgradeChoices(worldSeed, upgrades);
       notice = {
@@ -110,6 +127,7 @@ export const resolveMeleeCombatPhase = ({
   return {
     enemies,
     floorDrops,
+    weaponRelicDrops,
     defeatedBossIds,
     pendingUpgradeChoices,
     nextFloorDropSerial,

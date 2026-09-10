@@ -3,6 +3,7 @@ import {
   classDefinitionFor,
   classSkillDefinitionFor,
   upgradeDefinitionFor,
+  weaponRelicDefinitionFor,
 } from "../data/definitions";
 import type {
   GameNotice,
@@ -82,6 +83,12 @@ export const presentGameNotice = (notice: GameNotice): string => {
       return notice.hasUpgradeChoices
         ? "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. Choose one unowned upgrade, then campfire-save it."
         : "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. No complete unowned upgrade trio remains.";
+    case "weapon-relic.dropped":
+      return `${notice.bossName} defeated: a glowing Weapon Relic remains on the ground. Select a class, collect it, then campfire-save its rank.`;
+    case "weapon-relic.collected": {
+      const relic = weaponRelicDefinitionFor(notice.playerClass);
+      return `${relic.label} rank ${notice.weaponRank} collected in runtime. ${relic.abilityDescription} Campfire-save it to keep it.`;
+    }
     case "wave.started":
       return `Wave ${notice.waveIndex} has begun. ${notice.bossName} leads a 30-second assault.`;
     case "drop.collected":
@@ -116,6 +123,8 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     case "player.died":
     case "enemy.defeated":
     case "boss.defeated":
+    case "weapon-relic.dropped":
+    case "weapon-relic.collected":
     case "wave.started":
     case "drop.collected":
     case "farm.harvested":

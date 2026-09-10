@@ -14,6 +14,7 @@ import type {
   UpgradeId,
   ValidCampfireSaveRequest,
   Vector2,
+  WeaponRelicDropState,
   WorldIdentity,
 } from "./types";
 import {
@@ -23,6 +24,7 @@ import {
   hydrateSessionState,
 } from "./session/sessionState";
 import { floorDropCollectionPolicy } from "./session/floorDropCollectionPolicy";
+import { collectNearbyWeaponRelics } from "./session/weaponRelicPolicy";
 import {
   advanceAutoCombatPhase,
   advanceEnemyCombatPhase,
@@ -86,6 +88,7 @@ export class GameSession {
   private projectiles!: RuntimeProjectile[];
   private crescentAttacks!: RuntimeCrescentAttack[];
   private floorDrops!: FloorDropState[];
+  private weaponRelicDrops!: WeaponRelicDropState[];
   private defeatedBossIds!: Set<string>;
   private upgrades!: Set<UpgradeId>;
   private classProgression!: import("./types").ClassProgression;
@@ -127,6 +130,7 @@ export class GameSession {
     this.projectiles = state.projectiles;
     this.crescentAttacks = state.crescentAttacks;
     this.floorDrops = state.floorDrops;
+    this.weaponRelicDrops = state.weaponRelicDrops;
     this.defeatedBossIds = state.defeatedBossIds;
     this.upgrades = state.upgrades;
     this.classProgression = state.classProgression;
@@ -198,6 +202,7 @@ export class GameSession {
     }
 
     this.collectNearbyFloorDrops();
+    this.collectNearbyWeaponRelics();
     this.updateEnemyCombat(delta);
     this.ensureNeighborhoodEnemies();
     this.clampPlayerState();
@@ -368,6 +373,7 @@ export class GameSession {
       projectiles: this.projectiles,
       crescentAttacks: this.crescentAttacks,
       floorDrops: this.floorDrops,
+      weaponRelicDrops: this.weaponRelicDrops,
       buildings: this.settlement.buildingState,
       visibleChunks,
       inputSource: this.input.source,
@@ -401,6 +407,7 @@ export class GameSession {
       projectiles: this.projectiles,
       crescentAttacks: this.crescentAttacks,
       floorDrops: this.floorDrops,
+      weaponRelicDrops: this.weaponRelicDrops,
       defeatedBossIds: this.defeatedBossIds,
       upgrades: this.upgrades,
       pendingUpgradeChoices: this.pendingUpgradeChoices,
@@ -500,6 +507,7 @@ export class GameSession {
       elapsed: this.elapsed,
       enemies: this.enemies,
       floorDrops: this.floorDrops,
+      weaponRelicDrops: this.weaponRelicDrops,
       defeatedBossIds: this.defeatedBossIds,
       pendingUpgradeChoices: this.pendingUpgradeChoices,
       nextFloorDropSerial: this.nextFloorDropSerial,
@@ -509,6 +517,7 @@ export class GameSession {
     });
     this.enemies = result.enemies;
     this.floorDrops = result.floorDrops;
+    this.weaponRelicDrops = result.weaponRelicDrops;
     this.defeatedBossIds = result.defeatedBossIds;
     this.pendingUpgradeChoices = result.pendingUpgradeChoices;
     this.nextFloorDropSerial = result.nextFloorDropSerial;
@@ -532,6 +541,7 @@ export class GameSession {
       enemies: this.enemies,
       projectiles: this.projectiles,
       floorDrops: this.floorDrops,
+      weaponRelicDrops: this.weaponRelicDrops,
       defeatedBossIds: this.defeatedBossIds,
       pendingUpgradeChoices: this.pendingUpgradeChoices,
       nextFloorDropSerial: this.nextFloorDropSerial,
@@ -544,6 +554,7 @@ export class GameSession {
     this.enemies = result.enemies;
     this.projectiles = result.projectiles;
     this.floorDrops = result.floorDrops;
+    this.weaponRelicDrops = result.weaponRelicDrops;
     this.defeatedBossIds = result.defeatedBossIds;
     this.pendingUpgradeChoices = result.pendingUpgradeChoices;
     if (result.experienceEarned > 0) {
@@ -636,6 +647,23 @@ export class GameSession {
     this.floorDrops = [...result.floorDrops];
     this.resources = result.resources;
     if (result.collectedAny) this.notice = { kind: "drop.collected" };
+  }
+  private collectNearbyWeaponRelics(): void {
+    if (this.weaponRelicDrops.length === 0) return;
+    const result = collectNearbyWeaponRelics({
+      playerPosition: this.player.position,
+      drops: this.weaponRelicDrops,
+      progression: this.classProgression,
+      collectDistance: gameplayTuning.floorDropCollectDistance,
+    });
+    this.weaponRelicDrops = [...result.drops];
+    this.classProgression = result.progression;
+    if (result.collectedRank !== null && result.playerClass !== null)
+      this.notice = {
+        kind: "weapon-relic.collected",
+        playerClass: result.playerClass,
+        weaponRank: result.collectedRank,
+      };
   }
   private applyPassiveEffects(delta: number): void {
     const result = this.settlement.passive(

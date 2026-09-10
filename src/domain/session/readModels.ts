@@ -20,6 +20,7 @@ import type {
   ReadonlyResourceBag,
   UpgradeId,
   Vector2,
+  WeaponRelicDropState,
   WorldIdentity,
 } from "../types";
 import { chunkCoordinateFor, chunkKey } from "../world";
@@ -48,6 +49,7 @@ export interface ReadModelProjectileInput {
   readonly targetPosition: Vector2;
   readonly elapsed: number;
   readonly style?: "basic" | "slash" | "magic" | "arrow";
+  readonly homing?: boolean;
 }
 
 export interface ReadModelCrescentAttackInput {
@@ -71,6 +73,7 @@ export interface PresentationProjectionInput {
   readonly projectiles: readonly ReadModelProjectileInput[];
   readonly crescentAttacks: readonly ReadModelCrescentAttackInput[];
   readonly floorDrops: readonly FloorDropState[];
+  readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly visibleChunks: readonly ChunkRecipe[];
   readonly materialCapacity: number;
   readonly buildRadius: number;
@@ -149,6 +152,7 @@ export const projectGamePresentation = (
       ),
       progress: Math.min(1, projectile.elapsed / input.projectileTravelSeconds),
       style: projectile.style ?? "basic",
+      ...(projectile.homing === true ? { homing: true } : {}),
     };
   });
   const crescentAttacks: readonly CrescentAttackState[] =
@@ -168,6 +172,11 @@ export const projectGamePresentation = (
       ...drop,
       position: copyVector(drop.position),
     }));
+  const weaponRelicDrops = input.weaponRelicDrops
+    .filter((drop) =>
+      visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
+    )
+    .map((drop) => ({ ...drop, position: copyVector(drop.position) }));
   const notice = copyGameNotice(input.notice);
   const ui = {
     world,
@@ -186,9 +195,11 @@ export const projectGamePresentation = (
     classProgression: {
       ...input.classProgression,
       skillIds: [...input.classProgression.skillIds],
+      weaponRank: input.classProgression.weaponRank ?? 0,
     },
     pendingClassChoices: [...input.pendingClassChoices],
     pendingClassSkillChoices: [...input.pendingClassSkillChoices],
+    weaponRelicDropCount: weaponRelicDrops.length,
     canSave: input.canSave,
     savePointLabel: input.savePointLabel,
     notice,
@@ -200,6 +211,7 @@ export const projectGamePresentation = (
     projectiles,
     crescentAttacks,
     floorDrops,
+    weaponRelicDrops,
     visibleBuildings,
     visibleChunks: input.visibleChunks,
   };

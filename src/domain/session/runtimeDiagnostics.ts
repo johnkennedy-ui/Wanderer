@@ -12,6 +12,7 @@ export type RuntimeDiagnosticsInput = Pick<
   | "projectiles"
   | "crescentAttacks"
   | "floorDrops"
+  | "weaponRelicDrops"
   | "defeatedBossIds"
   | "upgrades"
   | "pendingUpgradeChoices"
@@ -59,6 +60,10 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       ...drop,
       position: copyVector(drop.position),
     })),
+    weaponRelicDrops: state.weaponRelicDrops.map((drop) => ({
+      ...drop,
+      position: copyVector(drop.position),
+    })),
     defeatedBossIds: [...state.defeatedBossIds].sort(),
     upgrades: [...state.upgrades].sort(),
     pendingUpgradeChoices: [...state.pendingUpgradeChoices],
@@ -81,6 +86,7 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       projectiles: state.projectiles.length,
       crescentAttacks: state.crescentAttacks.length,
       floorDrops: state.floorDrops.length,
+      weaponRelicDrops: state.weaponRelicDrops.length,
       // No retained recipe cache exists until M5; visible recipes are transient.
       cachedChunks: 0,
     },

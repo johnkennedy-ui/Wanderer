@@ -70,6 +70,7 @@ export interface ProjectileState {
   readonly targetPosition: Vector2;
   readonly progress: number;
   readonly style: AttackStyle;
+  readonly homing?: boolean;
 }
 
 /** A short-lived close-range attack projection. It is never a projectile or save data. */
@@ -88,6 +89,17 @@ export interface FloorDropState {
   readonly resource: ResourceKind;
   readonly amount: number;
   readonly position: Vector2;
+}
+
+/**
+ * A collectible weapon relic left only by a defeated timed-wave boss. It is a
+ * runtime projection, so an uncollected relic never enters a save document.
+ */
+export interface WeaponRelicDropState {
+  readonly id: string;
+  readonly position: Vector2;
+  readonly waveIndex: number;
+  readonly bossName: string;
 }
 
 export const buildingKinds = Object.freeze([
@@ -190,6 +202,11 @@ export interface ClassProgression {
   readonly level: 0 | 1 | 2 | 3 | 4 | 5;
   readonly playerClass: PlayerClass | null;
   readonly skillIds: readonly ClassSkillId[];
+  /**
+   * Current class weapon rank. Released progression extensions may omit this
+   * field; hydration normalizes missing historical values to zero.
+   */
+  readonly weaponRank?: number;
 }
 
 export interface PlayerState {
@@ -249,6 +266,9 @@ export interface CombatStats {
   readonly classSecondaryDamageMultiplier: number;
   readonly classAreaRadius: number;
   readonly classArcCosine: number;
+  readonly weaponProjectileCount: number;
+  readonly weaponProjectileDamageMultiplier: number;
+  readonly weaponProjectileHoming: boolean;
 }
 
 /**
