@@ -227,7 +227,7 @@ describe("class progression", () => {
     });
   });
 
-  it("makes each former Knight secondary-count skill improve uncapped crescents", () => {
+  it("makes each Knight crescent skill meaningful without changing fixed secondary damage", () => {
     const enemies = new Map([
       ["primary", enemy("primary", { x: 2, y: 0 })],
       ["baseline-secondary", enemy("baseline-secondary", { x: 1.8, y: 1 })],
@@ -275,6 +275,13 @@ describe("class progression", () => {
       targetId: "reach-secondary",
       damage: 10.2,
     });
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-wide-slash"]),
+      ).classSecondaryDamageMultiplier,
+    ).toBe(0.5);
 
     const crescentSweep = attack("knight-crescent-sweep");
     expect(
@@ -288,19 +295,28 @@ describe("class progression", () => {
       targetId: "arc-secondary",
       damage: 10.2,
     });
-
-    const whirlwind = attack("knight-whirlwind");
     expect(
       combatStatsFor(
         [],
         new Set(),
-        progression("knight", 5, ["knight-whirlwind"]),
+        progression("knight", 5, ["knight-crescent-sweep"]),
       ).classSecondaryDamageMultiplier,
-    ).toBe(0.75);
+    ).toBe(0.5);
+
+    const whirlwind = attack("knight-whirlwind");
+    const whirlwindStats = combatStatsFor(
+      [],
+      new Set(),
+      progression("knight", 5, ["knight-whirlwind"]),
+    );
+    expect(whirlwindStats).toMatchObject({
+      attackIntervalSeconds: 0.315,
+      classSecondaryDamageMultiplier: 0.5,
+    });
     const whirlwindSecondary = whirlwind.meleeImpacts.find(
       (impact) => impact.targetId === "baseline-secondary",
     );
-    expect(whirlwindSecondary?.damage).toBeCloseTo(15.3, 8);
+    expect(whirlwindSecondary?.damage).toBeCloseTo(10.2, 8);
   });
 
   it("allows Knight and Archer to accumulate attacks at half speed while moving", () => {

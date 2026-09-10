@@ -490,8 +490,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 4,
     label: "Whirlwind",
-    description: "Crescent secondary hits deal 75% damage instead of 50%.",
-    effect: { kind: "secondary-damage-multiplier", amount: 0.25 },
+    description: "Slash 30% faster.",
+    effect: { kind: "attack-interval", multiplier: 0.7 },
   },
   "wizard-flame-orb": {
     id: "wizard-flame-orb",
