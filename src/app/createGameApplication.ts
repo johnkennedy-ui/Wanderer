@@ -11,8 +11,9 @@ import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
 import { createVirtualStickInput } from "../platform/input/virtualStickInput";
 import { createBrowserLifecycle } from "../platform/lifecycle/browserLifecycle";
+import { createBrowserFrameScheduler } from "../platform/lifecycle/browserFrameScheduler";
 import { createThreeRenderer } from "../platform/render/threeRenderer";
-import { createBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
+import { createAsyncBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
 import { createGameUi } from "../ui/gameUi";
 
 export interface GameApplication {
@@ -20,9 +21,9 @@ export interface GameApplication {
 }
 
 /** The only composition root: it explicitly retains one GameSession and wires narrow adapters. */
-export const createGameApplication = (root: HTMLElement): GameApplication => {
-  const storage = createBrowserSaveStorage();
-  const recovered = storage.load();
+export const createGameApplication = async (root: HTMLElement): Promise<GameApplication> => {
+  const storage = createAsyncBrowserSaveStorage();
+  const recovered = await storage.load();
   const session = new GameSession({
     saved: recovered.ok ? recovered.document : undefined,
   });
@@ -35,18 +36,24 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
   } else {
     platformMessage = `Save was not loaded: ${recovered.message} Existing browser save data was left untouched.`;
   }
-  let animationFrame = 0;
-  let previousFrame = performance.now();
+  const scheduler = createBrowserFrameScheduler();
+  let animationFrame: number | null = null;
+  let previousFrame = scheduler.now();
+  let active = true;
+  let savePending = false;
 
   const ui = createGameUi(root, {
-    save(): void {
+    async save(): Promise<void> {
+      if (savePending) return;
       const request = session.createValidCampfireSaveRequest(Date.now());
       if (request === null) {
         platformMessage =
           "Save was not committed: move to a valid campfire first.";
         return;
       }
-      const result = storage.commit(request.document);
+      savePending = true;
+      const result = await storage.commit(request.document);
+      savePending = false;
       if (result.ok) session.recordSaveCommitted(request.document);
       platformMessage = result.ok
         ? `${result.message}${result.cleanupWarning === null ? "" : ` ${result.cleanupWarning}`} Save point: ${request.savePointLabel}.`
@@ -102,19 +109,31 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
   });
 
   const frame = (now: number): void => {
+    if (!active) return;
     session.tick((now - previousFrame) / 1_000);
     previousFrame = now;
     const presentation = session.presentation();
     renderer.render(presentation.renderer);
     ui.render(presentation.ui);
     ui.showTransient(platformMessage);
-    animationFrame = requestAnimationFrame(frame);
+    animationFrame = scheduler.request(frame);
   };
-  animationFrame = requestAnimationFrame(frame);
+  const unsubscribeLifecycle = lifecycle.subscribe((isActive) => {
+    active = isActive;
+    if (!active) {
+      if (animationFrame !== null) scheduler.cancel(animationFrame);
+      animationFrame = null;
+      return;
+    }
+    previousFrame = scheduler.now();
+    animationFrame = scheduler.request(frame);
+  });
+  animationFrame = scheduler.request(frame);
 
   return {
     dispose(): void {
-      cancelAnimationFrame(animationFrame);
+      if (animationFrame !== null) scheduler.cancel(animationFrame);
+      unsubscribeLifecycle();
       lifecycle.dispose();
       buildPlacement.dispose();
       tapToMove.dispose();

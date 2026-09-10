@@ -5,6 +5,11 @@ import {
 } from "../../domain/persistence/currentSave";
 import type { SaveLoadFailure } from "../../domain/persistence/saveErrors";
 import type { CurrentSave } from "../../domain/types";
+import type {
+  LoadedSave,
+  SaveCommitResult,
+  SaveStoragePort,
+} from "../../app/ports/saveStorage";
 
 export const SAVE_KEYS = Object.freeze({
   temporary: "wanderer.save.temporary",
@@ -18,38 +23,7 @@ export interface KeyValueStore {
   removeItem(key: string): void;
 }
 
-export interface LoadedSaveSuccess {
-  readonly ok: true;
-  readonly document: CurrentSave;
-  readonly source: "primary" | "backup";
-  readonly warning: string | null;
-  /** The rejected primary is diagnostic only; backup remains the authority. */
-  readonly primaryFailure: Exclude<SaveLoadFailure, "absent"> | null;
-}
-
-export interface LoadedSaveFailure {
-  readonly ok: false;
-  readonly document: null;
-  readonly source: null;
-  readonly warning: null;
-  readonly failure: SaveLoadFailure;
-  readonly message: string;
-}
-
-export type LoadedSave = LoadedSaveSuccess | LoadedSaveFailure;
-
-export type SaveCommitResult =
-  | {
-      readonly ok: true;
-      readonly message: string;
-      readonly cleanupWarning: string | null;
-    }
-  | {
-      readonly ok: false;
-      readonly message: string;
-      readonly cleanupWarning: null;
-    };
-
+export type { LoadedSave, SaveCommitResult } from "../../app/ports/saveStorage";
 export interface BrowserSaveStorage {
   load(): LoadedSave;
   commit(document: CurrentSave): SaveCommitResult;
@@ -163,3 +137,14 @@ export const createBrowserSaveStorage = (
     }
   },
 });
+
+/** Async application boundary; the storage protocol remains the legacy synchronous browser operation. */
+export const createAsyncBrowserSaveStorage = (
+  store?: KeyValueStore,
+): SaveStoragePort => {
+  const browserStorage = createBrowserSaveStorage(store);
+  return {
+    load: async () => browserStorage.load(),
+    commit: async (document) => browserStorage.commit(document),
+  };
+};
