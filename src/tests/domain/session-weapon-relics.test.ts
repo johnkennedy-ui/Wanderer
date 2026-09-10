@@ -133,8 +133,14 @@ describe("weapon relic progression", () => {
     expect(knightRankTwo.crescentDamageMultiplier).toBeCloseTo(1.4, 8);
 
     const targets = new Map([
-      ["first", enemy({ id: "first", kind: "scout", position: { x: 2, y: 0 } })],
-      ["second", enemy({ id: "second", kind: "scout", position: { x: 2.5, y: 0 } })],
+      [
+        "first",
+        enemy({ id: "first", kind: "scout", position: { x: 2, y: 0 } }),
+      ],
+      [
+        "second",
+        enemy({ id: "second", kind: "scout", position: { x: 2.5, y: 0 } }),
+      ],
     ]);
     const archer = advanceAutoCombatPhase({
       delta: 1,
