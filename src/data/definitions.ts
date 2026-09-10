@@ -57,7 +57,12 @@ export interface UpgradeDefinition {
 export type ClassSkillEffect =
   | UpgradeEffect
   | { readonly kind: "area-radius"; readonly amount: number }
-  | { readonly kind: "secondary-targets"; readonly amount: number };
+  | { readonly kind: "arc-cosine"; readonly amount: number }
+  | { readonly kind: "secondary-targets"; readonly amount: number }
+  | {
+      readonly kind: "secondary-damage-multiplier";
+      readonly amount: number;
+    };
 
 export interface ClassDefinition {
   readonly id: PlayerClass;
@@ -437,8 +442,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 1,
     label: "Wide Slash",
-    description: "Your slash hits one additional enemy in its arc.",
-    effect: { kind: "secondary-targets", amount: 1 },
+    description: "+0.6m crescent reach.",
+    effect: { kind: "area-radius", amount: 0.6 },
   },
   "knight-heavy-blade": {
     id: "knight-heavy-blade",
@@ -469,8 +474,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 3,
     label: "Crescent Sweep",
-    description: "Your slash hits one additional enemy in its arc.",
-    effect: { kind: "secondary-targets", amount: 1 },
+    description: "Widen the crescent from 120° to 150°.",
+    effect: { kind: "arc-cosine", amount: -0.25 },
   },
   "knight-bulwark": {
     id: "knight-bulwark",
@@ -485,8 +490,8 @@ const authoredClassSkillsById = {
     playerClass: "knight",
     tier: 4,
     label: "Whirlwind",
-    description: "Your slash hits two additional enemies in its arc.",
-    effect: { kind: "secondary-targets", amount: 2 },
+    description: "Crescent secondary hits deal 75% damage instead of 50%.",
+    effect: { kind: "secondary-damage-multiplier", amount: 0.25 },
   },
   "wizard-flame-orb": {
     id: "wizard-flame-orb",

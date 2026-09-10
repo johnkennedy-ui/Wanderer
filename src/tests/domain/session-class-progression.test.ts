@@ -227,6 +227,82 @@ describe("class progression", () => {
     });
   });
 
+  it("makes each former Knight secondary-count skill improve uncapped crescents", () => {
+    const enemies = new Map([
+      ["primary", enemy("primary", { x: 2, y: 0 })],
+      ["baseline-secondary", enemy("baseline-secondary", { x: 1.8, y: 1 })],
+      ["reach-secondary", enemy("reach-secondary", { x: 2.8, y: 0 })],
+      ["arc-secondary", enemy("arc-secondary", { x: 1, y: 2 })],
+    ]);
+    const attack = (skillId?: ClassProgression["skillIds"][number]) =>
+      advanceAutoCombatPhase({
+        delta: 1,
+        playerPosition: { x: 0, y: 0 },
+        enemies,
+        buildings: [],
+        upgrades: new Set(),
+        classProgression: progression(
+          "knight",
+          5,
+          skillId === undefined ? [] : [skillId],
+        ),
+        projectiles: [],
+        attackElapsed: 0,
+        nextProjectileSerial: 1,
+      });
+
+    const baseline = attack();
+    expect(combatStatsFor([], new Set(), progression("knight"))).toMatchObject({
+      attackRange: 2.4,
+      classAreaRadius: 2.4,
+      classArcCosine: 0.5,
+      classSecondaryDamageMultiplier: 0.5,
+    });
+    expect(baseline.meleeImpacts).toEqual([
+      { targetId: "primary", damage: 20.4 },
+      { targetId: "baseline-secondary", damage: 10.2 },
+    ]);
+
+    const wideSlash = attack("knight-wide-slash");
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-wide-slash"]),
+      ),
+    ).toMatchObject({ attackRange: 3, classAreaRadius: 3 });
+    expect(wideSlash.meleeImpacts).toContainEqual({
+      targetId: "reach-secondary",
+      damage: 10.2,
+    });
+
+    const crescentSweep = attack("knight-crescent-sweep");
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-crescent-sweep"]),
+      ).classArcCosine,
+    ).toBe(0.25);
+    expect(crescentSweep.meleeImpacts).toContainEqual({
+      targetId: "arc-secondary",
+      damage: 10.2,
+    });
+
+    const whirlwind = attack("knight-whirlwind");
+    expect(
+      combatStatsFor(
+        [],
+        new Set(),
+        progression("knight", 5, ["knight-whirlwind"]),
+      ).classSecondaryDamageMultiplier,
+    ).toBe(0.75);
+    const whirlwindSecondary = whirlwind.meleeImpacts.find(
+      (impact) => impact.targetId === "baseline-secondary",
+    );
+    expect(whirlwindSecondary?.damage).toBeCloseTo(15.3, 8);
+  });
+
   it("allows Knight and Archer to accumulate attacks at half speed while moving", () => {
     const enemies = new Map([["east", enemy("east", { x: 2, y: 0 })]]);
     const movingAttack = (playerClass: ClassProgression["playerClass"]) =>

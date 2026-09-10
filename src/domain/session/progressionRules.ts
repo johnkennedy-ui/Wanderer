@@ -192,6 +192,19 @@ export const combatStatsFor = (
         break;
       case "area-radius":
         classAreaRadius += effect.amount;
+        if (attackStyle === "slash") attackRange += effect.amount;
+        break;
+      case "arc-cosine":
+        classArcCosine = Math.max(
+          -1,
+          Math.min(1, classArcCosine + effect.amount),
+        );
+        break;
+      case "secondary-damage-multiplier":
+        classSecondaryDamageMultiplier = Math.min(
+          1,
+          classSecondaryDamageMultiplier + effect.amount,
+        );
         break;
       case "secondary-targets":
         chainTargets += effect.amount;
