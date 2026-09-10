@@ -73,6 +73,37 @@ across root/Pages base paths. Eight schema-v2/generator-v1 fixtures remain
 byte-identical to accepted M3. Independent review and release remain separate
 gates. See the M4 document for finite measurements and limitations.
 
+## M5 checks
+
+- `src/tests/domain/chunk-recipe-cache.test.ts`: immutable recipes, deterministic
+  LRU/identity/axis keys, both released generators, isolation/reset/hydration,
+  shared consumers, stationary warmup and preserved Healing Hut behaviour.
+- `src/tests/domain/session-world-runtime.test.ts` and
+  `session-runtime-bounds.test.ts`: retained enemy authority across eviction,
+  copied diagnostics and finite cache accounting without weakening global chase.
+- `src/tests/platform/three-renderer.test.ts`: retained identities, warm heavy
+  allocation counts, actual cylinder Y=0, aura/projectile/recovery variants,
+  bounded maps, instance isolation and exactly-once resource/adapter disposal.
+  CPU ownership tests do not establish real browser rendering or hardware speed.
+- `src/tests/ui/game-ui.test.ts`: keyed building rows, targeted updates, current
+  placement callbacks, removal/disposal, effect signatures and current HUD/class
+  flow. Narrow DOM doubles complement, rather than replace, browser checks.
+- `src/tests/browser/m5-rendering.spec.ts`: trusted current canvas placement,
+  row/effect identity and mutation observation, Healing Hut changes, stable
+  canvas/label, cancellation/reset and no implicit save. Public progression
+  choices are resolved before obstructed actions; old coordinate inputs are not
+  restored. Existing browser cases retain their names and semantic expectations,
+  using current icon-control names, resource chip labels and the capacity field.
+- `npm run test:soak`: the fixed schedule, deterministic repeat, durable
+  roundtrip and state bounds remain; cache maxima and `M5_SOAK_EVIDENCE` extend
+  diagnostics. Historical M4 measurements above remain historical, not new goldens.
+
+Run changed-file formatting, typecheck, focused/full tests, architecture, soak,
+fixture hashes, reproducible builds, and both root/Pages desktop/touch browser
+surfaces on the composed candidate. Exact-candidate independent review and release
+remain separate gates; implementation descriptions or old-base results are not
+M5 acceptance.
+
 ## Explicitly unverified native matrix
 
 All Android wrapper, APK/AAB, physical Android touch, pause/resume, lifecycle, performance, ARM64, target-SDK, signing, and Play evidence is **NOT YET VERIFIED** for this candidate. The rendered browser UI repeats this boundary for consumers. Native Android remains ungenerated. See `ANDROID_BUILD.md`.

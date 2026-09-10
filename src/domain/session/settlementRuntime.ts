@@ -20,6 +20,7 @@ import {
 } from "../world";
 import { emptyResources } from "../types";
 import type { SettlementCampfire } from "./sessionState";
+import type { ChunkRecipeSource } from "./chunkRecipeCache";
 import {
   addResourceBags,
   canAffordResources,
@@ -98,11 +99,14 @@ export class SettlementRuntime {
   private nextBuildingSerial: number;
   private farmHarvestElapsed: number;
 
-  constructor(state: {
-    readonly buildings: BuildingState[];
-    readonly nextBuildingSerial: number;
-    readonly farmHarvestElapsed: number;
-  }) {
+  constructor(
+    state: {
+      readonly buildings: BuildingState[];
+      readonly nextBuildingSerial: number;
+      readonly farmHarvestElapsed: number;
+    },
+    private readonly recipeSource: ChunkRecipeSource = generateChunk,
+  ) {
     this.buildings = state.buildings;
     this.nextBuildingSerial = state.nextBuildingSerial;
     this.farmHarvestElapsed = state.farmHarvestElapsed;
@@ -297,7 +301,7 @@ export class SettlementRuntime {
     position: Vector2,
   ): SettlementCampfire[] {
     const generated = visibleChunkCoordinates(position).flatMap((coordinate) =>
-      generateChunk(world, coordinate).campfires.map((campfire) => ({
+      this.recipeSource(world, coordinate).campfires.map((campfire) => ({
         id: campfire.id,
         label: campfire.kind === "home" ? "home campfire" : "wild campfire",
         position: campfire.position,
@@ -316,7 +320,7 @@ export class SettlementRuntime {
   }
   private isTerrainBlocked(world: WorldIdentity, position: Vector2): boolean {
     const coordinate = chunkCoordinateFor(position);
-    return generateChunk(world, coordinate).obstacles.some(
+    return this.recipeSource(world, coordinate).obstacles.some(
       (obstacle) => distance(obstacle.position, position) < 0.9,
     );
   }
