@@ -216,6 +216,175 @@ describe("weapon relic progression", () => {
     expect(homing.targetId).toBe(defeated.id);
   });
 
+  it("keeps a homing replacement out of its original splash list", () => {
+    const defeated = enemy({ id: "defeated", defeated: true, hp: 0 });
+    const replacement = enemy({
+      id: "replacement",
+      kind: "scout",
+      position: { x: 5, y: 0 },
+    });
+    const homing: RuntimeProjectile = {
+      id: "projectile:homing-splash",
+      origin: { x: 0, y: 0 },
+      targetId: defeated.id,
+      targetPosition: defeated.position,
+      damage: 10,
+      chainTargetIds: [replacement.id],
+      chainDamage: 7,
+      hitHeal: 0,
+      style: "magic",
+      homing: true,
+      elapsed: 0,
+    };
+    const result = advanceProjectileCombatPhase({
+      delta: 1,
+      playerHp: 100,
+      playerMaxHp: 100,
+      projectiles: [homing],
+      projectileTravelSeconds: 0.3,
+      ...phaseInput(
+        new Map([
+          [defeated.id, defeated],
+          [replacement.id, replacement],
+        ]),
+      ),
+    });
+    expect(result.enemies.get(replacement.id)?.hp).toBe(10);
+    expect(homing).toMatchObject({
+      targetId: defeated.id,
+      chainTargetIds: [replacement.id],
+    });
+  });
+
+  it("resolves every ranked relic damage effect through launch and impact", () => {
+    const archerTargets = () =>
+      new Map([
+        ["first", enemy({ id: "first", kind: "scout", hp: 100, maxHp: 100 })],
+        [
+          "second",
+          enemy({
+            id: "second",
+            kind: "scout",
+            hp: 100,
+            maxHp: 100,
+            position: { x: 3, y: 0 },
+          }),
+        ],
+      ]);
+    const launchArcher = (rank: number) =>
+      advanceAutoCombatPhase({
+        delta: 1,
+        playerPosition: { x: 0, y: 0 },
+        enemies: archerTargets(),
+        buildings: [],
+        upgrades: new Set(),
+        classProgression: {
+          ...progression("archer", rank),
+          skillIds: ["archer-volley"],
+        },
+        projectiles: [],
+        attackElapsed: 0,
+        nextProjectileSerial: 1,
+      });
+    const archerRankOne = launchArcher(1);
+    const archerRankTwo = launchArcher(2);
+    expect(archerRankOne.projectiles).toMatchObject([
+      { targetId: "first", chainTargetIds: ["second"] },
+      { targetId: "second", chainTargetIds: ["first"] },
+    ]);
+    const archerSingleTarget = advanceAutoCombatPhase({
+      delta: 1,
+      playerPosition: { x: 0, y: 0 },
+      enemies: new Map([["first", enemy({ id: "first", kind: "scout" })]]),
+      buildings: [],
+      upgrades: new Set(),
+      classProgression: {
+        ...progression("archer", 1),
+        skillIds: ["archer-volley"],
+      },
+      projectiles: [],
+      attackElapsed: 0,
+      nextProjectileSerial: 1,
+    });
+    expect(archerSingleTarget.projectiles).toMatchObject([
+      { targetId: "first", chainTargetIds: [] },
+      { targetId: "first", chainTargetIds: [] },
+    ]);
+    expect(archerRankTwo.projectiles.map(({ damage }) => damage)).toEqual(
+      archerRankOne.projectiles.map(({ damage }) => damage * 1.1),
+    );
+    for (const [projectiles, expectedHp] of [
+      [archerRankOne.projectiles, 73],
+      [archerRankTwo.projectiles, 70.3],
+    ] as const) {
+      const impact = advanceProjectileCombatPhase({
+        delta: 1,
+        playerHp: 100,
+        playerMaxHp: 100,
+        projectiles,
+        projectileTravelSeconds: 0.3,
+        ...phaseInput(archerTargets()),
+      });
+      expect(impact.enemies.get("first")?.hp).toBeCloseTo(expectedHp, 8);
+      expect(impact.enemies.get("second")?.hp).toBeCloseTo(expectedHp, 8);
+    }
+
+    const wizardTarget = enemy({ id: "wizard-target", hp: 100, maxHp: 100 });
+    const launchWizard = (rank: number) =>
+      advanceAutoCombatPhase({
+        delta: 1,
+        playerPosition: { x: 0, y: 0 },
+        enemies: new Map([[wizardTarget.id, wizardTarget]]),
+        buildings: [],
+        upgrades: new Set(),
+        classProgression: progression("wizard", rank),
+        projectiles: [],
+        attackElapsed: 0,
+        nextProjectileSerial: 1,
+      });
+    const wizardRankOne = launchWizard(1);
+    const wizardRankTwo = launchWizard(2);
+    expect(wizardRankTwo.projectiles[0].damage).toBeCloseTo(
+      wizardRankOne.projectiles[0].damage * 1.15,
+      8,
+    );
+    for (const [projectile, expectedHp] of [
+      [wizardRankOne.projectiles[0], 80.2],
+      [wizardRankTwo.projectiles[0], 77.23],
+    ] as const) {
+      const impact = advanceProjectileCombatPhase({
+        delta: 1,
+        playerHp: 100,
+        playerMaxHp: 100,
+        projectiles: [projectile],
+        projectileTravelSeconds: 0.3,
+        ...phaseInput(new Map([[wizardTarget.id, wizardTarget]])),
+      });
+      expect(impact.enemies.get(wizardTarget.id)?.hp).toBeCloseTo(
+        expectedHp,
+        8,
+      );
+    }
+
+    const knightTargets = archerTargets();
+    const knight = advanceAutoCombatPhase({
+      delta: 1,
+      playerPosition: { x: 0, y: 0 },
+      enemies: knightTargets,
+      buildings: [],
+      upgrades: new Set(),
+      classProgression: progression("knight", 1),
+      projectiles: [],
+      attackElapsed: 0,
+      nextProjectileSerial: 1,
+    });
+    expect(knight.projectiles).toEqual([]);
+    expect(knight.meleeImpacts).toEqual([
+      { targetId: "first", damage: 24.72 },
+      { targetId: "second", damage: 12.36 },
+    ]);
+  });
+
   it("emits a relic from both direct crescent and projectile wave-boss defeats", () => {
     const meleeBoss = waveBoss();
     const melee = resolveMeleeCombatPhase({

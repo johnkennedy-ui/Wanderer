@@ -244,7 +244,10 @@ export const advanceProjectileCombatPhase = ({
       targets: enemies,
       primaryTargetId: projectile.targetId,
       primaryDamage: projectile.damage,
-      chainTargetIds: projectile.chainTargetIds,
+      chainTargetIds: projectile.chainTargetIds.filter(
+        (targetId, index, ids) =>
+          targetId !== projectile.targetId && ids.indexOf(targetId) === index,
+      ),
       chainDamage: projectile.chainDamage,
     });
     for (const impact of resolution.impacts) {

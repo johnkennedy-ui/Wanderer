@@ -201,20 +201,20 @@ export const advanceAutoCombatPhase = ({
     upgrades,
     classProgression,
   );
-  const classSecondaryTargetIds = classSecondaryTargetIdsFor({
-    style: stats.attackStyle,
-    playerPosition,
-    primaryTarget: decision.target,
-    targets,
-    maximumTargets: stats.chainTargets,
-    areaRadius: stats.classAreaRadius,
-    arcCosine: stats.classArcCosine,
-  });
   const shotTargets = Array.from(
     { length: stats.weaponProjectileCount },
     (_, index) => targets[index] ?? decision.target,
   );
   for (const [index, target] of shotTargets.entries()) {
+    const classSecondaryTargetIds = classSecondaryTargetIdsFor({
+      style: stats.attackStyle,
+      playerPosition,
+      primaryTarget: target,
+      targets,
+      maximumTargets: stats.chainTargets,
+      areaRadius: stats.classAreaRadius,
+      arcCosine: stats.classArcCosine,
+    });
     const shotDamage =
       stats.attackDamage * stats.weaponProjectileDamageMultiplier;
     const draft = projectileDraftFor({
@@ -231,9 +231,7 @@ export const advanceAutoCombatPhase = ({
         .toString()
         .padStart(4, "0")}`,
       ...draft,
-      chainTargetIds: classSecondaryTargetIds.filter(
-        (targetId) => targetId !== target.id,
-      ),
+      chainTargetIds: classSecondaryTargetIds,
       chainDamage:
         shotDamage *
         (stats.classSecondaryDamageMultiplier ||
