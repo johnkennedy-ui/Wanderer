@@ -177,7 +177,7 @@ describe("class progression", () => {
     });
   });
 
-  it("gives Knight arcs, Wizard splash, and Archer a single long-range arrow", () => {
+  it("gives Knight an immediate crescent, Wizard splash, and Archer a single long-range arrow", () => {
     const enemies = new Map([
       ["east", enemy("east", { x: 2, y: 0 })],
       ["arc", enemy("arc", { x: 1.8, y: 1 })],
@@ -194,19 +194,28 @@ describe("class progression", () => {
         projectiles: [],
         attackElapsed: 0,
         nextProjectileSerial: 1,
-      }).projectiles[0];
+      });
 
     expect(attack(progression("knight"))).toMatchObject({
-      style: "slash",
-      targetId: "east",
-      chainTargetIds: ["arc"],
+      projectiles: [],
+      crescentAttacks: [
+        expect.objectContaining({
+          id: "crescent:0001",
+          radius: 2.4,
+          arcCosine: 0.5,
+        }),
+      ],
+      meleeImpacts: [
+        expect.objectContaining({ targetId: "east" }),
+        expect.objectContaining({ targetId: "arc" }),
+      ],
     });
-    expect(attack(progression("wizard"))).toMatchObject({
+    expect(attack(progression("wizard")).projectiles[0]).toMatchObject({
       style: "magic",
       targetId: "east",
       chainTargetIds: ["arc", "splash"],
     });
-    expect(attack(progression("archer"))).toMatchObject({
+    expect(attack(progression("archer")).projectiles[0]).toMatchObject({
       style: "arrow",
       targetId: "east",
       chainTargetIds: [],
@@ -231,7 +240,8 @@ describe("class progression", () => {
         nextProjectileSerial: 1,
       });
 
-    expect(movingAttack("knight").projectiles).toHaveLength(1);
+    expect(movingAttack("knight").projectiles).toHaveLength(0);
+    expect(movingAttack("knight").crescentAttacks).toHaveLength(1);
     expect(movingAttack("archer").projectiles).toHaveLength(0);
     expect(movingAttack("archer").attackElapsed).toBeCloseTo(0.45, 8);
     expect(movingAttack("wizard").projectiles).toHaveLength(0);

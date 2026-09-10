@@ -3,6 +3,7 @@ import type { GameNotice } from "../notices";
 import type {
   BuildingState,
   AttackStyle,
+  CrescentAttackState,
   ClassProgression,
   CurrentSave,
   EnemyKind,
@@ -58,6 +59,16 @@ export interface RuntimeProjectile {
   elapsed: number;
 }
 
+/** Runtime-only visible Knight attack. It applies its damage immediately. */
+export interface RuntimeCrescentAttack {
+  readonly id: string;
+  readonly origin: Vector2;
+  readonly direction: Vector2;
+  readonly radius: number;
+  readonly arcCosine: number;
+  elapsed: number;
+}
+
 export interface SettlementCampfire {
   readonly id: string;
   readonly label: string;
@@ -82,6 +93,7 @@ export interface SessionState {
   buildings: BuildingState[];
   enemies: Map<string, RuntimeEnemy>;
   projectiles: RuntimeProjectile[];
+  crescentAttacks: RuntimeCrescentAttack[];
   floorDrops: FloorDropState[];
   defeatedBossIds: Set<string>;
   upgrades: Set<UpgradeId>;
@@ -89,6 +101,7 @@ export interface SessionState {
   pendingUpgradeChoices: UpgradeId[];
   nextBuildingSerial: number;
   nextProjectileSerial: number;
+  nextCrescentSerial: number;
   nextFloorDropSerial: number;
   committedSavePoint: SettlementCampfire;
   input: MoveCommand;
@@ -175,6 +188,7 @@ export const createFreshSessionState = (
     buildings: [],
     enemies: new Map(),
     projectiles: [],
+    crescentAttacks: [],
     floorDrops: [],
     defeatedBossIds: new Set(),
     upgrades: new Set(),
@@ -182,6 +196,7 @@ export const createFreshSessionState = (
     pendingUpgradeChoices: [],
     nextBuildingSerial: 1,
     nextProjectileSerial: 1,
+    nextCrescentSerial: 1,
     nextFloorDropSerial: 1,
     committedSavePoint: homeSavePoint(),
     input: idleInput(elapsed),
@@ -209,6 +224,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   buildings: cloneBuildings(saved.buildings),
   enemies: new Map(),
   projectiles: [],
+  crescentAttacks: [],
   floorDrops: [],
   defeatedBossIds: new Set(saved.defeatedBossIds),
   upgrades: new Set(saved.upgrades),
@@ -216,6 +232,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   pendingUpgradeChoices: [],
   nextBuildingSerial: saved.nextBuildingSerial,
   nextProjectileSerial: 1,
+  nextCrescentSerial: 1,
   nextFloorDropSerial: 1,
   committedSavePoint: {
     id: saved.savePointId,

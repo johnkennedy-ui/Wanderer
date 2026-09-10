@@ -10,6 +10,7 @@ import type {
   InputSource,
   PlayerState,
   PlayerStats,
+  CrescentAttackState,
   ProjectileState,
   ReadonlyResourceBag,
   UpgradeId,
@@ -131,6 +132,7 @@ export interface GameRendererSnapshot {
   readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
+  readonly crescentAttacks: readonly CrescentAttackState[];
   readonly floorDrops: readonly FloorDropState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];

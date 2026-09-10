@@ -346,8 +346,8 @@ const authoredClassDefinitions = {
     damageMultiplier: 1.2,
     attackIntervalSeconds: 0.45,
     attackRange: 2.4,
-    secondaryDamageMultiplier: 0.7,
-    areaRadius: 0,
+    secondaryDamageMultiplier: 0.5,
+    areaRadius: 2.4,
     arcCosine: 0.5,
     secondaryTargets: 2,
     passiveStats: {

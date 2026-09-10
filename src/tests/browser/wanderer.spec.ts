@@ -8,6 +8,42 @@ import {
 
 const applicationPath = process.env.PLAYWRIGHT_BASE_PATH ?? "/";
 
+const primeClassChoice = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wanderer.save.primary",
+      JSON.stringify({
+        schemaVersion: 2,
+        world: {
+          seed: "wanderer-known-seed",
+          generatorVersion: "wanderer-web-v2",
+        },
+        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+        resources: {
+          wood: 120,
+          stone: 120,
+          scrap: 120,
+          essence: 20,
+          bossCore: 0,
+        },
+        buildings: [],
+        defeatedBossIds: [],
+        upgrades: [],
+        nextBuildingSerial: 1,
+        committedAt: 0,
+        savePointId: "campfire:home",
+        savePointPosition: { x: 0, y: 0 },
+        classProgression: {
+          experience: 30,
+          level: 1,
+          playerClass: null,
+          skillIds: [],
+        },
+      }),
+    );
+  });
+};
+
 const choosePendingClassChoicesIfOpen = async (
   page: Page,
 ): Promise<boolean> => {
@@ -63,6 +99,7 @@ const checkWithPendingClassResolution = async (
 test("earned experience opens a class choice and the selected class is visible", async ({
   page,
 }) => {
+  await primeClassChoice(page);
   await page.goto(applicationPath);
   const classModal = page.getByTestId("class-modal");
   await expect(classModal).toBeVisible({ timeout: 8_000 });
@@ -70,6 +107,21 @@ test("earned experience opens a class choice and the selected class is visible",
   await expect(classModal).toBeHidden();
   await openStatus(page);
   await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+});
+
+test("Knight attacks render as crescents instead of projectiles", async ({
+  page,
+}) => {
+  await primeClassChoice(page);
+  await page.goto(applicationPath);
+  const classModal = page.getByTestId("class-modal");
+  await expect(classModal).toBeVisible({ timeout: 8_000 });
+  await classModal.getByTestId("class-knight").click();
+  const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-crescent-attack-count", /[1-9]/, {
+    timeout: 8_000,
+  });
+  await expect(canvas).toHaveAttribute("data-projectile-count", "0");
 });
 
 test("the icon HUD exposes compact resources and the current skill tree", async ({

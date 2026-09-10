@@ -1,4 +1,4 @@
-import { distance } from "../math";
+import { distance, normalize } from "../math";
 import type { GameNotice } from "../notices";
 import type {
   BuildingState,
@@ -27,6 +27,7 @@ import {
   projectileUpgradeEffectsFor,
 } from "./progressionRules";
 import type {
+  RuntimeCrescentAttack,
   RuntimeEnemy,
   RuntimeProjectile,
   SettlementCampfire,
@@ -57,6 +58,19 @@ const copyProjectile = (projectile: RuntimeProjectile): RuntimeProjectile => ({
   chainTargetIds: [...projectile.chainTargetIds],
 });
 
+const copyCrescentAttack = (
+  attack: RuntimeCrescentAttack,
+): RuntimeCrescentAttack => ({
+  ...attack,
+  origin: copyVector(attack.origin),
+  direction: copyVector(attack.direction),
+});
+
+export interface MeleeImpact {
+  readonly targetId: string;
+  readonly damage: number;
+}
+
 export interface AutoCombatPhaseInput {
   readonly delta: number;
   /** A moving class may accumulate attack time at a reduced, deterministic rate. */
@@ -67,14 +81,19 @@ export interface AutoCombatPhaseInput {
   readonly upgrades: ReadonlySet<UpgradeId>;
   readonly classProgression?: ClassProgression;
   readonly projectiles: readonly RuntimeProjectile[];
+  readonly crescentAttacks?: readonly RuntimeCrescentAttack[];
   readonly attackElapsed: number;
   readonly nextProjectileSerial: number;
+  readonly nextCrescentSerial?: number;
 }
 
 export interface AutoCombatPhaseResult {
   readonly projectiles: RuntimeProjectile[];
+  readonly crescentAttacks: RuntimeCrescentAttack[];
+  readonly meleeImpacts: readonly MeleeImpact[];
   readonly attackElapsed: number;
   readonly nextProjectileSerial: number;
+  readonly nextCrescentSerial: number;
   readonly combatStatus: string;
 }
 
@@ -88,10 +107,18 @@ export const advanceAutoCombatPhase = ({
   upgrades,
   classProgression,
   projectiles: currentProjectiles,
+  crescentAttacks: currentCrescentAttacks = [],
   attackElapsed,
   nextProjectileSerial,
+  nextCrescentSerial = 1,
 }: AutoCombatPhaseInput): AutoCombatPhaseResult => {
   const projectiles = currentProjectiles.map(copyProjectile);
+  const crescentAttacks = currentCrescentAttacks
+    .map((attack) => ({
+      ...copyCrescentAttack(attack),
+      elapsed: attack.elapsed + delta,
+    }))
+    .filter((attack) => attack.elapsed < 0.18);
   const stats = combatStatsFor(buildings, upgrades, classProgression);
   const targets = liveTargetsInRange({
     playerPosition,
@@ -107,8 +134,11 @@ export const advanceAutoCombatPhase = ({
   if (decision.kind === "no-target")
     return {
       projectiles,
+      crescentAttacks,
+      meleeImpacts: [],
       attackElapsed: decision.attackElapsed,
       nextProjectileSerial,
+      nextCrescentSerial,
       combatStatus: "Stationary: seeking a target",
     };
 
@@ -118,10 +148,54 @@ export const advanceAutoCombatPhase = ({
   if (decision.kind === "waiting")
     return {
       projectiles,
+      crescentAttacks,
+      meleeImpacts: [],
       attackElapsed: decision.attackElapsed,
       nextProjectileSerial,
+      nextCrescentSerial,
       combatStatus,
     };
+
+  if (stats.attackStyle === "slash") {
+    const secondaryTargetIds = classSecondaryTargetIdsFor({
+      style: stats.attackStyle,
+      playerPosition,
+      primaryTarget: decision.target,
+      targets,
+      maximumTargets: stats.chainTargets,
+      areaRadius: stats.classAreaRadius,
+      arcCosine: stats.classArcCosine,
+    });
+    const direction = normalize({
+      x: decision.target.position.x - playerPosition.x,
+      y: decision.target.position.y - playerPosition.y,
+    });
+    return {
+      projectiles,
+      crescentAttacks: [
+        ...crescentAttacks,
+        {
+          id: `crescent:${nextCrescentSerial.toString().padStart(4, "0")}`,
+          origin: copyVector(playerPosition),
+          direction,
+          radius: stats.classAreaRadius,
+          arcCosine: stats.classArcCosine,
+          elapsed: 0,
+        },
+      ],
+      meleeImpacts: [
+        { targetId: decision.target.id, damage: stats.attackDamage },
+        ...secondaryTargetIds.map((targetId) => ({
+          targetId,
+          damage: stats.attackDamage * stats.classSecondaryDamageMultiplier,
+        })),
+      ],
+      attackElapsed: decision.attackElapsed,
+      nextProjectileSerial,
+      nextCrescentSerial: nextCrescentSerial + 1,
+      combatStatus,
+    };
+  }
 
   const projectileEffects = projectileUpgradeEffectsFor(
     upgrades,
@@ -158,8 +232,11 @@ export const advanceAutoCombatPhase = ({
   });
   return {
     projectiles,
+    crescentAttacks,
+    meleeImpacts: [],
     attackElapsed: decision.attackElapsed,
     nextProjectileSerial: nextProjectileSerial + 1,
+    nextCrescentSerial,
     combatStatus,
   };
 };

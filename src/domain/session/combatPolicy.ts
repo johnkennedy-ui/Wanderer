@@ -150,6 +150,8 @@ export const classSecondaryTargetIdsFor = <Target extends CombatTarget>({
     });
     return others
       .filter((target) => {
+        if (distance(playerPosition, target.position) > areaRadius)
+          return false;
         const candidate = normalize({
           x: target.position.x - playerPosition.x,
           y: target.position.y - playerPosition.y,

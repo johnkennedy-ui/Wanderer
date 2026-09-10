@@ -28,8 +28,10 @@ import {
   advanceEnemyCombatPhase,
 } from "./session/combatTickRuntime";
 import { advanceProjectileCombatPhase } from "./session/projectileCombatRuntime";
+import { resolveMeleeCombatPhase } from "./session/meleeCombatRuntime";
 import type {
   RuntimeEnemy,
+  RuntimeCrescentAttack,
   RuntimeProjectile,
   SessionState,
   SettlementCampfire,
@@ -81,12 +83,14 @@ export class GameSession {
   private settlement!: SettlementRuntime;
   private enemies!: Map<string, RuntimeEnemy>;
   private projectiles!: RuntimeProjectile[];
+  private crescentAttacks!: RuntimeCrescentAttack[];
   private floorDrops!: FloorDropState[];
   private defeatedBossIds!: Set<string>;
   private upgrades!: Set<UpgradeId>;
   private classProgression!: import("./types").ClassProgression;
   private pendingUpgradeChoices!: UpgradeId[];
   private nextProjectileSerial!: number;
+  private nextCrescentSerial!: number;
   private nextFloorDropSerial!: number;
   private committedSavePoint!: SettlementCampfire;
   private input!: MoveCommand;
@@ -119,12 +123,14 @@ export class GameSession {
     });
     this.enemies = state.enemies;
     this.projectiles = state.projectiles;
+    this.crescentAttacks = state.crescentAttacks;
     this.floorDrops = state.floorDrops;
     this.defeatedBossIds = state.defeatedBossIds;
     this.upgrades = state.upgrades;
     this.classProgression = state.classProgression;
     this.pendingUpgradeChoices = state.pendingUpgradeChoices;
     this.nextProjectileSerial = state.nextProjectileSerial;
+    this.nextCrescentSerial = state.nextCrescentSerial;
     this.nextFloorDropSerial = state.nextFloorDropSerial;
     this.committedSavePoint = state.committedSavePoint;
     this.input = state.input;
@@ -356,6 +362,7 @@ export class GameSession {
       buildRadius,
       enemies: this.enemies,
       projectiles: this.projectiles,
+      crescentAttacks: this.crescentAttacks,
       floorDrops: this.floorDrops,
       buildings: this.settlement.buildingState,
       visibleChunks,
@@ -387,6 +394,7 @@ export class GameSession {
       buildings: this.settlement.buildingState,
       enemies: this.enemies,
       projectiles: this.projectiles,
+      crescentAttacks: this.crescentAttacks,
       floorDrops: this.floorDrops,
       defeatedBossIds: this.defeatedBossIds,
       upgrades: this.upgrades,
@@ -421,13 +429,50 @@ export class GameSession {
       upgrades: this.upgrades,
       classProgression: this.classProgression,
       projectiles: this.projectiles,
+      crescentAttacks: this.crescentAttacks,
       attackElapsed: this.attackElapsed,
       nextProjectileSerial: this.nextProjectileSerial,
+      nextCrescentSerial: this.nextCrescentSerial,
     });
     this.projectiles = result.projectiles;
+    this.crescentAttacks = result.crescentAttacks;
     this.attackElapsed = result.attackElapsed;
     this.nextProjectileSerial = result.nextProjectileSerial;
+    this.nextCrescentSerial = result.nextCrescentSerial;
     this.combatStatus = result.combatStatus;
+    if (result.meleeImpacts.length > 0)
+      this.updateMeleeCombat(result.meleeImpacts);
+  }
+  private updateMeleeCombat(
+    impacts: readonly import("./session/combatTickRuntime").MeleeImpact[],
+  ): void {
+    const result = resolveMeleeCombatPhase({
+      impacts,
+      elapsed: this.elapsed,
+      enemies: this.enemies,
+      floorDrops: this.floorDrops,
+      defeatedBossIds: this.defeatedBossIds,
+      pendingUpgradeChoices: this.pendingUpgradeChoices,
+      nextFloorDropSerial: this.nextFloorDropSerial,
+      worldSeed: this.world.seed,
+      upgrades: this.upgrades,
+      floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
+    });
+    this.enemies = result.enemies;
+    this.floorDrops = result.floorDrops;
+    this.defeatedBossIds = result.defeatedBossIds;
+    this.pendingUpgradeChoices = result.pendingUpgradeChoices;
+    this.nextFloorDropSerial = result.nextFloorDropSerial;
+    if (result.experienceEarned > 0) {
+      const experience =
+        this.classProgression.experience + result.experienceEarned;
+      this.classProgression = {
+        ...this.classProgression,
+        experience,
+        level: playerLevelForExperience(experience),
+      };
+    }
+    if (result.notice !== null) this.notice = result.notice;
   }
   private updateProjectiles(delta: number): void {
     const result = advanceProjectileCombatPhase({

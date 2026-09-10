@@ -69,6 +69,16 @@ export interface ProjectileState {
   readonly style: AttackStyle;
 }
 
+/** A short-lived close-range attack projection. It is never a projectile or save data. */
+export interface CrescentAttackState {
+  readonly id: string;
+  readonly origin: Vector2;
+  readonly direction: Vector2;
+  readonly radius: number;
+  readonly arcCosine: number;
+  readonly progress: number;
+}
+
 /** A runtime-only resource bundle left by a completed lethal projectile impact. */
 export interface FloorDropState {
   readonly id: string;
