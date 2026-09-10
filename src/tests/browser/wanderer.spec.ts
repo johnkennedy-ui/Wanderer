@@ -96,6 +96,14 @@ const checkWithPendingClassResolution = async (
   throw new Error("A pending class choice kept the requested control blocked.");
 };
 
+test("HUD reports the deterministic next-wave schedule", async ({ page }) => {
+  await page.goto(applicationPath);
+  await openStatus(page);
+  await expect(page.getByTestId("wave-status")).toContainText(
+    /Next wave in 1(?:[01]\d|20)s/,
+  );
+});
+
 test("earned experience opens a class choice and the selected class is visible", async ({
   page,
 }) => {

@@ -95,11 +95,14 @@ export const resolveMeleeCombatPhase = ({
         hasUpgradeChoices: pendingUpgradeChoices.length === 3,
       };
     } else {
-      enemy.respawnAt = elapsed + (definition.respawnSeconds ?? 0);
+      const respawns = enemy.waveIndex === undefined;
+      enemy.respawnAt = respawns
+        ? elapsed + (definition.respawnSeconds ?? 0)
+        : null;
       notice = {
         kind: "enemy.defeated",
         enemyKind: enemy.kind,
-        respawns: true,
+        respawns,
       };
     }
   }

@@ -153,6 +153,14 @@ const authoredGameplayTuning = {
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
   experienceThresholds: [30, 100, 250, 600, 1500] as const,
+  waveIntervalSeconds: 120,
+  waveDurationSeconds: 30,
+  waveDensityMultiplier: 5,
+  waveBaseGroupSize: 3,
+  waveBossHealthMultiplier: 5,
+  waveBossDamageMultiplier: 2,
+  waveBossDropMultiplier: 5,
+  waveBossVisualScale: 1.6,
 };
 
 export const gameplayTuning = deepFreeze(authoredGameplayTuning);
