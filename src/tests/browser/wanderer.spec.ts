@@ -154,7 +154,7 @@ test("HUD reports the deterministic next-wave schedule", async ({ page }) => {
   );
 });
 
-test("earned experience opens a class choice and the selected class is visible", async ({
+test("earned experience opens a class choice and the selected class is visible after reload", async ({
   page,
 }) => {
   await primeClassChoice(page);
