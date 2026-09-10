@@ -290,8 +290,8 @@ test("initial browser load uses compact circular actions with accessible hidden 
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
   await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
   await expect(page.getByTestId("save-button")).toBeEnabled();
-  await expect(page.getByTestId("resources")).toContainText("Wood");
-  await expect(page.getByTestId("resources")).toContainText("Boss Core");
+  await expect(page.locator('[aria-label="Wood: 120"]')).toHaveCount(1);
+  await expect(page.locator('[aria-label="Boss Core: 0"]')).toHaveCount(1);
   await expect(page.getByTestId("boss-route-cue")).toContainText(
     "boss is 6m east of the home Campfire",
   );
@@ -302,7 +302,8 @@ test("initial browser load uses compact circular actions with accessible hidden 
   await openBuildMenu(page);
   await expect(page.getByTestId("build-radius")).toContainText("6m/9m/12m");
   await expect(page.getByTestId("build-radius")).toContainText("3m/4m/5m");
-  await expect(page.getByTestId("build-Healer")).toHaveText(
+  await expect(page.getByTestId("build-Healer")).toHaveAttribute(
+    "aria-label",
     "Place Healing Hut",
   );
 });
@@ -361,7 +362,7 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
   await expect(canvas).toHaveAttribute("data-floor-drop-count", /[1-9]/, {
     timeout: 4_000,
   });
-  await expect(page.getByTestId("resources")).toContainText("Wood 120");
+  await expect(page.locator('[aria-label="Wood: 120"]')).toHaveCount(1);
   await expect(page.getByTestId("save-message")).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
@@ -548,8 +549,8 @@ test("Storage exposes an enforced common-material capacity while Boss Core is ex
     page.getByTestId("build-Storage"),
   );
   await tapCanvas(page, 0.5, 0.5);
-  await expect(page.getByTestId("resources")).toContainText(
-    "capacity 180 each",
+  await expect(page.getByTestId("resource-capacity")).toContainText(
+    "Capacity 180 each",
   );
   await expect(page.getByTestId("effects")).toContainText(
     "Boss Core is exempt",
@@ -725,7 +726,7 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await expect(modal).toBeHidden();
   await openBuildMenu(page);
   await expect(page.getByTestId("effects")).toContainText(selectedUpgradeLabel);
-  await expect(resources).toContainText("Boss Core");
+  await expect(page.locator('[aria-label^="Boss Core:"]')).toHaveCount(1);
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
@@ -735,6 +736,6 @@ test("public keyboard play defeats the real boss, selects one upgrade, and never
   await expect(saveMessage).toContainText(
     "Fresh runtime: no committed save loaded.",
   );
-  await expect(resources).toContainText("Boss Core 0");
+  await expect(page.locator('[aria-label="Boss Core: 0"]')).toHaveCount(1);
   await expect(modal).toBeHidden();
 });
