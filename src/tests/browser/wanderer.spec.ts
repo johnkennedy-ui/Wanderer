@@ -359,7 +359,17 @@ test("enabled primary canvas taps travel to a destination when no build mode is 
     page.getByTestId("close-character-status"),
   );
   await tapCanvas(page, 0.4, 0.62);
-  await expect(position).toContainText("input: tap-to-move");
+  // The incidental Boss Core handler may legitimately run after the tap. Read
+  // the public position text without another locator action so that handler
+  // does not delay observation until the short tap-to-move interval has ended.
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="position"]')
+        ?.textContent?.includes("input: tap-to-move") ?? false,
+    undefined,
+    { timeout: 5_000 },
+  );
   await expect(page.getByTestId("combat-status")).toContainText("suppressed");
   await expect(position).not.toHaveText(initialPosition);
 });
