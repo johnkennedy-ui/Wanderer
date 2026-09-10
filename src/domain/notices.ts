@@ -95,6 +95,11 @@ export type GameNotice =
       readonly respawns: boolean;
     }
   | { readonly kind: "boss.defeated"; readonly hasUpgradeChoices: boolean }
+  | {
+      readonly kind: "wave.started";
+      readonly waveIndex: number;
+      readonly bossName: string;
+    }
   | { readonly kind: "drop.collected" }
   | { readonly kind: "farm.harvested" };
 
@@ -108,6 +113,7 @@ export interface GameUiSnapshot {
   readonly buildRadius: number;
   readonly inputSource: InputSource;
   readonly combatStatus: string;
+  readonly wave: WaveStatus;
   readonly projectileCount: number;
   readonly buildings: readonly BuildingState[];
   readonly effects: readonly string[];
@@ -118,6 +124,15 @@ export interface GameUiSnapshot {
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
   readonly notice: GameNotice;
+}
+
+export interface WaveStatus {
+  readonly active: boolean;
+  readonly waveIndex: number;
+  readonly secondsRemaining: number;
+  readonly nextWaveInSeconds: number;
+  readonly bossName: string | null;
+  readonly bossActive: boolean;
 }
 
 /** A transient, renderer-only projection of the player's post-hit state. */

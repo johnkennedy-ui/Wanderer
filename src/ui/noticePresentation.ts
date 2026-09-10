@@ -82,6 +82,8 @@ export const presentGameNotice = (notice: GameNotice): string => {
       return notice.hasUpgradeChoices
         ? "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. Choose one unowned upgrade, then campfire-save it."
         : "The Ember Wyrm is defeated: a Boss Core drop remains on the ground. No complete unowned upgrade trio remains.";
+    case "wave.started":
+      return `Wave ${notice.waveIndex} has begun. ${notice.bossName} leads a 30-second assault.`;
     case "drop.collected":
       return "Collected floor drops on contact; no save was made.";
     case "farm.harvested":
@@ -114,6 +116,7 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     case "player.died":
     case "enemy.defeated":
     case "boss.defeated":
+    case "wave.started":
     case "drop.collected":
     case "farm.harvested":
       return "";

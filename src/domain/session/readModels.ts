@@ -3,6 +3,7 @@ import type {
   GameNotice,
   GamePresentation,
   PlayerHitRecoveryPresentation,
+  WaveStatus,
 } from "../notices";
 import type {
   BuildingState,
@@ -35,6 +36,8 @@ export interface ReadModelEnemyInput {
   readonly dangerTier: number;
   readonly respawnAt: number | null;
   readonly defeated: boolean;
+  readonly isWaveBoss?: boolean;
+  readonly bossName?: string;
 }
 
 /** The runtime projectile facts needed to construct a read model. */
@@ -73,6 +76,7 @@ export interface PresentationProjectionInput {
   readonly buildRadius: number;
   readonly inputSource: InputSource;
   readonly combatStatus: string;
+  readonly wave: WaveStatus;
   readonly effects: readonly string[];
   readonly pendingUpgradeChoices: readonly UpgradeId[];
   readonly classProgression: ClassProgression;
@@ -127,6 +131,9 @@ export const projectGamePresentation = (
       dangerTier: enemy.dangerTier,
       respawnAt: enemy.respawnAt,
       defeated: enemy.defeated,
+      ...(enemy.isWaveBoss === true
+        ? { isWaveBoss: true, bossName: enemy.bossName }
+        : {}),
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
   const projectiles = input.projectiles.map((projectile) => {
@@ -171,6 +178,7 @@ export const projectGamePresentation = (
     buildRadius: input.buildRadius,
     inputSource: input.inputSource,
     combatStatus: input.combatStatus,
+    wave: { ...input.wave },
     projectileCount: projectiles.length,
     buildings,
     effects: input.effects,

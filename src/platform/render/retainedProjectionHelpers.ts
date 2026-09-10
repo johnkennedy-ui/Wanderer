@@ -100,12 +100,21 @@ export class RetainedProjection {
     for (const enemy of snapshot.enemies) {
       enemies.add(enemy.id);
       const presentation = enemyPresentation[enemy.kind];
+      const scale = enemy.isWaveBoss ? gameplayTuning.waveBossVisualScale : 1;
       this.marker(
         this.enemies,
         enemy.id,
         enemy.position,
-        this.resources.cylinder(presentation.radius, presentation.height),
-        this.resources.material(presentation.color),
+        this.resources.cylinder(
+          presentation.radius * scale,
+          presentation.height * scale,
+        ),
+        this.resources.material(
+          presentation.color,
+          0.8,
+          enemy.isWaveBoss ? 0xff6d00 : 0,
+          enemy.isWaveBoss ? 0.65 : 1,
+        ),
       );
     }
     this.removeMissing(this.enemies, enemies);

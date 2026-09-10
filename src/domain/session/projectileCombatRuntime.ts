@@ -94,7 +94,10 @@ const defeatEnemy = ({
     };
   }
 
-  enemy.respawnAt = elapsed + (definition.respawnSeconds ?? 0);
+  const respawns = enemy.waveIndex === undefined;
+  enemy.respawnAt = respawns
+    ? elapsed + (definition.respawnSeconds ?? 0)
+    : null;
   return {
     floorDrops: [...floorDrops.map(copyFloorDrop), ...draftedDrops],
     defeatedBossIds: new Set(defeatedBossIds),
@@ -103,7 +106,7 @@ const defeatEnemy = ({
     notice: {
       kind: "enemy.defeated",
       enemyKind: enemy.kind,
-      respawns: true,
+      respawns,
     },
     experienceEarned: 1,
   };

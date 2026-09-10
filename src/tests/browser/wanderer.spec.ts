@@ -146,6 +146,27 @@ test(
   },
 );
 
+test("HUD reports the deterministic next-wave schedule", async ({ page }) => {
+  await page.goto(applicationPath);
+  await openStatus(page);
+  await expect(page.getByTestId("wave-status")).toContainText(
+    /Next wave in 1(?:[01]\d|20)s/,
+  );
+});
+
+test("earned experience opens a class choice and the selected class is visible", async ({
+  page,
+}) => {
+  await primeClassChoice(page);
+  await page.goto(applicationPath);
+  const classModal = page.getByTestId("class-modal");
+  await expect(classModal).toBeVisible({ timeout: 8_000 });
+  await classModal.getByTestId("class-wizard").click();
+  await expect(classModal).toBeHidden();
+  await openStatus(page);
+  await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+});
+
 test(
   "earned experience opens a class choice and the selected class is visible",
   { tag: "@manual-choices" },

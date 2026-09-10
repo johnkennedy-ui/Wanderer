@@ -40,6 +40,7 @@ import {
   missingVisibleRuntimeEnemyDraftsFor,
   visibleChunksFor,
 } from "./session/worldRuntime";
+import { waveEnemyDraftsFor, wavePhaseFor } from "./session/wavePolicy";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
@@ -100,6 +101,7 @@ export class GameSession {
   private elapsed!: number;
   private attackElapsed!: number;
   private playerHitRecoveryEndsAt = 0;
+  private startedWaveIndices = new Set<number>();
   private notice!: GameNotice;
   private combatStatus!: string;
   constructor(options: SessionOptions = {}) {
@@ -144,6 +146,7 @@ export class GameSession {
     this.elapsed = state.elapsed;
     this.attackElapsed = state.attackElapsed;
     this.playerHitRecoveryEndsAt = 0;
+    this.startedWaveIndices = new Set();
     this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
@@ -170,6 +173,7 @@ export class GameSession {
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
+    this.updateWaveLifecycle();
     this.updateProjectiles(delta);
     const movementDistance = this.playerMoveDistanceFor(delta);
     const destinationMoving = this.moveTowardDestination(movementDistance);
@@ -378,6 +382,7 @@ export class GameSession {
       visibleChunks,
       inputSource: this.input.source,
       combatStatus: this.combatStatus,
+      wave: this.waveStatus(),
       effects,
       pendingUpgradeChoices: [...this.pendingUpgradeChoices],
       classProgression: this.classProgression,
@@ -433,6 +438,50 @@ export class GameSession {
       defeatedBossIds: this.defeatedBossIds,
     });
     for (const draft of drafts) this.enemies.set(draft.id, draft);
+  }
+  /** Owns the transient timed encounter lifecycle; it is never serialized. */
+  private updateWaveLifecycle(): void {
+    for (const [id, enemy] of this.enemies)
+      if (
+        enemy.waveExpiresAt !== undefined &&
+        this.elapsed + 0.000_001 >= enemy.waveExpiresAt
+      )
+        this.enemies.delete(id);
+
+    const phase = wavePhaseFor(this.elapsed);
+    if (!phase.active || this.startedWaveIndices.has(phase.waveIndex)) return;
+    for (const enemy of waveEnemyDraftsFor({
+      seed: this.world.seed,
+      waveIndex: phase.waveIndex,
+      center: this.player.position,
+    }))
+      this.enemies.set(enemy.id, enemy);
+    this.startedWaveIndices.add(phase.waveIndex);
+    const boss = [...this.enemies.values()].find(
+      (enemy) =>
+        enemy.waveIndex === phase.waveIndex && enemy.isWaveBoss === true,
+    );
+    if (boss?.bossName !== undefined)
+      this.notice = {
+        kind: "wave.started",
+        waveIndex: phase.waveIndex,
+        bossName: boss.bossName,
+      };
+  }
+  private waveStatus() {
+    const phase = wavePhaseFor(this.elapsed);
+    const bosses = [...this.enemies.values()]
+      .filter((enemy) => enemy.isWaveBoss === true && !enemy.defeated)
+      .sort((left, right) => (right.waveIndex ?? 0) - (left.waveIndex ?? 0));
+    const boss = bosses[0];
+    return {
+      active: phase.active,
+      waveIndex: phase.waveIndex,
+      secondsRemaining: phase.secondsRemaining,
+      nextWaveInSeconds: phase.nextWaveInSeconds,
+      bossName: boss?.bossName ?? null,
+      bossActive: boss !== undefined,
+    };
   }
   private updateAutoCombat(delta: number, attackSpeedMultiplier = 1): void {
     const result = advanceAutoCombatPhase({
