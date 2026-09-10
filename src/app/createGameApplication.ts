@@ -41,6 +41,7 @@ export const createGameApplication = async (root: HTMLElement): Promise<GameAppl
   let previousFrame = scheduler.now();
   let active = true;
   let savePending = false;
+  let disposed = false;
 
   const ui = createGameUi(root, {
     async save(): Promise<void> {
@@ -128,10 +129,13 @@ export const createGameApplication = async (root: HTMLElement): Promise<GameAppl
     previousFrame = scheduler.now();
     animationFrame = scheduler.request(frame);
   });
-  animationFrame = scheduler.request(frame);
+  if (active) animationFrame = scheduler.request(frame);
 
   return {
     dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      active = false;
       if (animationFrame !== null) scheduler.cancel(animationFrame);
       unsubscribeLifecycle();
       lifecycle.dispose();
