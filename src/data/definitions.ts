@@ -349,7 +349,10 @@ const authoredClassDefinitions = {
     secondaryDamageMultiplier: 0.5,
     areaRadius: 2.4,
     arcCosine: 0.5,
-    secondaryTargets: 2,
+    // The weaponless crescent damages every valid enemy in its forward arc.
+    // Infinity is an explicit authored "no cap" policy; finite class values
+    // remain bounded for projectile and splash attacks.
+    secondaryTargets: Number.POSITIVE_INFINITY,
     passiveStats: {
       strength: 6,
       dexterity: 0,

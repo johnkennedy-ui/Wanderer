@@ -181,6 +181,8 @@ describe("class progression", () => {
     const enemies = new Map([
       ["east", enemy("east", { x: 2, y: 0 })],
       ["arc", enemy("arc", { x: 1.8, y: 1 })],
+      ["arc-east", enemy("arc-east", { x: 2.2, y: 0.4 })],
+      ["arc-west", enemy("arc-west", { x: 1.8, y: -1 })],
       ["splash", enemy("splash", { x: 3.3, y: 0 })],
     ]);
     const attack = (classState: ClassProgression) =>
@@ -196,7 +198,8 @@ describe("class progression", () => {
         nextProjectileSerial: 1,
       });
 
-    expect(attack(progression("knight"))).toMatchObject({
+    const knightAttack = attack(progression("knight"));
+    expect(knightAttack).toMatchObject({
       projectiles: [],
       crescentAttacks: [
         expect.objectContaining({
@@ -205,15 +208,17 @@ describe("class progression", () => {
           arcCosine: 0.5,
         }),
       ],
-      meleeImpacts: [
-        expect.objectContaining({ targetId: "east" }),
-        expect.objectContaining({ targetId: "arc" }),
-      ],
     });
+    expect(knightAttack.meleeImpacts).toEqual([
+      { targetId: "east", damage: 20.4 },
+      { targetId: "arc", damage: 10.2 },
+      { targetId: "arc-west", damage: 10.2 },
+      { targetId: "arc-east", damage: 10.2 },
+    ]);
     expect(attack(progression("wizard")).projectiles[0]).toMatchObject({
       style: "magic",
       targetId: "east",
-      chainTargetIds: ["arc", "splash"],
+      chainTargetIds: ["arc", "arc-west", "arc-east", "splash"],
     });
     expect(attack(progression("archer")).projectiles[0]).toMatchObject({
       style: "arrow",
