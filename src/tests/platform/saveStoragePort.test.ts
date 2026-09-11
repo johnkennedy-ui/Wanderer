@@ -11,13 +11,26 @@ import { MemorySaveStorage } from "../support/memorySaveStorage";
 class Store implements KeyValueStore {
   readonly values = new Map<string, string>();
   writes = 0;
-  getItem(key: string): string | null { return this.values.get(key) ?? null; }
-  setItem(key: string, value: string): void { this.writes += 1; this.values.set(key, value); }
-  removeItem(key: string): void { this.writes += 1; this.values.delete(key); }
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+  setItem(key: string, value: string): void {
+    this.writes += 1;
+    this.values.set(key, value);
+  }
+  removeItem(key: string): void {
+    this.writes += 1;
+    this.values.delete(key);
+  }
 }
 
 const absent: LoadedSave = {
-  ok: false, document: null, source: null, warning: null, failure: "absent", message: "absent",
+  ok: false,
+  document: null,
+  source: null,
+  warning: null,
+  failure: "absent",
+  message: "absent",
 };
 const valid = () => {
   const request = new GameSession().createValidCampfireSaveRequest(1);
@@ -37,7 +50,9 @@ const contract = (name: string, make: () => SaveStoragePort): void => {
 };
 
 contract("memory save storage contract", () => new MemorySaveStorage(absent));
-contract("browser save storage contract", () => createAsyncBrowserSaveStorage(new Store()));
+contract("browser save storage contract", () =>
+  createAsyncBrowserSaveStorage(new Store()),
+);
 
 describe("browser async storage port", () => {
   it("does not write corrupt or unsupported data while loading", async () => {

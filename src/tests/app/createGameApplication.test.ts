@@ -16,7 +16,7 @@ const absent: LoadedSave = {
   message: "No save exists.",
 };
 
-const deferred = <T,>() => {
+const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => {
     resolve = next;
@@ -60,7 +60,11 @@ describe("explicit campfire save intent", () => {
 
   it("commits only a valid campfire request and excludes overlapping commits", async () => {
     const request = validRequest();
-    const committed = deferred<{ ok: true; message: string; cleanupWarning: null }>();
+    const committed = deferred<{
+      ok: true;
+      message: string;
+      cleanupWarning: null;
+    }>();
     const messages: string[] = [];
     let requests = 0;
     let records = 0;
@@ -92,7 +96,11 @@ describe("explicit campfire save intent", () => {
     const overlapping = intent.save();
     expect(requests).toBe(1);
     expect(commits).toBe(1);
-    committed.resolve({ ok: true, message: "Saved explicitly.", cleanupWarning: null });
+    committed.resolve({
+      ok: true,
+      message: "Saved explicitly.",
+      cleanupWarning: null,
+    });
     await Promise.all([first, overlapping]);
     expect(records).toBe(1);
     expect(messages).toEqual(["Saved explicitly. Save point: home campfire."]);

@@ -4,10 +4,20 @@ import { createBrowserLifecycle } from "../../platform/lifecycle/browserLifecycl
 class FakeDocument {
   visibilityState: DocumentVisibilityState = "visible";
   listener: (() => void) | null = null;
-  adds = 0; removes = 0;
-  addEventListener(_type: "visibilitychange", listener: () => void): void { this.adds += 1; this.listener = listener; }
-  removeEventListener(_type: "visibilitychange", listener: () => void): void { this.removes += 1; if (this.listener === listener) this.listener = null; }
-  emit(state: DocumentVisibilityState): void { this.visibilityState = state; this.listener?.(); }
+  adds = 0;
+  removes = 0;
+  addEventListener(_type: "visibilitychange", listener: () => void): void {
+    this.adds += 1;
+    this.listener = listener;
+  }
+  removeEventListener(_type: "visibilitychange", listener: () => void): void {
+    this.removes += 1;
+    if (this.listener === listener) this.listener = null;
+  }
+  emit(state: DocumentVisibilityState): void {
+    this.visibilityState = state;
+    this.listener?.();
+  }
 }
 
 describe("browser lifecycle port", () => {
