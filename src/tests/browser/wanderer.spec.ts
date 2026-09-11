@@ -154,18 +154,20 @@ test("HUD reports the deterministic next-wave schedule", async ({ page }) => {
   );
 });
 
-test("earned experience opens a class choice and the selected class is visible after reload", async ({
-  page,
-}) => {
-  await primeClassChoice(page);
-  await page.goto(applicationPath);
-  const classModal = page.getByTestId("class-modal");
-  await expect(classModal).toBeVisible({ timeout: 8_000 });
-  await classModal.getByTestId("class-wizard").click();
-  await expect(classModal).toBeHidden();
-  await openStatus(page);
-  await expect(page.getByTestId("class-progression")).toContainText("Wizard");
-});
+test(
+  "earned experience opens a class choice and the selected class is visible after reload",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-wizard").click();
+    await expect(classModal).toBeHidden();
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText("Wizard");
+  },
+);
 
 test(
   "earned experience opens a class choice and the selected class is visible",
