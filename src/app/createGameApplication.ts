@@ -11,46 +11,46 @@ import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
 import { createVirtualStickInput } from "../platform/input/virtualStickInput";
 import { createBrowserLifecycle } from "../platform/lifecycle/browserLifecycle";
+import { createBrowserFrameScheduler } from "../platform/lifecycle/browserFrameScheduler";
 import { createThreeRenderer } from "../platform/render/threeRenderer";
-import { createBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
+import { createAsyncBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
 import { createGameUi } from "../ui/gameUi";
+import {
+  createApplicationBootstrap,
+  createApplicationLifecycle,
+  createCampfireSaveIntent,
+} from "./applicationLifecycle";
 
 export interface GameApplication {
   dispose(): void;
 }
 
 /** The only composition root: it explicitly retains one GameSession and wires narrow adapters. */
-export const createGameApplication = (root: HTMLElement): GameApplication => {
-  const storage = createBrowserSaveStorage();
-  const recovered = storage.load();
-  const session = new GameSession({
-    saved: recovered.ok ? recovered.document : undefined,
-  });
-  let platformMessage: string;
-  if (recovered.ok) {
-    platformMessage =
-      recovered.warning ?? "Recovered last explicit campfire save.";
-  } else if (recovered.failure === "absent") {
-    platformMessage = "Fresh runtime: no committed save loaded.";
-  } else {
-    platformMessage = `Save was not loaded: ${recovered.message} Existing browser save data was left untouched.`;
-  }
-  let animationFrame = 0;
-  let previousFrame = performance.now();
+export const createGameApplication = async (
+  root: HTMLElement,
+): Promise<GameApplication> => {
+  const storage = createAsyncBrowserSaveStorage();
+  const bootstrap = await createApplicationBootstrap(
+    storage,
+    (saved) => new GameSession({ saved }),
+  );
+  const { session } = bootstrap;
+  let platformMessage = bootstrap.platformMessage;
+  const scheduler = createBrowserFrameScheduler();
+  let disposed = false;
+
+  const saveIntent = createCampfireSaveIntent(
+    session,
+    storage,
+    (message) => {
+      platformMessage = message;
+    },
+    () => Date.now(),
+  );
 
   const ui = createGameUi(root, {
-    save(): void {
-      const request = session.createValidCampfireSaveRequest(Date.now());
-      if (request === null) {
-        platformMessage =
-          "Save was not committed: move to a valid campfire first.";
-        return;
-      }
-      const result = storage.commit(request.document);
-      if (result.ok) session.recordSaveCommitted(request.document);
-      platformMessage = result.ok
-        ? `${result.message}${result.cleanupWarning === null ? "" : ` ${result.cleanupWarning}`} Save point: ${request.savePointLabel}.`
-        : result.message;
+    async save(): Promise<void> {
+      await saveIntent.save();
     },
     reset(seed: string): void {
       session.resetWorld(seed);
@@ -101,21 +101,23 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
     platformMessage = message;
   });
 
-  const frame = (now: number): void => {
-    session.tick((now - previousFrame) / 1_000);
-    previousFrame = now;
-    const presentation = session.presentation();
-    renderer.render(presentation.renderer);
-    ui.render(presentation.ui);
-    ui.showTransient(platformMessage);
-    animationFrame = requestAnimationFrame(frame);
-  };
-  animationFrame = requestAnimationFrame(frame);
+  const applicationLifecycle = createApplicationLifecycle(
+    lifecycle,
+    scheduler,
+    (deltaSeconds) => {
+      session.tick(deltaSeconds);
+      const presentation = session.presentation();
+      renderer.render(presentation.renderer);
+      ui.render(presentation.ui);
+      ui.showTransient(platformMessage);
+    },
+  );
 
   return {
     dispose(): void {
-      cancelAnimationFrame(animationFrame);
-      lifecycle.dispose();
+      if (disposed) return;
+      disposed = true;
+      applicationLifecycle.dispose();
       buildPlacement.dispose();
       tapToMove.dispose();
       stick.dispose();
