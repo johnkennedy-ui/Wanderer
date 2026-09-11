@@ -419,24 +419,35 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
 test("enemy hits visibly flash the player during a finite recovery window", async ({
   page,
 }) => {
+  // GameSession caps frame deltas: wall time cannot measure simulation expiry.
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
   await page.goto(applicationPath);
+  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
   const canvas = page.getByTestId("world-canvas");
-  await expect
-    .poll(
-      async () =>
-        `${await canvas.getAttribute("data-player-hit-recovery")}:${await canvas.getAttribute("data-player-hit-flash")}`,
-      {
-        intervals: [50, 50, 100],
-        timeout: 12_000,
-      },
-    )
-    .toBe("active:on");
-  await expect
-    .poll(() => canvas.getAttribute("data-player-hit-recovery"), {
-      intervals: [50, 50, 100],
-      timeout: 1_000,
-    })
-    .toBe("inactive");
+  const recoveryState = () =>
+    canvas.evaluate(
+      (element) =>
+        `${element.getAttribute("data-player-hit-recovery")}:${element.getAttribute("data-player-hit-flash")}`,
+    );
+  let state = await recoveryState();
+  for (
+    let elapsed = 0;
+    state !== "active:on" && elapsed < 12_000;
+    elapsed += 50
+  ) {
+    await page.clock.runFor(50);
+    state = await recoveryState();
+  }
+  expect(state).toBe("active:on");
+  for (
+    let elapsed = 0;
+    state !== "inactive:off" && elapsed < 1_000;
+    elapsed += 50
+  ) {
+    await page.clock.runFor(50);
+    state = await recoveryState();
+  }
+  expect(state).toBe("inactive:off");
 });
 
 test("a Healing Hut is selected and placed through the canvas without moving the player", async ({
