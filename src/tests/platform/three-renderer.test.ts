@@ -685,6 +685,7 @@ describe("retained Three CPU projection", () => {
       projectiles: 0,
       crescents: 0,
       drops: 0,
+      relicDrops: 0,
     });
     for (const dispose of disposals) expect(dispose).toHaveBeenCalledTimes(1);
     const secondBefore = second.diagnostics();
@@ -792,6 +793,8 @@ describe("Three browser adapter ownership", () => {
     renderer.render(snapshot);
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "1",
+      weaponRelicDropCount: "0",
+      homingProjectileCount: "0",
       projectileCount: "8",
       crescentAttackCount: "5",
       playerHitRecovery: "active",
@@ -830,6 +833,8 @@ describe("Three browser adapter ownership", () => {
     });
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "0",
+      weaponRelicDropCount: "0",
+      homingProjectileCount: "0",
       projectileCount: "0",
       crescentAttackCount: "0",
       playerHitRecovery: "inactive",

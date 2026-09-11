@@ -100,6 +100,7 @@ describe("GameSession lifecycle", () => {
       level: 0,
       playerClass: null,
       skillIds: [],
+      weaponRank: 0,
     });
 
     const session = new GameSession({ saved });

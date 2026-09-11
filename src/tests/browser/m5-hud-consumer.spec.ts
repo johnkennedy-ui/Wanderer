@@ -112,6 +112,7 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
         bossActive: false,
       },
       projectileCount: 0,
+      weaponRelicDropCount: 0,
       buildings: [],
       effects: ["Experience: 100", "Wizard"],
       pendingUpgradeChoices: [],

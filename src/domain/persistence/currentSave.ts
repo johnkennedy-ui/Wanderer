@@ -32,7 +32,10 @@ export const isClassProgression = (
     candidate.skillIds.every((id) =>
       classSkillIds.includes(id as (typeof classSkillIds)[number]),
     ) &&
-    new Set(candidate.skillIds).size === candidate.skillIds.length
+    new Set(candidate.skillIds).size === candidate.skillIds.length &&
+    (candidate.weaponRank === undefined ||
+      (Number.isInteger(candidate.weaponRank) &&
+        (candidate.weaponRank as number) >= 0))
   );
 };
 
@@ -69,6 +72,25 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
     x: save.savePointPosition.x,
     y: save.savePointPosition.y,
   },
+});
+
+/**
+ * Browser storage can retain released current-save extensions while the
+ * historical `toSaveV2Document` helper remains an exact frozen V2 DTO.
+ */
+export const toCurrentSaveStorageDocument = (
+  save: CurrentSave,
+): CurrentSave => ({
+  ...toSaveV2Document(save),
+  ...(save.classProgression === undefined
+    ? {}
+    : {
+        classProgression: {
+          ...save.classProgression,
+          skillIds: [...save.classProgression.skillIds],
+          weaponRank: save.classProgression.weaponRank ?? 0,
+        },
+      }),
 });
 
 /** Current runtime validation is intentionally separate from V2 wire parsing. */

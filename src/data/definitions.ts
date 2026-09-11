@@ -88,6 +88,13 @@ export interface ClassSkillDefinition {
   readonly effect: ClassSkillEffect;
 }
 
+export interface WeaponRelicDefinition {
+  readonly playerClass: PlayerClass;
+  readonly label: string;
+  readonly abilityDescription: string;
+  readonly glowColor: number;
+}
+
 const authoredResourceDefinitions = {
   wood: {
     label: "Wood",
@@ -161,6 +168,12 @@ const authoredGameplayTuning = {
   waveBossDamageMultiplier: 2,
   waveBossDropMultiplier: 5,
   waveBossVisualScale: 1.6,
+  weaponRelicKnightRankOneDamageMultiplier: 1.3,
+  weaponRelicKnightDamageMultiplierPerAdditionalRank: 0.1,
+  weaponRelicKnightRankOneRadiusBonus: 0.8,
+  weaponRelicKnightRadiusBonusPerAdditionalRank: 0.2,
+  weaponRelicWizardDamageMultiplierPerAdditionalRank: 0.15,
+  weaponRelicArcherDamageMultiplierPerAdditionalRank: 0.1,
 };
 
 export const gameplayTuning = deepFreeze(authoredGameplayTuning);
@@ -431,6 +444,37 @@ export const classDefinitions = deepFreeze(
 );
 export const classDefinitionFor = (id: PlayerClass): ClassDefinition =>
   classDefinitionsById[id];
+
+const authoredWeaponRelicDefinitions = {
+  knight: {
+    playerClass: "knight",
+    label: "Dawnblade Relic",
+    abilityDescription:
+      "Expands and strengthens each visible Knight crescent. Later ranks add more reach and power.",
+    glowColor: 0xffd166,
+  },
+  wizard: {
+    playerClass: "wizard",
+    label: "Starcall Relic",
+    abilityDescription:
+      "Makes magic projectiles home onto living targets. Later ranks add projectile damage.",
+    glowColor: 0xb388ff,
+  },
+  archer: {
+    playerClass: "archer",
+    label: "Twinwind Relic",
+    abilityDescription:
+      "Fires a second arrow each attack. Later ranks increase both arrows' damage.",
+    glowColor: 0x69d2ff,
+  },
+} satisfies Record<PlayerClass, WeaponRelicDefinition>;
+
+export const weaponRelicDefinitionsByClass = deepFreeze(
+  authoredWeaponRelicDefinitions,
+);
+export const weaponRelicDefinitionFor = (
+  playerClass: PlayerClass,
+): WeaponRelicDefinition => weaponRelicDefinitionsByClass[playerClass];
 
 type ClassSkillCatalogue = {
   readonly [Id in ClassSkillId]: ClassSkillDefinition & { readonly id: Id };

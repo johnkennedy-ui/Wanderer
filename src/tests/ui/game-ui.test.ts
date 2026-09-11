@@ -262,6 +262,7 @@ const snapshot = (
     bossActive: false,
   },
   projectileCount: 0,
+  weaponRelicDropCount: 0,
   buildings,
   effects: ["same effect"],
   pendingUpgradeChoices: [],

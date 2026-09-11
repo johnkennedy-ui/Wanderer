@@ -129,6 +129,14 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.updateMatrixWorld();
       positionPlayerHealthLabel(snapshot);
       setDataset("floorDropCount", String(snapshot.floorDrops.length));
+      setDataset(
+        "weaponRelicDropCount",
+        String(snapshot.weaponRelicDrops.length),
+      );
+      let homingProjectileCount = 0;
+      for (const projectile of snapshot.projectiles)
+        if (projectile.homing === true) homingProjectileCount += 1;
+      setDataset("homingProjectileCount", String(homingProjectileCount));
       setDataset("projectileCount", String(snapshot.projectiles.length));
       setDataset(
         "crescentAttackCount",

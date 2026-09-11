@@ -36,6 +36,9 @@ describe("session progression rules", () => {
       classSecondaryDamageMultiplier: 0,
       classAreaRadius: 0,
       classArcCosine: 1,
+      weaponProjectileCount: 1,
+      weaponProjectileDamageMultiplier: 1,
+      weaponProjectileHoming: false,
     });
 
     for (const [level, attackDamage] of [
@@ -53,6 +56,9 @@ describe("session progression rules", () => {
         classSecondaryDamageMultiplier: 0,
         classAreaRadius: 0,
         classArcCosine: 1,
+        weaponProjectileCount: 1,
+        weaponProjectileDamageMultiplier: 1,
+        weaponProjectileHoming: false,
       });
     }
   });
@@ -83,6 +89,9 @@ describe("session progression rules", () => {
       classSecondaryDamageMultiplier: 0,
       classAreaRadius: 0,
       classArcCosine: 1,
+      weaponProjectileCount: 1,
+      weaponProjectileDamageMultiplier: 1,
+      weaponProjectileHoming: false,
     });
   });
 

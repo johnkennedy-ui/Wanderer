@@ -23,6 +23,7 @@ export class RetainedProjection {
   private readonly projectiles: MarkerMap = new Map();
   private readonly crescents: MarkerMap = new Map();
   private readonly drops: MarkerMap = new Map();
+  private readonly relicDrops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
   private meshesRemoved = 0;
   private disposed = false;
@@ -121,7 +122,10 @@ export class RetainedProjection {
     const projectiles = new Set<string>();
     for (const projectile of snapshot.projectiles) {
       projectiles.add(projectile.id);
-      const presentation = projectilePresentationFor(projectile.style);
+      const presentation = projectilePresentationFor(
+        projectile.style,
+        projectile.homing === true,
+      );
       const position = {
         x:
           projectile.origin.x +
@@ -175,6 +179,19 @@ export class RetainedProjection {
       );
     }
     this.removeMissing(this.drops, drops);
+    const relicDrops = new Set<string>();
+    for (const drop of snapshot.weaponRelicDrops) {
+      relicDrops.add(drop.id);
+      this.marker(
+        this.relicDrops,
+        drop.id,
+        drop.position,
+        this.resources.weaponRelicDrop(),
+        this.resources.material(0xffe082, 0.2, 0xff8f00, 1.1, 0.55),
+        0.38,
+      );
+    }
+    this.removeMissing(this.relicDrops, relicDrops);
     // Select immutable-equivalent variants: never recolor a shared material.
     // Inactive frames select non-emissive material again, clearing recovery.
     const recovery = snapshot.playerHitRecovery;
@@ -203,6 +220,7 @@ export class RetainedProjection {
         projectiles: this.projectiles.size,
         crescents: this.crescents.size,
         drops: this.drops.size,
+        relicDrops: this.relicDrops.size,
       }),
     });
   }
@@ -219,6 +237,7 @@ export class RetainedProjection {
       this.projectiles,
       this.crescents,
       this.drops,
+      this.relicDrops,
     ]) {
       this.meshesRemoved += map.size;
       map.clear();

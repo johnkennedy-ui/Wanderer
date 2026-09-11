@@ -1,7 +1,7 @@
 import { decodeSave } from "../../domain/persistence/decodeSave";
 import {
   isCurrentSave,
-  toSaveV2Document,
+  toCurrentSaveStorageDocument,
 } from "../../domain/persistence/currentSave";
 import type { SaveLoadFailure } from "../../domain/persistence/saveErrors";
 import type { CurrentSave } from "../../domain/types";
@@ -105,7 +105,7 @@ export const createBrowserSaveStorage = (
         cleanupWarning: null,
       };
     try {
-      const serialized = JSON.stringify(toSaveV2Document(document));
+      const serialized = JSON.stringify(toCurrentSaveStorageDocument(document));
       store.setItem(SAVE_KEYS.temporary, serialized);
       const verifiedTemporary = decodeSave(store.getItem(SAVE_KEYS.temporary));
       if (!verifiedTemporary.ok)
@@ -121,7 +121,7 @@ export const createBrowserSaveStorage = (
         : verifiedTemporary.document;
       store.setItem(
         SAVE_KEYS.backup,
-        JSON.stringify(toSaveV2Document(backupCandidate)),
+        JSON.stringify(toCurrentSaveStorageDocument(backupCandidate)),
       );
       if (!decodeSave(store.getItem(SAVE_KEYS.backup)).ok)
         return {

@@ -52,6 +52,12 @@ describe("notice presentation", () => {
       },
       { kind: "enemy.defeated", enemyKind: "scout", respawns: true },
       { kind: "boss.defeated", hasUpgradeChoices: true },
+      { kind: "weapon-relic.dropped", bossName: "The Ashen Colossus" },
+      {
+        kind: "weapon-relic.collected",
+        playerClass: "wizard",
+        weaponRank: 2,
+      },
       { kind: "drop.collected" },
       { kind: "farm.harvested" },
     ] as const satisfies readonly GameNotice[];
@@ -71,6 +77,8 @@ describe("notice presentation", () => {
     expect(presentGameNotice(notices[13])).toBe(
       "scout defeated: data-defined resource drops remain on the ground. It will respawn later; no save was made.",
     );
+    expect(presentGameNotice(notices[15])).toContain("glowing Weapon Relic");
+    expect(presentGameNotice(notices[16])).toContain("Starcall Relic rank 2");
     for (const notice of notices)
       expect(presentGameNotice(notice)).not.toBe("");
   });

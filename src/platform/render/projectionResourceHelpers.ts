@@ -30,7 +30,17 @@ const projectilePresentation = Object.freeze({
   { readonly color: number; readonly emissive: number; readonly radius: number }
 >);
 
-export const projectilePresentationFor = (style: AttackStyle) => {
+const homingProjectilePresentation = Object.freeze({
+  color: 0xe6d6ff,
+  emissive: 0xab78ff,
+  radius: 0.28,
+});
+
+export const projectilePresentationFor = (
+  style: AttackStyle,
+  homing = false,
+) => {
+  if (homing) return homingProjectilePresentation;
   switch (style) {
     case "slash":
     case "magic":
@@ -118,14 +128,21 @@ export class ProjectionResources {
   drop(): THREE.BufferGeometry {
     return this.geometry("drop", () => new THREE.DodecahedronGeometry(0.22, 0));
   }
+  weaponRelicDrop(): THREE.BufferGeometry {
+    return this.geometry(
+      "weapon-relic-drop",
+      () => new THREE.OctahedronGeometry(0.34, 0),
+    );
+  }
   material(
     color: number,
     roughness = 0.8,
     emissive = 0,
     emissiveIntensity = 1,
+    metalness = 0,
   ): THREE.MeshStandardMaterial {
     this.assertLive();
-    const key = `${color}:${roughness}:${emissive}:${emissiveIntensity}`;
+    const key = `${color}:${roughness}:${emissive}:${emissiveIntensity}:${metalness}`;
     let material = this.materials.get(key);
     if (material === undefined) {
       material = new THREE.MeshStandardMaterial({
@@ -133,6 +150,7 @@ export class ProjectionResources {
         roughness,
         emissive,
         emissiveIntensity,
+        metalness,
       });
       this.materials.set(key, material);
       this.materialsCreated += 1;

@@ -59,5 +59,6 @@ export const projectCurrentSave = (
   classProgression: {
     ...state.classProgression,
     skillIds: [...state.classProgression.skillIds],
+    weaponRank: state.classProgression.weaponRank ?? 0,
   },
 });

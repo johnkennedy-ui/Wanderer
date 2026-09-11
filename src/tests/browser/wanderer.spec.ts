@@ -57,6 +57,50 @@ const primeClassChoice = async (page: Page): Promise<void> => {
   });
 };
 
+const primeRankedClass = async (
+  page: Page,
+  playerClass: "knight" | "wizard" | "archer",
+  weaponRank: number,
+): Promise<void> => {
+  await page.addInitScript(
+    ({ playerClass: savedClass, weaponRank: savedRank }) => {
+      window.localStorage.setItem(
+        "wanderer.save.primary",
+        JSON.stringify({
+          schemaVersion: 2,
+          world: {
+            seed: "wanderer-known-seed",
+            generatorVersion: "wanderer-web-v2",
+          },
+          player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+          resources: {
+            wood: 120,
+            stone: 120,
+            scrap: 120,
+            essence: 20,
+            bossCore: 0,
+          },
+          buildings: [],
+          defeatedBossIds: [],
+          upgrades: [],
+          nextBuildingSerial: 1,
+          committedAt: 0,
+          savePointId: "campfire:home",
+          savePointPosition: { x: 0, y: 0 },
+          classProgression: {
+            experience: 1500,
+            level: 5,
+            playerClass: savedClass,
+            skillIds: [],
+            weaponRank: savedRank,
+          },
+        }),
+      );
+    },
+    { playerClass, weaponRank },
+  );
+};
+
 const checkWithPendingClassResolution = async (
   _page: Page,
   target: Locator,
@@ -204,6 +248,22 @@ test(
     await expect(canvas).toHaveAttribute("data-projectile-count", "0");
   },
 );
+
+test("ranked class weapon relics are visible in status and project their attack abilities", async ({
+  page,
+}) => {
+  await primeRankedClass(page, "archer", 1);
+  await page.goto(applicationPath);
+  await openStatus(page);
+  await expect(page.getByTestId("weapon-relic-status")).toContainText(
+    "Twinwind Relic rank 1",
+  );
+  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+    "data-projectile-count",
+    "2",
+    { timeout: 8_000 },
+  );
+});
 
 test("the icon HUD exposes compact resources and the current skill tree", async ({
   page,
