@@ -160,8 +160,20 @@ export const assertRuntimeInvariants = (state: RuntimeDiagnostics): void => {
         state.enemies.filter((enemy) => !enemy.defeated).length &&
       state.counts.projectiles === state.projectiles.length &&
       state.counts.floorDrops === state.floorDrops.length &&
-      state.counts.cachedChunks === 0,
+      state.counts.cachedChunks === state.chunkCache.size,
     "diagnostic counts",
+  );
+  for (const value of Object.values(state.chunkCache))
+    requireInvariant(
+      Number.isSafeInteger(value) && value >= 0,
+      "cache counters",
+    );
+  requireInvariant(
+    state.chunkCache.capacity > 0 &&
+      state.chunkCache.size <= state.chunkCache.capacity &&
+      state.chunkCache.size + state.chunkCache.evictions <=
+        state.chunkCache.misses,
+    "cache bounds",
   );
 };
 

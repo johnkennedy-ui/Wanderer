@@ -3,7 +3,6 @@ import {
   classDefinitionFor,
   classSkillDefinitionFor,
   classSkillDefinitions,
-  gameplayTuning,
   upgradeDefinitionFor,
   weaponRelicDefinitionFor,
 } from "../data/definitions";
@@ -21,6 +20,12 @@ import {
   presentPlacementNotice,
   presentPlacementResult,
 } from "./noticePresentation";
+import {
+  RetainedBuildingRows,
+  RetainedEffects,
+  setAttribute,
+  setText as text,
+} from "./retainedLists";
 
 export interface UiIntents {
   save(): void;
@@ -53,10 +58,6 @@ export interface GameUi {
   showTransient(message: string): void;
   dispose(): void;
 }
-
-const text = (element: HTMLElement, value: string): void => {
-  element.textContent = value;
-};
 
 /** Deliberately replaceable visual tokens; accessible labels carry the meaning. */
 const buildingPlaceholderIcons: Record<BuildingKind, string> = {
@@ -235,8 +236,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     toggle: HTMLButtonElement,
     visible: boolean,
   ): void => {
-    panel.hidden = !visible;
-    toggle.setAttribute("aria-expanded", String(visible));
+    if (panel.hidden !== !visible) panel.hidden = !visible;
+    setAttribute(toggle, "aria-expanded", String(visible));
   };
   let statusPanelVisible = false;
   let buildMenuVisible = false;
@@ -245,7 +246,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let statsPanelVisible = false;
   let placementMode: PlacementMode = null;
   let placementFeedback = "";
-  let renderedBuildingStateKey: string | null = null;
+  let disposed = false;
 
   const setPlacementFeedback = (message: string): void => {
     placementFeedback = message;
@@ -298,12 +299,18 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   resourcesToggle.addEventListener("click", () => {
     const visible = !resourcesPanelVisible;
     setResourcesPanelVisible(visible);
-    if (visible) setSkillTreePanelVisible(false);
+    if (visible) {
+      setSkillTreePanelVisible(false);
+      setStatsPanelVisible(false);
+    }
   });
   skillTreeToggle.addEventListener("click", () => {
     const visible = !skillTreePanelVisible;
     setSkillTreePanelVisible(visible);
-    if (visible) setResourcesPanelVisible(false);
+    if (visible) {
+      setResourcesPanelVisible(false);
+      setStatsPanelVisible(false);
+    }
   });
   statsToggle.addEventListener("click", () => {
     const visible = !statsPanelVisible;
@@ -336,6 +343,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setBuildMenuVisible(false);
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
+    setStatsPanelVisible(false);
   };
   for (const kind of buildingKinds) {
     const button = document.createElement("button");
@@ -360,6 +368,54 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     intents.reset(seedInput.value);
   });
   saveButton.addEventListener("click", intents.save);
+  const buildingRows = new RetainedBuildingRows(buildingList, {
+    startRelocation(id, kind): void {
+      startPlacement({ kind: "relocate", buildingId: id, buildingKind: kind });
+    },
+    upgradeBuilding: (id) => intents.upgradeBuilding(id),
+    demolish(id): void {
+      if (placementMode?.kind === "relocate" && placementMode.buildingId === id)
+        setPlacementMode(null);
+      intents.demolish(id);
+    },
+  });
+  const effects = new RetainedEffects(byTestId<HTMLUListElement>("effects"));
+  const skillTree = new RetainedEffects(
+    byTestId<HTMLUListElement>("skill-tree-skills"),
+  );
+  const resourceChips = (
+    [
+      ["wood", "Wood"],
+      ["stone", "Stone"],
+      ["scrap", "Metal / Scrap"],
+      ["essence", "Essence"],
+      ["bossCore", "Boss Core"],
+    ] as const
+  ).map(([kind, label]) => {
+    const element = document.createElement("span");
+    element.className = "resource-chip";
+    element.title = label;
+    byTestId("resources").append(element);
+    return { kind, label, element };
+  });
+  const statRows = (
+    [
+      ["strength", "Strength"],
+      ["dexterity", "Dexterity"],
+      ["agility", "Agility"],
+      ["luck", "Luck"],
+      ["vitality", "Vitality"],
+      ["magic", "Magic"],
+      ["defense", "Defense"],
+      ["magicDefense", "Magic Defense"],
+    ] as const
+  ).map(([kind, label]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const value = document.createElement("dd");
+    byTestId("stats-list").append(term, value);
+    return { kind, value };
+  });
 
   return {
     worldHost,
@@ -372,7 +428,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     },
     applyWorldPlacement(position: Vector2): void {
       const mode = placementMode;
-      if (mode === null) return;
+      if (disposed || mode === null) return;
       const result =
         mode.kind === "place"
           ? intents.place(mode.buildingKind, position)
@@ -384,6 +440,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       text(saveMessage, message);
     },
     render(snapshot: GameUiSnapshot): void {
+      if (disposed) return;
       text(
         byTestId("seed"),
         `Seed: ${snapshot.world.seed} · generator ${snapshot.world.generatorVersion}`,
@@ -425,6 +482,17 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           ? "Projectile: 1 in flight"
           : `Projectile: ${snapshot.projectileCount} in flight`,
       );
+      for (const { kind, label, element } of resourceChips) {
+        setAttribute(
+          element,
+          "aria-label",
+          `${label}: ${snapshot.resources[kind]}`,
+        );
+        text(
+          element,
+          `${resourcePlaceholderIcons[kind]} ${snapshot.resources[kind]}`,
+        );
+      }
       const weaponRank = snapshot.classProgression.weaponRank ?? 0;
       const uncollectedRelicSuffix =
         snapshot.weaponRelicDropCount === 0
@@ -438,28 +506,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
             ? `Weapon Relic: rank 0 · defeat a timed-wave boss to unlock ${weaponRelicDefinitionFor(snapshot.classProgression.playerClass).label}${uncollectedRelicSuffix}`
             : `Weapon Relic: ${weaponRelicDefinitionFor(snapshot.classProgression.playerClass).label} rank ${weaponRank}${uncollectedRelicSuffix}`,
       );
-      const resources = byTestId<HTMLDivElement>("resources");
-      resources.replaceChildren(
-        ...(
-          [
-            ["wood", "Wood"],
-            ["stone", "Stone"],
-            ["scrap", "Metal / Scrap"],
-            ["essence", "Essence"],
-            ["bossCore", "Boss Core"],
-          ] as const
-        ).map(([kind, label]) => {
-          const resource = document.createElement("span");
-          resource.className = "resource-chip";
-          resource.setAttribute(
-            "aria-label",
-            `${label}: ${snapshot.resources[kind]}`,
-          );
-          resource.title = label;
-          resource.textContent = `${resourcePlaceholderIcons[kind]} ${snapshot.resources[kind]}`;
-          return resource;
-        }),
-      );
       text(
         byTestId("resource-capacity"),
         `Capacity ${snapshot.materialCapacity} each; Boss Core is exempt.`,
@@ -469,92 +515,26 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m. Healing Hut L1/L2/L3 auras use 3m/4m/5m.`,
       );
       text(byTestId("message"), presentGameNotice(snapshot.notice));
-      saveButton.disabled = !snapshot.canSave;
-      saveButton.textContent = snapshot.canSave
-        ? `Save at ${snapshot.savePointLabel}`
-        : "Save at campfire (move closer)";
+      if (saveButton.disabled !== !snapshot.canSave)
+        saveButton.disabled = !snapshot.canSave;
+      text(
+        saveButton,
+        snapshot.canSave
+          ? `Save at ${snapshot.savePointLabel}`
+          : "Save at campfire (move closer)",
+      );
       const placementNotice = presentPlacementNotice(snapshot.notice);
       if (placementNotice !== "") setPlacementFeedback(placementNotice);
 
-      const buildingStateKey = snapshot.buildings
-        .map(
-          (building) =>
-            `${building.id}:${building.kind}:${building.level}:${building.position.x}:${building.position.y}`,
-        )
-        .join("|");
-      if (buildingStateKey !== renderedBuildingStateKey) {
-        renderedBuildingStateKey = buildingStateKey;
-        buildingList.replaceChildren();
-        for (const building of snapshot.buildings) {
-          const definition = buildingDefinitions[building.kind];
-          const row = document.createElement("div");
-          row.className = "building-row";
-          row.dataset.testid = `building-${building.id}`;
-          const label = document.createElement("span");
-          label.textContent = `${definition.label} L${building.level} @ ${building.position.x.toFixed(1)}, ${building.position.y.toFixed(1)}`;
-          row.append(label);
-          if (building.kind === "Healer") {
-            const radius =
-              gameplayTuning.healingHutRadiusByLevel[building.level - 1];
-            const bonus =
-              gameplayTuning.healerHealingBonusByLevel[building.level - 1];
-            const aura = document.createElement("span");
-            aura.className = "healing-radius";
-            aura.dataset.testid = `healing-radius-${building.id}`;
-            aura.setAttribute(
-              "aria-label",
-              `Healing Hut healing radius, level ${building.level}: ${radius} metres`,
-            );
-            aura.textContent = `Healing aura: ${radius}m radius · +${bonus} health/s while stationary inside`;
-            row.append(aura);
-          }
-          const upgrade = document.createElement("button");
-          upgrade.type = "button";
-          upgrade.textContent = "Upgrade";
-          upgrade.disabled = building.level === 3;
-          upgrade.addEventListener("click", () =>
-            intents.upgradeBuilding(building.id),
-          );
-          const move = document.createElement("button");
-          move.type = "button";
-          move.textContent = "Relocate on canvas";
-          move.addEventListener("click", () =>
-            startPlacement({
-              kind: "relocate",
-              buildingId: building.id,
-              buildingKind: building.kind,
-            }),
-          );
-          const demolish = document.createElement("button");
-          demolish.type = "button";
-          demolish.textContent = "Demolish";
-          demolish.addEventListener("click", () => {
-            if (
-              placementMode?.kind === "relocate" &&
-              placementMode.buildingId === building.id
-            )
-              setPlacementMode(null);
-            intents.demolish(building.id);
-          });
-          row.append(upgrade, move, demolish);
-          buildingList.append(row);
-        }
-      }
-
-      const effects = byTestId<HTMLUListElement>("effects");
-      effects.replaceChildren(
-        ...snapshot.effects.map((effect) =>
-          Object.assign(document.createElement("li"), { textContent: effect }),
-        ),
-      );
+      buildingRows.render(snapshot.buildings);
+      effects.render(snapshot.effects);
       const skillTreeSummary = byTestId<HTMLElement>("skill-tree-summary");
-      const skillTreeSkills = byTestId<HTMLUListElement>("skill-tree-skills");
       if (snapshot.classProgression.playerClass === null) {
         text(
           skillTreeSummary,
           `Level ${snapshot.classProgression.level} · choose a class when the class choice appears.`,
         );
-        skillTreeSkills.replaceChildren();
+        skillTree.render([]);
       } else {
         const playerClass = snapshot.classProgression.playerClass;
         const selectedSkillIds = new Set(snapshot.classProgression.skillIds);
@@ -562,44 +542,24 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           skillTreeSummary,
           `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/4 class skills selected · ${weaponRelicDefinitionFor(playerClass).label} rank ${weaponRank}.`,
         );
-        skillTreeSkills.replaceChildren(
-          ...classSkillDefinitions
+        skillTree.render(
+          classSkillDefinitions
             .filter((skill) => skill.playerClass === playerClass)
             .map((skill) => {
-              const item = document.createElement("li");
               const selected = selectedSkillIds.has(skill.id);
-              item.textContent = `T${skill.tier} · ${skill.label}: ${selected ? "selected" : skill.description}`;
-              return item;
+              return `T${skill.tier} · ${skill.label}: ${selected ? "selected" : skill.description}`;
             }),
         );
       }
-      const statLabels = {
-        strength: "Strength",
-        dexterity: "Dexterity",
-        agility: "Agility",
-        luck: "Luck",
-        vitality: "Vitality",
-        magic: "Magic",
-        defense: "Defense",
-        magicDefense: "Magic Defense",
-      } as const;
-      const statsList = byTestId<HTMLDListElement>("stats-list");
-      statsList.replaceChildren(
-        ...Object.entries(statLabels).flatMap(([key, label]) => {
-          const term = document.createElement("dt");
-          term.textContent = label;
-          const value = document.createElement("dd");
-          value.textContent = String(
-            snapshot.playerStats[key as keyof typeof snapshot.playerStats],
-          );
-          return [term, value];
-        }),
-      );
+      for (const { kind, value } of statRows)
+        text(value, String(snapshot.playerStats[kind]));
       const hasClassChoice =
         snapshot.pendingClassChoices.length > 0 ||
         snapshot.pendingClassSkillChoices.length > 0;
-      upgradeModal.hidden =
+      const hideUpgrades =
         hasClassChoice || snapshot.pendingUpgradeChoices.length === 0;
+      if (upgradeModal.hidden !== hideUpgrades)
+        upgradeModal.hidden = hideUpgrades;
       const choiceKey = snapshot.pendingUpgradeChoices.join("|");
       if (upgradeChoices.dataset.choiceKey !== choiceKey) {
         upgradeChoices.replaceChildren();
@@ -613,7 +573,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         }
         upgradeChoices.dataset.choiceKey = choiceKey;
       }
-      classModal.hidden = !hasClassChoice;
+      if (classModal.hidden !== !hasClassChoice)
+        classModal.hidden = !hasClassChoice;
       const classChoiceKey = [
         ...snapshot.pendingClassChoices,
         ...snapshot.pendingClassSkillChoices,
@@ -657,6 +618,13 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       }
     },
     dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      setPlacementMode(null);
+      buildingRows.dispose();
+      effects.dispose();
+      skillTree.dispose();
+      saveButton.removeEventListener("click", intents.save);
       root.replaceChildren();
     },
   };

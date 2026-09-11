@@ -46,6 +46,7 @@ import { waveEnemyDraftsFor, wavePhaseFor } from "./session/wavePolicy";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
+import { ChunkRecipeCache } from "./session/chunkRecipeCache";
 import {
   SettlementRuntime,
   type SettlementCommandOutcome,
@@ -80,6 +81,7 @@ interface SessionOptions {
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
 export class GameSession {
+  private readonly chunkRecipes = new ChunkRecipeCache();
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
@@ -118,14 +120,18 @@ export class GameSession {
     this.ensureNeighborhoodEnemies();
   }
   private replaceState(state: SessionState): void {
+    this.chunkRecipes.clear();
     this.world = state.world;
     this.player = state.player;
     this.resources = state.resources;
-    this.settlement = new SettlementRuntime({
-      buildings: state.buildings,
-      nextBuildingSerial: state.nextBuildingSerial,
-      farmHarvestElapsed: state.farmHarvestElapsed,
-    });
+    this.settlement = new SettlementRuntime(
+      {
+        buildings: state.buildings,
+        nextBuildingSerial: state.nextBuildingSerial,
+        farmHarvestElapsed: state.farmHarvestElapsed,
+      },
+      this.chunkRecipes.get,
+    );
     this.enemies = state.enemies;
     this.projectiles = state.projectiles;
     this.crescentAttacks = state.crescentAttacks;
@@ -340,7 +346,11 @@ export class GameSession {
   }
 
   presentation(): GamePresentation {
-    const visibleChunks = visibleChunksFor(this.world, this.player.position);
+    const visibleChunks = visibleChunksFor(
+      this.world,
+      this.player.position,
+      this.chunkRecipes.get,
+    );
     const savePoint = this.settlement.nearbyCampfireAt(
       this.world,
       this.player.position,
@@ -420,10 +430,15 @@ export class GameSession {
       elapsed: this.elapsed,
       attackElapsed: this.attackElapsed,
       farmHarvestElapsed: this.settlement.harvestElapsed,
+      chunkCache: this.chunkRecipes.diagnostics(),
     });
   }
   private ensureNeighborhoodEnemies(): void {
-    const visibleChunks = visibleChunksFor(this.world, this.player.position);
+    const visibleChunks = visibleChunksFor(
+      this.world,
+      this.player.position,
+      this.chunkRecipes.get,
+    );
     const drafts = missingVisibleRuntimeEnemyDraftsFor({
       visibleChunks,
       existingEnemies: this.enemies,
