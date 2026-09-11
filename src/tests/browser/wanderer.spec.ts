@@ -152,6 +152,7 @@ test(
       level: 0,
       playerClass: null,
       skillIds: [],
+      weaponRank: 0,
     });
     await page.addInitScript(
       ({ key, value }) => window.localStorage.setItem(key, value),
