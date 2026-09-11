@@ -159,7 +159,7 @@ const authoredGameplayTuning = {
   playerHitRecoveryFlashIntervalSeconds: 0.1,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
-  experienceThresholds: [30, 100, 250, 600, 1500] as const,
+  experienceThresholds: [6, 20, 50, 120, 300] as const,
   waveIntervalSeconds: 120,
   waveDurationSeconds: 30,
   waveDensityMultiplier: 5,

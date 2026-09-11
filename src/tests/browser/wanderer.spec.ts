@@ -34,7 +34,7 @@ const primeClassChoice = async (page: Page): Promise<void> => {
         savePointId: "campfire:home",
         savePointPosition: { x: 0, y: 0 },
         classProgression: {
-          experience: 30,
+          experience: 6,
           level: 1,
           playerClass: null,
           skillIds: [],
@@ -75,7 +75,7 @@ const primeRankedClass = async (
           savePointId: "campfire:home",
           savePointPosition: { x: 0, y: 0 },
           classProgression: {
-            experience: 1500,
+            experience: 300,
             level: 5,
             playerClass: savedClass,
             skillIds: [],

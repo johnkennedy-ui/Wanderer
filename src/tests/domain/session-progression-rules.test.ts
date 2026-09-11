@@ -163,7 +163,7 @@ describe("session progression rules", () => {
       "Storage L1: L1: 180 per Wood, Stone, Metal / Scrap, and Essence.",
       "Trailblazer: 15% faster movement.",
       "Iron Skin: +25 maximum health and heal 25 immediately.",
-      "Experience: 0 / 30 · choose a class at level 1.",
+      "Experience: 0 / 6 · choose a class at level 1.",
     ]);
   });
 });

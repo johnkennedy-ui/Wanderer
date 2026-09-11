@@ -250,7 +250,7 @@ describe("browser save validation and recovery", () => {
     const document = {
       ...validSave(),
       classProgression: {
-        experience: 30,
+        experience: 6,
         level: 1 as const,
         playerClass: "wizard" as const,
         skillIds: [],

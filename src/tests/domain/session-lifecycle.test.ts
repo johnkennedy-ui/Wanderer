@@ -136,6 +136,38 @@ describe("GameSession lifecycle", () => {
     expect(placed.building?.id).toMatch(/:0001$/);
   });
 
+  it("derives hydrated class levels from stored experience without mutating saves", () => {
+    const saved: SaveDocument = {
+      ...savedAtHome(),
+      classProgression: {
+        experience: 100,
+        level: 2,
+        playerClass: "wizard",
+        skillIds: ["wizard-flame-orb"],
+        weaponRank: 0,
+      },
+    };
+
+    const hydrated = hydrateSessionState(saved);
+    expect(hydrated.classProgression).toEqual({
+      experience: 100,
+      level: 3,
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+      weaponRank: 0,
+    });
+    expect(saved.classProgression).toEqual({
+      experience: 100,
+      level: 2,
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+      weaponRank: 0,
+    });
+    expect(
+      new GameSession({ saved }).presentation().ui.classProgression,
+    ).toEqual(hydrated.classProgression);
+  });
+
   it("copies caller-owned world identity for fresh and saved sessions", () => {
     const suppliedWorld = {
       seed: "caller-owned-world",
