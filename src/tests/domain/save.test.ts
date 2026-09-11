@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { GameSession } from "../../domain/GameSession";
 import { buildingDefinitions } from "../../data/definitions";
 import { decodeSave, isSaveDocument } from "../../domain/save";
-import { toSaveV2Document } from "../../domain/persistence/currentSave";
+import {
+  toCurrentSaveStorageDocument,
+  toSaveV2Document,
+} from "../../domain/persistence/currentSave";
 import type { SaveDocument } from "../../domain/types";
 import {
   createBrowserSaveStorage,
@@ -241,15 +244,27 @@ describe("browser save validation and recovery", () => {
     expect(store.getItem(SAVE_KEYS.backup)).toBe(beforeBackup);
   });
 
-  it("serializes an explicit save as the unchanged schema-2 wire shape", () => {
+  it("keeps frozen V2 projection exact while browser storage retains current extensions", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
-    const document = validSave();
+    const document = {
+      ...validSave(),
+      classProgression: {
+        experience: 30,
+        level: 1 as const,
+        playerClass: "wizard" as const,
+        skillIds: [],
+        weaponRank: 2,
+      },
+    };
 
     expect(storage.commit(document).ok).toBe(true);
     const serialized = store.getItem(SAVE_KEYS.primary);
     expect(serialized).not.toBeNull();
-    expect(JSON.parse(serialized ?? "")).toEqual(toSaveV2Document(document));
+    expect(JSON.parse(serialized ?? "")).toEqual(
+      toCurrentSaveStorageDocument(document),
+    );
+    expect(toSaveV2Document(document)).not.toHaveProperty("classProgression");
     expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 2 });
   });
 

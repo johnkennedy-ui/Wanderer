@@ -58,6 +58,8 @@ const projectilePosition = (projectile: ProjectileState): Vector2 => ({
 });
 
 const projectilePresentationFor = (projectile: ProjectileState) => {
+  if (projectile.homing === true)
+    return { color: 0xe6d6ff, emissive: 0xab78ff, radius: 0.28 };
   switch (projectile.style) {
     case "slash":
       return { color: 0xd8dde8, emissive: 0x6d7585, radius: 0.25 };
@@ -300,6 +302,21 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         mesh.position.y = 0.24;
         projection.add(mesh);
       }
+      for (const drop of snapshot.weaponRelicDrops) {
+        const mesh = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.34, 0),
+          new THREE.MeshStandardMaterial({
+            color: 0xffe082,
+            emissive: 0xff8f00,
+            emissiveIntensity: 1.1,
+            roughness: 0.2,
+            metalness: 0.55,
+          }),
+        );
+        mesh.position.copy(toWorld(drop.position));
+        mesh.position.y = 0.38;
+        projection.add(mesh);
+      }
       const player = cylinder(
         0.45,
         1.05,
@@ -324,6 +341,13 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
       positionPlayerHealthLabel(snapshot);
       canvas.dataset.floorDropCount = String(snapshot.floorDrops.length);
+      canvas.dataset.weaponRelicDropCount = String(
+        snapshot.weaponRelicDrops.length,
+      );
+      canvas.dataset.homingProjectileCount = String(
+        snapshot.projectiles.filter((projectile) => projectile.homing === true)
+          .length,
+      );
       canvas.dataset.projectileCount = String(snapshot.projectiles.length);
       canvas.dataset.crescentAttackCount = String(
         snapshot.crescentAttacks.length,

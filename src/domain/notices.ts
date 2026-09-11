@@ -13,6 +13,7 @@ import type {
   CrescentAttackState,
   ProjectileState,
   ReadonlyResourceBag,
+  WeaponRelicDropState,
   UpgradeId,
   PlayerClass,
   WorldIdentity,
@@ -95,6 +96,12 @@ export type GameNotice =
       readonly respawns: boolean;
     }
   | { readonly kind: "boss.defeated"; readonly hasUpgradeChoices: boolean }
+  | { readonly kind: "weapon-relic.dropped"; readonly bossName: string }
+  | {
+      readonly kind: "weapon-relic.collected";
+      readonly playerClass: PlayerClass;
+      readonly weaponRank: number;
+    }
   | {
       readonly kind: "wave.started";
       readonly waveIndex: number;
@@ -121,6 +128,7 @@ export interface GameUiSnapshot {
   readonly classProgression: ClassProgression;
   readonly pendingClassChoices: readonly PlayerClass[];
   readonly pendingClassSkillChoices: readonly ClassSkillId[];
+  readonly weaponRelicDropCount: number;
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
   readonly notice: GameNotice;
@@ -149,6 +157,7 @@ export interface GameRendererSnapshot {
   readonly projectiles: readonly ProjectileState[];
   readonly crescentAttacks: readonly CrescentAttackState[];
   readonly floorDrops: readonly FloorDropState[];
+  readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];
 }

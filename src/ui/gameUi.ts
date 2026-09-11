@@ -5,6 +5,7 @@ import {
   classSkillDefinitions,
   gameplayTuning,
   upgradeDefinitionFor,
+  weaponRelicDefinitionFor,
 } from "../data/definitions";
 import type { GameUiSnapshot, PlacementResult } from "../domain/notices";
 import { buildingKinds } from "../domain/types";
@@ -121,6 +122,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <span data-testid="combat-status"></span>
         <span data-testid="wave-status" aria-live="polite"></span>
         <span data-testid="projectile-status"></span>
+        <span data-testid="weapon-relic-status"></span>
       </div>
       <p class="message" data-testid="message" aria-live="polite"></p>
       <p class="subtle" data-testid="boss-route-cue">Ember Wyrm route: the boss is 6m east of the home Campfire. Move east, then stop within basic-attack range.</p>
@@ -423,6 +425,19 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           ? "Projectile: 1 in flight"
           : `Projectile: ${snapshot.projectileCount} in flight`,
       );
+      const weaponRank = snapshot.classProgression.weaponRank ?? 0;
+      const uncollectedRelicSuffix =
+        snapshot.weaponRelicDropCount === 0
+          ? ""
+          : ` · ${snapshot.weaponRelicDropCount} glowing drop${snapshot.weaponRelicDropCount === 1 ? "" : "s"} nearby`;
+      text(
+        byTestId("weapon-relic-status"),
+        snapshot.classProgression.playerClass === null
+          ? `Weapon Relic: rank 0 · choose a class before collecting one${uncollectedRelicSuffix}`
+          : weaponRank === 0
+            ? `Weapon Relic: rank 0 · defeat a timed-wave boss to unlock ${weaponRelicDefinitionFor(snapshot.classProgression.playerClass).label}${uncollectedRelicSuffix}`
+            : `Weapon Relic: ${weaponRelicDefinitionFor(snapshot.classProgression.playerClass).label} rank ${weaponRank}${uncollectedRelicSuffix}`,
+      );
       const resources = byTestId<HTMLDivElement>("resources");
       resources.replaceChildren(
         ...(
@@ -545,7 +560,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         const selectedSkillIds = new Set(snapshot.classProgression.skillIds);
         text(
           skillTreeSummary,
-          `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/4 class skills selected.`,
+          `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/4 class skills selected · ${weaponRelicDefinitionFor(playerClass).label} rank ${weaponRank}.`,
         );
         skillTreeSkills.replaceChildren(
           ...classSkillDefinitions

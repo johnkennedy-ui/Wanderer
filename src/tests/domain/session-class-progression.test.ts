@@ -153,6 +153,7 @@ describe("class progression", () => {
       level: 5,
       playerClass: "wizard",
       skillIds: ["wizard-wide-blast"],
+      weaponRank: 0,
     });
     const decoded = decodeSave(JSON.stringify(request?.document));
     if (!decoded.ok) throw new Error(decoded.message);

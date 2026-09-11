@@ -11,6 +11,7 @@ const defaultClassProgression = (): ClassProgression => ({
   level: 0,
   playerClass: null,
   skillIds: [],
+  weaponRank: 0,
 });
 
 export const migrateSaveV2 = (
@@ -52,5 +53,6 @@ export const migrateSaveV2 = (
   classProgression: {
     ...classProgression,
     skillIds: [...classProgression.skillIds],
+    weaponRank: classProgression.weaponRank ?? 0,
   },
 });

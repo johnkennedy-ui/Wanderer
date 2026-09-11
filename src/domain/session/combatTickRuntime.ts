@@ -97,7 +97,7 @@ export interface AutoCombatPhaseResult {
   readonly combatStatus: string;
 }
 
-/** Advances auto-combat and allocates at most one projectile serial. */
+/** Advances auto-combat and allocates one serial for every authored shot. */
 export const advanceAutoCombatPhase = ({
   delta,
   attackSpeedMultiplier = 1,
@@ -201,41 +201,52 @@ export const advanceAutoCombatPhase = ({
     upgrades,
     classProgression,
   );
-  const classSecondaryTargetIds = classSecondaryTargetIdsFor({
-    style: stats.attackStyle,
-    playerPosition,
-    primaryTarget: decision.target,
-    targets,
-    maximumTargets: stats.chainTargets,
-    areaRadius: stats.classAreaRadius,
-    arcCosine: stats.classArcCosine,
-  });
-  const draft = projectileDraftFor({
-    playerPosition,
-    target: decision.target,
-    targets,
-    attackDamage: stats.attackDamage,
-    chainTargets: 0,
-    chainDamageMultiplier: 0,
-    hitHeal: projectileEffects.hitHeal,
-  });
-  projectiles.push({
-    id: `projectile:${nextProjectileSerial.toString().padStart(4, "0")}`,
-    ...draft,
-    chainTargetIds: classSecondaryTargetIds,
-    chainDamage:
-      stats.attackDamage *
-      (stats.classSecondaryDamageMultiplier ||
-        projectileEffects.chainDamageMultiplier),
-    style: stats.attackStyle,
-    elapsed: 0,
-  });
+  const shotTargets = Array.from(
+    { length: stats.weaponProjectileCount },
+    (_, index) => targets[index] ?? decision.target,
+  );
+  for (const [index, target] of shotTargets.entries()) {
+    const classSecondaryTargetIds = classSecondaryTargetIdsFor({
+      style: stats.attackStyle,
+      playerPosition,
+      primaryTarget: target,
+      targets,
+      maximumTargets: stats.chainTargets,
+      areaRadius: stats.classAreaRadius,
+      arcCosine: stats.classArcCosine,
+    });
+    const shotDamage =
+      stats.attackDamage * stats.weaponProjectileDamageMultiplier;
+    const draft = projectileDraftFor({
+      playerPosition,
+      target,
+      targets,
+      attackDamage: shotDamage,
+      chainTargets: 0,
+      chainDamageMultiplier: 0,
+      hitHeal: projectileEffects.hitHeal,
+    });
+    projectiles.push({
+      id: `projectile:${(nextProjectileSerial + index)
+        .toString()
+        .padStart(4, "0")}`,
+      ...draft,
+      chainTargetIds: classSecondaryTargetIds,
+      chainDamage:
+        shotDamage *
+        (stats.classSecondaryDamageMultiplier ||
+          projectileEffects.chainDamageMultiplier),
+      style: stats.attackStyle,
+      ...(stats.weaponProjectileHoming ? { homing: true } : {}),
+      elapsed: 0,
+    });
+  }
   return {
     projectiles,
     crescentAttacks,
     meleeImpacts: [],
     attackElapsed: decision.attackElapsed,
-    nextProjectileSerial: nextProjectileSerial + 1,
+    nextProjectileSerial: nextProjectileSerial + shotTargets.length,
     nextCrescentSerial,
     combatStatus,
   };
