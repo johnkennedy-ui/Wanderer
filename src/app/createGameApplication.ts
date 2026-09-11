@@ -9,7 +9,6 @@ import type {
 import { createBuildPlacementInput } from "../platform/input/buildPlacementInput";
 import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
-import { createVirtualStickInput } from "../platform/input/virtualStickInput";
 import { createBrowserLifecycle } from "../platform/lifecycle/browserLifecycle";
 import { createThreeRenderer } from "../platform/render/threeRenderer";
 import { createBrowserSaveStorage } from "../platform/storage/browserSaveStorage";
@@ -81,13 +80,9 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
   });
   const renderer = createThreeRenderer(ui.worldHost);
   const keyboard = createKeyboardInput((command) => session.move(command));
-  const stick = createVirtualStickInput(ui.virtualStick, (command) =>
-    session.move(command),
-  );
   const tapToMove = createTapToMoveInput(
     renderer.canvas,
     renderer.worldPositionFromClientPoint,
-    ui.isTapToMoveEnabled,
     (command) => session.setDestination(command),
     ui.isWorldPlacementEnabled,
   );
@@ -118,7 +113,6 @@ export const createGameApplication = (root: HTMLElement): GameApplication => {
       lifecycle.dispose();
       buildPlacement.dispose();
       tapToMove.dispose();
-      stick.dispose();
       keyboard.dispose();
       renderer.dispose();
       ui.dispose();

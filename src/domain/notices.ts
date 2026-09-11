@@ -16,6 +16,7 @@ import type {
   WeaponRelicDropState,
   UpgradeId,
   PlayerClass,
+  Vector2,
   WorldIdentity,
 } from "./types";
 
@@ -116,7 +117,6 @@ export interface GameUiSnapshot {
   readonly player: PlayerState;
   readonly playerStats: PlayerStats;
   readonly resources: ReadonlyResourceBag;
-  readonly materialCapacity: number;
   readonly buildRadius: number;
   readonly inputSource: InputSource;
   readonly combatStatus: string;
@@ -160,6 +160,8 @@ export interface GameRendererSnapshot {
   readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly visibleBuildings: readonly BuildingState[];
   readonly visibleChunks: readonly ChunkRecipe[];
+  /** Copied runtime destination for a disposable target marker; never saved. */
+  readonly destination: Vector2 | null;
 }
 
 /** One immutable-shaped frame result with only the two narrow presentation views. */

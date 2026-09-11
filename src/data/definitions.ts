@@ -13,7 +13,6 @@ import { deepFreeze } from "./deepFreeze";
 
 export interface ResourceDefinition {
   readonly label: string;
-  readonly storageLimited: boolean;
   readonly description: string;
   readonly groundDropColor: number;
 }
@@ -98,33 +97,27 @@ export interface WeaponRelicDefinition {
 const authoredResourceDefinitions = {
   wood: {
     label: "Wood",
-    storageLimited: true,
     description: "Common construction timber.",
     groundDropColor: 0xb87333,
   },
   stone: {
     label: "Stone",
-    storageLimited: true,
     description: "Common settlement masonry.",
     groundDropColor: 0xa9b3b8,
   },
   scrap: {
     label: "Metal / Scrap",
-    storageLimited: true,
     description: "Recovered metal for durable work.",
     groundDropColor: 0x8ab4c8,
   },
   essence: {
     label: "Essence",
-    storageLimited: true,
     description: "Elite energy used for advanced upgrades.",
     groundDropColor: 0xb388ff,
   },
   bossCore: {
     label: "Boss Core",
-    storageLimited: false,
-    description:
-      "Boss progression currency; saved but exempt from Storage capacity.",
+    description: "Boss progression currency.",
     groundDropColor: 0xffd54f,
   },
 } satisfies Record<ResourceKind, ResourceDefinition>;
@@ -133,8 +126,6 @@ export const resourceDefinitions = deepFreeze(authoredResourceDefinitions);
 
 const authoredGameplayTuning = {
   deathResourceLossRate: 0.25,
-  baseMaterialCapacity: 120,
-  storageCapacityBonusByLevel: [60, 140, 240] as const,
   campfireBuildRadiusByLevel: [6, 9, 12] as const,
   workshopDamageBonusByLevel: [4, 9, 15] as const,
   farmHarvestEverySeconds: 2,
@@ -255,14 +246,14 @@ const authoredBuildingDefinitions = {
     ],
   },
   Storage: {
-    label: "Storage",
+    label: "Legacy Storage",
     baseCost: { wood: 20, stone: 8, scrap: 3, essence: 0, bossCore: 0 },
     description:
-      "Enforces a higher per-material capacity for common resources.",
+      "A legacy structure preserved from existing saves. It has no resource effect and cannot be upgraded or relocated.",
     levelEffects: [
-      "L1: 180 per Wood, Stone, Metal / Scrap, and Essence.",
-      "L2: 260 per Wood, Stone, Metal / Scrap, and Essence.",
-      "L3: 360 per Wood, Stone, Metal / Scrap, and Essence.",
+      "L1: legacy structure; no resource effect.",
+      "L2: legacy structure; no resource effect.",
+      "L3: legacy structure; no resource effect.",
     ],
   },
   Healer: {

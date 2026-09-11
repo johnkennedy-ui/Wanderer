@@ -21,8 +21,7 @@ export interface Vector2 {
   readonly y: number;
 }
 
-export type InputSource =
-  "keyboard" | "virtual-stick" | "tap-to-move" | "system";
+export type InputSource = "keyboard" | "tap-to-move" | "system";
 
 export interface MoveCommand {
   readonly intent: Vector2;
@@ -30,7 +29,7 @@ export interface MoveCommand {
   readonly at: number;
 }
 
-/** An explicit runtime-only destination issued by an enabled tap-to-move adapter. */
+/** An explicit runtime-only destination issued by a primary canvas tap. */
 export interface DestinationCommand {
   readonly destination: Vector2;
   readonly source: "tap-to-move";

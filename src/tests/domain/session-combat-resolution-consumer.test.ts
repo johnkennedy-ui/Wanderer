@@ -7,7 +7,7 @@ import { emptyResources } from "../../domain/types";
 import { advance, savedAtHome } from "./session-test-helpers";
 
 describe("GameSession combat-resolution consumer coverage", () => {
-  it("collects floor drops by range and capacity without mutating inputs", () => {
+  it("collects all nearby floor drops by range without mutating inputs", () => {
     const resources = emptyResources();
     resources.wood = 9;
     const drops = [
@@ -40,24 +40,17 @@ describe("GameSession combat-resolution consumer coverage", () => {
       playerPosition: { x: 0, y: 0 },
       floorDrops: drops,
       resources,
-      materialCapacity: 10,
       collectDistance: 0.8,
     });
 
     expect(result.resources).toEqual({
-      wood: 10,
+      wood: 13,
       stone: 0,
       scrap: 0,
       essence: 0,
       bossCore: 2,
     });
     expect(result.floorDrops).toEqual([
-      {
-        id: "near-wood",
-        resource: "wood",
-        amount: 3,
-        position: { x: 0, y: 0 },
-      },
       {
         id: "far-stone",
         resource: "stone",

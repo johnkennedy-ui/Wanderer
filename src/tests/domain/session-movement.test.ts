@@ -4,20 +4,20 @@ import { GameSession } from "../../domain/GameSession";
 import { advance, savedAtHome } from "./session-test-helpers";
 
 describe("GameSession movement", () => {
-  it("preserves bounded virtual-stick magnitude after a lower movement dead zone", () => {
+  it("normalizes keyboard movement after the shared lower movement dead zone", () => {
     const session = new GameSession();
-    session.move({ intent: { x: 0.07, y: 0 }, source: "virtual-stick", at: 1 });
+    session.move({ intent: { x: 0.07, y: 0 }, source: "keyboard", at: 1 });
     session.tick(0.1);
     expect(session.presentation().ui.player.position).toEqual({ x: 0, y: 0 });
 
-    session.move({ intent: { x: 0.2, y: 0 }, source: "virtual-stick", at: 2 });
+    session.move({ intent: { x: 0.2, y: 0 }, source: "keyboard", at: 2 });
     session.tick(0.1);
     expect(session.presentation().ui.player.position).toEqual({
       x: 0.06,
       y: 0,
     });
 
-    session.move({ intent: { x: 3, y: 4 }, source: "virtual-stick", at: 3 });
+    session.move({ intent: { x: 3, y: 4 }, source: "keyboard", at: 3 });
     session.tick(0.1);
     expect(session.presentation().ui.player.position).toEqual({
       x: 0.24,
@@ -128,15 +128,22 @@ describe("GameSession movement", () => {
     expect(settledDistance).toBeCloseTo(standoff, 6);
   });
 
-  it("moves to explicit tap destinations, stops on arrival, and lets manual movement cancel them", () => {
+  it("projects copied tap destinations, stops on arrival, and lets keyboard movement cancel them", () => {
     const session = new GameSession();
     session.setDestination({
       destination: { x: 1, y: 0 },
       source: "tap-to-move",
       at: 1,
     });
+    const activeDestination = session.presentation().renderer.destination;
+    expect(activeDestination).toEqual({ x: 1, y: 0 });
+    if (activeDestination === null)
+      throw new Error("tap destination should be projected to the renderer");
+    (activeDestination as { x: number }).x = 99;
+    expect(session.presentation().renderer.destination).toEqual({ x: 1, y: 0 });
     advance(session, 1);
     expect(session.presentation().ui.player.position).toEqual({ x: 1, y: 0 });
+    expect(session.presentation().renderer.destination).toBeNull();
     advance(session, 0.1);
     expect(session.presentation().ui.player.position).toEqual({ x: 1, y: 0 });
 
@@ -146,23 +153,20 @@ describe("GameSession movement", () => {
       at: 2,
     });
     session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 3 });
+    expect(session.presentation().renderer.destination).toBeNull();
     advance(session, 0.1);
     expect(session.presentation().ui.player.position.x).toBeLessThan(1);
+    const request = session.createValidCampfireSaveRequest(4);
+    expect(request?.document).not.toHaveProperty("destination");
     session.setDestination({
       destination: { x: 5, y: 0 },
       source: "tap-to-move",
-      at: 4,
-    });
-    session.move({
-      intent: { x: -1, y: 0 },
-      source: "virtual-stick",
       at: 5,
     });
-    const beforeStickCancellation = session.presentation().ui.player.position.x;
-    advance(session, 0.1);
-    expect(session.presentation().ui.player.position.x).toBeLessThan(
-      beforeStickCancellation,
-    );
+    session.resetWorld("destination-reset");
+    expect(session.presentation().renderer.destination).toBeNull();
+    const reloaded = new GameSession({ saved: request?.document });
+    expect(reloaded.presentation().renderer.destination).toBeNull();
   });
 
   it("doubles manual movement only while an enemy-hit recovery window is active", () => {

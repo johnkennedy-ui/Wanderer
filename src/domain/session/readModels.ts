@@ -75,8 +75,8 @@ export interface PresentationProjectionInput {
   readonly floorDrops: readonly FloorDropState[];
   readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly visibleChunks: readonly ChunkRecipe[];
-  readonly materialCapacity: number;
   readonly buildRadius: number;
+  readonly destination: Vector2 | null;
   readonly inputSource: InputSource;
   readonly combatStatus: string;
   readonly wave: WaveStatus;
@@ -183,7 +183,6 @@ export const projectGamePresentation = (
     player,
     playerStats,
     resources,
-    materialCapacity: input.materialCapacity,
     buildRadius: input.buildRadius,
     inputSource: input.inputSource,
     combatStatus: input.combatStatus,
@@ -214,6 +213,8 @@ export const projectGamePresentation = (
     weaponRelicDrops,
     visibleBuildings,
     visibleChunks: input.visibleChunks,
+    destination:
+      input.destination === null ? null : copyVector(input.destination),
   };
   return { ui, renderer };
 };

@@ -45,8 +45,6 @@ type PlacementMode =
 
 export interface GameUi {
   readonly worldHost: HTMLElement;
-  readonly virtualStick: HTMLElement;
-  isTapToMoveEnabled(): boolean;
   isWorldPlacementEnabled(): boolean;
   applyWorldPlacement(position: Vector2): void;
   render(snapshot: GameUiSnapshot): void;
@@ -131,8 +129,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <button data-testid="new-world">New / reset world</button>
         <button data-testid="save-button">Save at campfire</button>
       </div>
-      <label class="tap-to-move-toggle"><input data-testid="tap-to-move-toggle" type="checkbox" /> Tap-to-move</label>
-      <p class="subtle">When enabled, tap an open part of the world to travel there. A selected building placement always takes priority for its next tap.</p>
+      <p class="subtle">WASD / arrows move. Tap an open part of the world to travel there; a selected building placement takes priority for its next tap.</p>
       <p data-testid="save-message" class="subtle">No automatic save. Reload restores only the last explicit campfire commit.</p>
       <hr />
       <h2>Passive effects</h2>
@@ -142,7 +139,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     <section id="resources-panel" data-testid="resources-panel" class="side-panel panel resources-panel" aria-label="Resources" hidden>
       <header class="panel-heading"><h2>Resources</h2><button type="button" class="panel-close" data-testid="close-resources" aria-label="Close Resources">×</button></header>
       <div class="resource-list" data-testid="resources"></div>
-      <p class="subtle" data-testid="resource-capacity"></p>
     </section>
     <section id="skill-tree-panel" data-testid="skill-tree-panel" class="side-panel panel skill-tree-panel" aria-label="Skill Tree" hidden>
       <header class="panel-heading"><h2>Skill Tree</h2><button type="button" class="panel-close" data-testid="close-skill-tree" aria-label="Close Skill Tree">×</button></header>
@@ -163,12 +159,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <p data-testid="placement-mode" class="placement-mode" role="status" aria-live="polite">Placement mode inactive.</p>
       <button type="button" data-testid="cancel-placement" class="placement-cancel" hidden>Cancel placement</button>
       <p data-testid="placement-message" class="subtle" aria-live="polite"></p>
-    </section>
-    <section class="touch-controls" aria-label="Touch movement">
-      <div class="virtual-stick" data-testid="virtual-stick" data-active="false" aria-label="Virtual movement stick">
-        <div class="stick-knob" data-stick-knob></div>
-      </div>
-      <p>WASD / arrows · tap or drag the stick to move</p>
     </section>
     <section class="upgrade-modal" data-testid="upgrade-modal" hidden aria-live="assertive">
       <div class="upgrade-card">
@@ -196,7 +186,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const buildButtons = byTestId<HTMLDivElement>("build-buttons");
   const buildingList = byTestId<HTMLDivElement>("building-list");
   const saveButton = byTestId<HTMLButtonElement>("save-button");
-  const tapToMoveToggle = byTestId<HTMLInputElement>("tap-to-move-toggle");
   const saveMessage = byTestId<HTMLParagraphElement>("save-message");
   const placementMessage = byTestId<HTMLParagraphElement>("placement-message");
   const placementModeElement = byTestId<HTMLParagraphElement>("placement-mode");
@@ -209,7 +198,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     "class-modal-description",
   );
   const classChoices = byTestId<HTMLDivElement>("class-choices");
-  const virtualStick = byTestId<HTMLDivElement>("virtual-stick");
   const statusPanel = byTestId<HTMLElement>("character-status-panel");
   const buildMenuPanel = byTestId<HTMLElement>("build-menu-panel");
   const resourcesPanel = byTestId<HTMLElement>("resources-panel");
@@ -337,7 +325,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
   };
-  for (const kind of buildingKinds) {
+  for (const kind of buildingKinds.filter((kind) => kind !== "Storage")) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "build-option";
@@ -363,10 +351,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
 
   return {
     worldHost,
-    virtualStick,
-    isTapToMoveEnabled(): boolean {
-      return tapToMoveToggle.checked;
-    },
     isWorldPlacementEnabled(): boolean {
       return placementMode !== null;
     },
@@ -461,14 +445,15 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         }),
       );
       text(
-        byTestId("resource-capacity"),
-        `Capacity ${snapshot.materialCapacity} each; Boss Core is exempt.`,
-      );
-      text(
         byTestId("build-radius"),
         `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m. Healing Hut L1/L2/L3 auras use 3m/4m/5m.`,
       );
-      text(byTestId("message"), presentGameNotice(snapshot.notice));
+      text(
+        byTestId("message"),
+        snapshot.notice.kind === "farm.harvested"
+          ? "Farm harvest collected while stationary; no save was made."
+          : presentGameNotice(snapshot.notice),
+      );
       saveButton.disabled = !snapshot.canSave;
       saveButton.textContent = snapshot.canSave
         ? `Save at ${snapshot.savePointLabel}`
@@ -487,6 +472,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         buildingList.replaceChildren();
         for (const building of snapshot.buildings) {
           const definition = buildingDefinitions[building.kind];
+          const isLegacyStorage = building.kind === "Storage";
           const row = document.createElement("div");
           row.className = "building-row";
           row.dataset.testid = `building-${building.id}`;
@@ -511,13 +497,18 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           const upgrade = document.createElement("button");
           upgrade.type = "button";
           upgrade.textContent = "Upgrade";
-          upgrade.disabled = building.level === 3;
+          upgrade.disabled = isLegacyStorage || building.level === 3;
+          if (isLegacyStorage)
+            upgrade.title = "Legacy Storage cannot be upgraded.";
           upgrade.addEventListener("click", () =>
             intents.upgradeBuilding(building.id),
           );
           const move = document.createElement("button");
           move.type = "button";
           move.textContent = "Relocate on canvas";
+          move.disabled = isLegacyStorage;
+          if (isLegacyStorage)
+            move.title = "Legacy Storage cannot be relocated.";
           move.addEventListener("click", () =>
             startPlacement({
               kind: "relocate",

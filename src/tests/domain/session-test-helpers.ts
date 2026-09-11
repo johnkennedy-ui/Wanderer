@@ -32,7 +32,7 @@ export const savedAtHome = (): SaveDocument => {
 
 export const placeAndUpgradeTo = (
   session: GameSession,
-  kind: "Workshop" | "Farm" | "Storage" | "Healer",
+  kind: "Workshop" | "Farm" | "Healer",
   level: 1 | 2 | 3,
 ) => {
   const built = session.placeBuilding(kind, { x: 1, y: 1 });

@@ -1,4 +1,3 @@
-import { resourceDefinitions } from "../../data/definitions";
 import { distance } from "../math";
 import type {
   FloorDropState,
@@ -6,13 +5,12 @@ import type {
   ResourceBag,
   Vector2,
 } from "../types";
-import { clampResourcesToCapacity } from "./economy";
+import { collectResourcesWithinCapacity } from "./economy";
 
 export interface FloorDropCollectionInput {
   readonly playerPosition: Vector2;
   readonly floorDrops: readonly FloorDropState[];
   readonly resources: ReadonlyResourceBag;
-  readonly materialCapacity: number;
   readonly collectDistance: number;
 }
 
@@ -32,7 +30,6 @@ export const floorDropCollectionPolicy = ({
   playerPosition,
   floorDrops,
   resources,
-  materialCapacity,
   collectDistance,
 }: FloorDropCollectionInput): FloorDropCollectionResult => {
   let nextResources = { ...resources };
@@ -45,27 +42,14 @@ export const floorDropCollectionPolicy = ({
       continue;
     }
 
-    const capacityRemaining = resourceDefinitions[drop.resource].storageLimited
-      ? Math.max(0, materialCapacity - nextResources[drop.resource])
-      : Number.POSITIVE_INFINITY;
-    const collectedAmount = Math.min(drop.amount, capacityRemaining);
-    if (collectedAmount <= 0) {
-      remaining.push(copyDrop(drop));
-      continue;
-    }
-
-    nextResources = clampResourcesToCapacity(
-      {
-        ...nextResources,
-        [drop.resource]: nextResources[drop.resource] + collectedAmount,
-      },
-      materialCapacity,
-    );
+    nextResources = collectResourcesWithinCapacity(nextResources, {
+      wood: drop.resource === "wood" ? drop.amount : 0,
+      stone: drop.resource === "stone" ? drop.amount : 0,
+      scrap: drop.resource === "scrap" ? drop.amount : 0,
+      essence: drop.resource === "essence" ? drop.amount : 0,
+      bossCore: drop.resource === "bossCore" ? drop.amount : 0,
+    });
     collectedAny = true;
-    if (collectedAmount < drop.amount)
-      remaining.push(
-        copyDrop({ ...drop, amount: drop.amount - collectedAmount }),
-      );
   }
 
   return { floorDrops: remaining, resources: nextResources, collectedAny };

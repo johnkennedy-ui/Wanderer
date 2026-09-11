@@ -156,11 +156,11 @@ describe("session progression rules", () => {
         upgrades(["trailblazer", "iron-skin"]),
       ),
     ).toEqual([
-      "Storage: 180 each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.",
+      "Storage: Infinity each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.",
       "Hearth Ward: 2 health/s while stationary near a campfire.",
       "Death: 25% carried-resource loss; no death save.",
       "Workshop L2: L2: +9 basic attack damage.",
-      "Storage L1: L1: 180 per Wood, Stone, Metal / Scrap, and Essence.",
+      "Legacy Storage L1: L1: legacy structure; no resource effect.",
       "Trailblazer: 15% faster movement.",
       "Iron Skin: +25 maximum health and heal 25 immediately.",
       "Experience: 0 / 6 · choose a class at level 1.",

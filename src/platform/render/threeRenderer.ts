@@ -104,6 +104,22 @@ const healingHutAura = (radius: number): THREE.Mesh =>
     }),
   );
 
+/** A bright ground ring marking the copied runtime-only movement target. */
+const destinationMarker = (): THREE.Mesh => {
+  const marker = new THREE.Mesh(
+    new THREE.RingGeometry(0.34, 0.52, 40),
+    new THREE.MeshBasicMaterial({
+      color: 0xffe082,
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  marker.rotation.x = -Math.PI / 2;
+  return marker;
+};
+
 const knightCrescent = (
   radius: number,
   arcCosine: number,
@@ -230,6 +246,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
           addMarker(fire, campfire.position);
         }
       }
+      if (snapshot.destination !== null) {
+        const marker = destinationMarker();
+        marker.position.copy(toWorld(snapshot.destination));
+        marker.position.y = 0.03;
+        projection.add(marker);
+      }
       for (const building of snapshot.visibleBuildings) {
         if (building.kind === "Healer") {
           const aura = healingHutAura(
@@ -352,6 +374,8 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       canvas.dataset.crescentAttackCount = String(
         snapshot.crescentAttacks.length,
       );
+      canvas.dataset.destinationMarker =
+        snapshot.destination === null ? "inactive" : "active";
       canvas.dataset.playerHitRecovery = snapshot.playerHitRecovery.active
         ? "active"
         : "inactive";

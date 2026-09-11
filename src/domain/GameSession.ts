@@ -51,10 +51,6 @@ import {
   type SettlementCommandOutcome,
 } from "./session/settlementRuntime";
 import {
-  clampResourcesToCapacity,
-  materialCapacityFor,
-} from "./session/economy";
-import {
   applyUpgradeEffectToPlayer,
   combatStatsFor,
   describeProgressionEffects,
@@ -110,10 +106,6 @@ export class GameSession {
       options.saved === undefined
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
         : hydrateSessionState(options.saved),
-    );
-    this.resources = clampResourcesToCapacity(
-      this.resources,
-      materialCapacityFor(this.settlement.buildingState),
     );
     this.ensureNeighborhoodEnemies();
   }
@@ -345,7 +337,6 @@ export class GameSession {
       this.world,
       this.player.position,
     );
-    const materialCapacity = materialCapacityFor(this.settlement.buildingState);
     const buildRadius = this.settlement.buildRadiusAt(
       this.world,
       this.player.position,
@@ -354,7 +345,7 @@ export class GameSession {
       this.settlement.buildingState,
       this.upgrades,
       this.classProgression,
-    );
+    ).filter((effect) => !effect.startsWith("Storage"));
     return projectGamePresentation({
       world: this.world,
       player: this.player,
@@ -367,8 +358,8 @@ export class GameSession {
           gameplayTuning.playerHitRecoveryFlashIntervalSeconds,
       }),
       resources: this.resources,
-      materialCapacity,
       buildRadius,
+      destination: this.destination,
       enemies: this.enemies,
       projectiles: this.projectiles,
       crescentAttacks: this.crescentAttacks,
@@ -636,12 +627,10 @@ export class GameSession {
   }
   private collectNearbyFloorDrops(): void {
     if (this.floorDrops.length === 0) return;
-    const materialCapacity = materialCapacityFor(this.settlement.buildingState);
     const result = floorDropCollectionPolicy({
       playerPosition: this.player.position,
       floorDrops: this.floorDrops,
       resources: this.resources,
-      materialCapacity,
       collectDistance: gameplayTuning.floorDropCollectDistance,
     });
     this.floorDrops = [...result.floorDrops];

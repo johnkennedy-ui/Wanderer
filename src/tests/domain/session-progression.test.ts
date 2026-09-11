@@ -71,7 +71,10 @@ describe("GameSession progression", () => {
     });
     advance(session, 3);
     expect(session.presentation().ui.player.position).toEqual({ x: 0, y: 0 });
-    expect(session.presentation().ui.resources).toEqual(resourcesBeforeReturn);
+    expect(session.presentation().ui.resources).toEqual({
+      ...resourcesBeforeReturn,
+      stone: resourcesBeforeReturn.stone + 1,
+    });
     const request = session.createValidCampfireSaveRequest(99);
     expect(request).not.toBeNull();
     expect(request?.document.savePointId).toBe("campfire:home");
