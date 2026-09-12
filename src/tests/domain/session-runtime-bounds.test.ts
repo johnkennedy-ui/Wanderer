@@ -80,6 +80,7 @@ describe("runtime diagnostics, not an enemy memory bound", () => {
     expect(Reflect.set(snapshot.floorDrops[0].position, "y", 99)).toBe(false);
     expect(Reflect.set(snapshot.buildings[0].position, "x", 99)).toBe(false);
     expect(Reflect.set(snapshot.world, "seed", "bad")).toBe(false);
+    expect(Reflect.set(snapshot.chunkCache, "size", 99)).toBe(false);
     expect(canonicalHash(snapshot)).toBe(hash);
     // Mutate the source fixture after projection: it must remain independently writable.
     input.player.position = { x: 99, y: 99 };
@@ -120,6 +121,54 @@ describe("runtime diagnostics, not an enemy memory bound", () => {
     session.resetWorld("independent-reset");
     expect(canonicalHash(before)).toBe(hash);
     expect(session.diagnostics().world.seed).toBe("independent-reset");
+  });
+
+  it("extra presentation cache hits do not change gameplay or retained diagnostic snapshots", () => {
+    const observed = new GameSession();
+    const control = new GameSession();
+    const old = observed.diagnostics();
+    const oldHash = canonicalHash(old);
+    for (let step = 0; step < 30; step += 1) {
+      observed.tick(0.1);
+      control.tick(0.1);
+      observed.presentation();
+      observed.presentation();
+    }
+    const { chunkCache: observedCache, ...observedState } =
+      observed.diagnostics();
+    const { chunkCache: controlCache, ...controlState } = control.diagnostics();
+    expect(observedState).toEqual(controlState);
+    expect(observedCache.misses).toBe(controlCache.misses);
+    expect(observedCache.hits).toBeGreaterThan(controlCache.hits);
+    expect(canonicalHash(old)).toBe(oldHash);
+    expect(observed.presentation()).toEqual(control.presentation());
+  });
+
+  it("copies supplied cache metrics before freezing the diagnostic projection", () => {
+    const chunkCache = {
+      capacity: 27,
+      hits: 4,
+      misses: 10,
+      size: 9,
+      evictions: 1,
+    };
+    const snapshot = projectRuntimeDiagnostics({
+      ...diagnosticInput(),
+      chunkCache,
+    });
+    assertRuntimeInvariants(snapshot);
+    expect(snapshot.counts.cachedChunks).toBe(9);
+    expect(Object.isFrozen(snapshot.chunkCache)).toBe(true);
+    expect(Object.isFrozen(chunkCache)).toBe(false);
+    chunkCache.hits = 99;
+    chunkCache.size = 0;
+    expect(snapshot.chunkCache).toEqual({
+      capacity: 27,
+      hits: 4,
+      misses: 10,
+      size: 9,
+      evictions: 1,
+    });
   });
 
   const corruptions: readonly [
@@ -250,6 +299,56 @@ describe("runtime diagnostics, not an enemy memory bound", () => {
       "invalid projectile position",
       (s) => {
         s.projectiles[0].targetPosition.x = -Infinity;
+      },
+    ],
+    [
+      "negative cache hits",
+      (s) => {
+        s.chunkCache.hits = -1;
+      },
+    ],
+    [
+      "fractional cache misses",
+      (s) => {
+        s.chunkCache.misses = 1.5;
+      },
+    ],
+    [
+      "unsafe cache evictions",
+      (s) => {
+        s.chunkCache.evictions = Number.MAX_SAFE_INTEGER + 1;
+      },
+    ],
+    [
+      "zero cache capacity",
+      (s) => {
+        s.chunkCache.capacity = 0;
+      },
+    ],
+    [
+      "cache exceeds capacity",
+      (s) => {
+        s.chunkCache.size = s.chunkCache.capacity + 1;
+        s.chunkCache.misses = s.chunkCache.size;
+        s.counts.cachedChunks = s.chunkCache.size;
+      },
+    ],
+    [
+      "cache accounting exceeds misses",
+      (s) => {
+        s.chunkCache.evictions = 1;
+      },
+    ],
+    [
+      "cached chunk count mismatch",
+      (s) => {
+        s.counts.cachedChunks = 1;
+      },
+    ],
+    [
+      "unsupported generator",
+      (s) => {
+        s.world.generatorVersion = "unsupported";
       },
     ],
     [

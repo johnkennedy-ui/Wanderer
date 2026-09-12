@@ -19,7 +19,6 @@ import type {
   UpgradeId,
 } from "../types";
 import { emptyPlayerStats } from "../types";
-import { materialCapacityFor } from "./economy";
 
 export interface ProjectileUpgradeEffects {
   readonly chainDamageMultiplier: number;
@@ -393,7 +392,7 @@ export const describeProgressionEffects = (
   },
 ): string[] => {
   const effects = [
-    `Storage: ${materialCapacityFor(buildings)} each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.`,
+    "Resources: uncapped. Legacy Storage remains visible but cannot be upgraded or relocated.",
     `Hearth Ward: ${gameplayTuning.baseCampfireHealingPerSecond} health/s while stationary near a campfire.`,
     `Death: ${(gameplayTuning.deathResourceLossRate * 100).toFixed(0)}% carried-resource loss; no death save.`,
   ];

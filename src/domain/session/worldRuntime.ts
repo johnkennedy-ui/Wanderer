@@ -2,6 +2,7 @@ import { enemyDefinitions } from "../../data/definitions";
 import type { ChunkRecipe, Vector2, WorldIdentity } from "../types";
 import { generateChunk, visibleChunkCoordinates } from "../world";
 import { copyVector } from "./sessionState";
+import type { ChunkRecipeSource } from "./chunkRecipeCache";
 import type { RuntimeEnemy } from "./sessionState";
 
 /**
@@ -11,9 +12,10 @@ import type { RuntimeEnemy } from "./sessionState";
 export const visibleChunksFor = (
   world: WorldIdentity,
   playerPosition: Vector2,
+  recipeSource: ChunkRecipeSource = generateChunk,
 ): readonly ChunkRecipe[] =>
   visibleChunkCoordinates(playerPosition).map((coordinate) =>
-    generateChunk(world, coordinate),
+    recipeSource(world, coordinate),
   );
 
 export interface MissingVisibleRuntimeEnemyDraftsInput {

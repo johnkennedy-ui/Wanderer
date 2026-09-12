@@ -1,6 +1,8 @@
 import { deepFreeze } from "../../data/deepFreeze";
 import type { SessionState } from "./sessionState";
 import { cloneBuildings, copyVector } from "./sessionState";
+import { CHUNK_RECIPE_CACHE_CAPACITY } from "./chunkRecipeCache";
+import type { ChunkRecipeCacheDiagnostics } from "./chunkRecipeCache";
 
 /** Copy-out evidence only. Never use this projection as gameplay/UI authority. */
 export type RuntimeDiagnosticsInput = Pick<
@@ -25,7 +27,10 @@ export type RuntimeDiagnosticsInput = Pick<
   | "elapsed"
   | "attackElapsed"
   | "farmHarvestElapsed"
-> & { readonly buildings: readonly SessionState["buildings"][number][] };
+> & {
+  readonly buildings: readonly SessionState["buildings"][number][];
+  readonly chunkCache?: ChunkRecipeCacheDiagnostics;
+};
 
 export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
   // Preserve simulation order in arrays: sorting these would hide ordering drift.
@@ -79,6 +84,15 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       projectile: state.nextProjectileSerial,
       floorDrop: state.nextFloorDropSerial,
     },
+    chunkCache: {
+      ...(state.chunkCache ?? {
+        capacity: CHUNK_RECIPE_CACHE_CAPACITY,
+        hits: 0,
+        misses: 0,
+        size: 0,
+        evictions: 0,
+      }),
+    },
     counts: {
       // Global pursuit means every non-defeated retained enemy is active.
       activeEnemies: enemies.filter((enemy) => !enemy.defeated).length,
@@ -87,8 +101,7 @@ export const projectRuntimeDiagnostics = (state: RuntimeDiagnosticsInput) => {
       crescentAttacks: state.crescentAttacks.length,
       floorDrops: state.floorDrops.length,
       weaponRelicDrops: state.weaponRelicDrops.length,
-      // No retained recipe cache exists until M5; visible recipes are transient.
-      cachedChunks: 0,
+      cachedChunks: state.chunkCache?.size ?? 0,
     },
   });
 };

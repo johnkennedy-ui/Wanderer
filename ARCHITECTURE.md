@@ -38,6 +38,26 @@ Presentation gets narrow read models: `GameUiSnapshot` for the DOM UI and
 snapshot aggregate remains; consumers cannot use presentation projections to
 acquire unrelated authority or mutable session internals.
 
+## M5 ownership
+
+`GameSession` owns one instance-local `ChunkRecipeCache`, bounded to 27 frozen
+recipes keyed by seed, generator version and chunk coordinates. Visible-world,
+enemy-neighbourhood and settlement queries receive its narrow recipe function.
+State/world replacement clears entries and counters. Both released generators
+remain supported; recipe eviction never changes enemy authority or global chase.
+
+`RetainedProjection` owns a retained player and seven visible-ID maps, including
+Healing Hut auras. `ProjectionResources` owns finite shared geometry/material
+variants and lifetime allocation/disposal counters. Resource owners live in the
+existing `retainedProjectionHelpers.ts` and `projectionResourceHelpers.ts` helper
+modules; no architecture-guard exemption is introduced.
+
+Building rows retain nodes and removable listeners by building ID. Effects use
+value signatures; listeners read current row data and begin the existing
+next-canvas-tap placement flow. Current icon panels, class/skill choices and
+resources remain presentation consumers, not owners of gameplay or persistence.
+See `Documentation~/M5_RENDERING_CACHE.md` for bounds and verification limits.
+
 ## Allowed dependency direction
 
 | Source area     | May depend on                                           | Must not depend on                                                            |

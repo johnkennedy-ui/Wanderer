@@ -8,7 +8,13 @@ import {
   visibleChunksFor,
 } from "../../domain/session/worldRuntime";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
-import { generateChunk, visibleChunkCoordinates } from "../../domain/world";
+import {
+  generateChunk,
+  visibleChunkCoordinates,
+  WANDERER_WEB_V1,
+  WANDERER_WEB_V2,
+} from "../../domain/world";
+import { ChunkRecipeCache } from "../../domain/session/chunkRecipeCache";
 
 const world = {
   seed: "world-runtime-review-seed",
@@ -16,6 +22,56 @@ const world = {
 };
 
 describe("session world runtime coordination", () => {
+  for (const generatorVersion of [WANDERER_WEB_V1, WANDERER_WEB_V2]) {
+    it(`shares ordered cached recipes while keeping runtime drafts independent (${generatorVersion})`, () => {
+      const identity = { ...world, generatorVersion };
+      const cache = new ChunkRecipeCache();
+      const position = { x: 0, y: 0 };
+      const chunks = visibleChunksFor(identity, position, cache.get);
+      expect(chunks).toEqual(visibleChunksFor(identity, position));
+      const repeated = visibleChunksFor(identity, position, cache.get);
+      repeated.forEach((chunk, index) => expect(chunk).toBe(chunks[index]));
+      const drafts = missingVisibleRuntimeEnemyDraftsFor({
+        visibleChunks: chunks,
+        existingEnemies: new Map(),
+        defeatedBossIds: new Set(),
+      });
+      const scout = drafts.find((enemy) => enemy.id === "enemy:starter-scout");
+      const spawn = chunks
+        .flatMap((chunk) => chunk.spawns)
+        .find((entry) => entry.id === scout?.id);
+      if (scout === undefined || spawn === undefined)
+        throw new Error("missing released starter scout");
+      expect(scout.position).not.toBe(spawn.position);
+      expect(scout.spawnPosition).not.toBe(spawn.position);
+      scout.position = { x: 99, y: -99 };
+      scout.hp -= 1;
+      scout.attackElapsed = 0.7;
+      const existingEnemies = new Map([[scout.id, scout]]);
+      const defeatedBossIds = new Set(["boss:ember-wyrm"]);
+      // Evict the home recipes, not gameplay state, by asking for distant windows.
+      for (const x of [160, -160, 320, -320])
+        visibleChunksFor(identity, { x, y: x }, cache.get);
+      expect(cache.diagnostics().evictions).toBeGreaterThan(0);
+      const revisited = visibleChunksFor(identity, position, cache.get);
+      expect(revisited).toEqual(chunks);
+      expect(revisited[0]).not.toBe(chunks[0]);
+      const missing = missingVisibleRuntimeEnemyDraftsFor({
+        visibleChunks: revisited,
+        existingEnemies,
+        defeatedBossIds,
+      });
+      expect(missing.map((enemy) => enemy.id)).not.toContain(scout.id);
+      expect(missing.map((enemy) => enemy.id)).not.toContain("boss:ember-wyrm");
+      expect(existingEnemies.get(scout.id)).toBe(scout);
+      expect(scout.position).toEqual({ x: 99, y: -99 });
+      expect(scout.hp).toBe(scout.maxHp - 1);
+      expect(scout.attackElapsed).toBe(0.7);
+      expect(scout.spawnPosition).toEqual(spawn.position);
+      expect(cache.diagnostics().size).toBeLessThanOrEqual(27);
+    });
+  }
+
   it("continues global pursuit far outside the player's 3x3 neighbourhood", () => {
     const drafts = missingVisibleRuntimeEnemyDraftsFor({
       visibleChunks: visibleChunksFor(world, { x: 0, y: 0 }),

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { CHUNK_RECIPE_CACHE_CAPACITY } from "../../domain/session/chunkRecipeCache";
 import {
   canonicalHash,
   runSoak,
   SOAK_HALF_STEPS,
 } from "./session-soak-fixture";
 
-describe("fixed-seed fixed-step M4 soak", () => {
+describe("fixed-seed fixed-step M5 cached soak", () => {
   for (const reloadAtMidpoint of [false, true]) {
     it(`repeats canonical state and measured maxima (midpoint reload=${reloadAtMidpoint})`, () => {
       const first = runSoak(reloadAtMidpoint);
@@ -17,7 +18,10 @@ describe("fixed-seed fixed-step M4 soak", () => {
       expect(first.midpointRuntimeReset).toBe(true);
       expect(first.maxima.projectiles).toBeGreaterThan(0);
       expect(first.maxima.floorDrops).toBeGreaterThan(0);
-      expect(first.maxima.cachedChunks).toBe(0);
+      expect(first.maxima.cachedChunks).toBeGreaterThanOrEqual(9);
+      expect(first.maxima.cachedChunks).toBeLessThanOrEqual(
+        CHUNK_RECIPE_CACHE_CAPACITY,
+      );
       expect(first.maxima.retainedEnemyDeltas).toBeGreaterThan(
         first.retainedAtStart,
       );
@@ -32,7 +36,7 @@ describe("fixed-seed fixed-step M4 soak", () => {
       expect(coordinates.some(([, y]) => y >= 1)).toBe(true);
       expect(coordinates.some(([, y]) => y <= -1)).toBe(true);
       // Captured by root's test log; values are measured, never invented goldens.
-      console.info("M4_SOAK_EVIDENCE", JSON.stringify(first));
+      console.info("M5_SOAK_EVIDENCE", JSON.stringify(first));
     }, 60_000);
   }
 

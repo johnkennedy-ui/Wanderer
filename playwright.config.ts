@@ -17,7 +17,14 @@ export default defineConfig({
     baseURL: previewUrl,
     headless: true,
     viewport: { width: 1280, height: 800 },
-    trace: "retain-on-failure",
+    trace: {
+      mode: "retain-on-failure",
+      screenshots: false,
+      snapshots: true,
+      sources: true,
+      attachments: true,
+    },
+    screenshot: "only-on-failure",
     launchOptions:
       chromiumExecutable === undefined
         ? undefined

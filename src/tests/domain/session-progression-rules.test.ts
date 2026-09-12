@@ -156,7 +156,7 @@ describe("session progression rules", () => {
         upgrades(["trailblazer", "iron-skin"]),
       ),
     ).toEqual([
-      "Storage: Infinity each for Wood, Stone, Metal / Scrap, and Essence; Boss Core is exempt.",
+      "Resources: uncapped. Legacy Storage remains visible but cannot be upgraded or relocated.",
       "Hearth Ward: 2 health/s while stationary near a campfire.",
       "Death: 25% carried-resource loss; no death save.",
       "Workshop L2: L2: +9 basic attack damage.",
