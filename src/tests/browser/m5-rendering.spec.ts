@@ -219,16 +219,35 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
     "data-healing-hut-aura-count",
     "0",
   );
-  // Reset also cancels a pending next-tap operation and clears its feedback.
-  await page.getByTestId("build-Campfire").click();
-  await openStatus(page);
-  await page.getByTestId("new-world").click();
-  await expect(page.getByTestId("placement-mode")).toBeHidden();
-  await expect(page.getByTestId("placement-message")).toBeEmpty();
-  expect(
-    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
-  ).toBeNull();
   await rowHandle.dispose();
   await auraHandle.dispose();
   await relocate.dispose();
+});
+
+// This remains a live public reset assertion, isolated from the long retention
+// journey so incidental progression choices cannot consume its fixed watchdog.
+test("M5 reset cancels a pending next-tap operation and clears feedback without persistence", async ({
+  page,
+}) => {
+  await openM5World(page);
+  await openBuild(page);
+  await page.getByTestId("build-Campfire").click();
+  const placementMode = page.getByTestId("placement-mode");
+  await expect(placementMode).toContainText("Campfire selected");
+  await expect(placementMode).not.toHaveAttribute("hidden");
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "active",
+  );
+  await openStatus(page);
+  await page.getByTestId("new-world").click();
+  await expect(placementMode).toBeHidden();
+  await expect(page.getByTestId("placement-message")).toBeEmpty();
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "inactive",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+  ).toBeNull();
 });
