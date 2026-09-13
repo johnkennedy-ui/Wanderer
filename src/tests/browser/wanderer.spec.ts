@@ -228,32 +228,34 @@ test(
   },
 );
 
-test("ranked class weapon relics are visible in status and project their attack abilities", async ({
-  page,
-}) => {
-  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
-  await primeRankedClass(page, "archer", 1);
-  await page.goto(applicationPath);
-  await openStatus(page);
-  await expect(page.getByTestId("weapon-relic-status")).toContainText(
-    "Twinwind Relic rank 1",
-  );
-  // Observe actual rendered frames: both arrows may hit between wall-time polls.
-  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
-  const canvas = page.getByTestId("world-canvas");
-  let projectileCount = await canvas.getAttribute("data-projectile-count");
-  for (
-    let elapsed = 0;
-    projectileCount !== "2" && elapsed < 8_000;
-    elapsed += 16
-  ) {
-    await page.clock.runFor(16);
-    projectileCount = await canvas.getAttribute("data-projectile-count");
-  }
-  await expect(canvas).toHaveAttribute("data-projectile-count", "2", {
-    timeout: 8_000,
-  });
-});
+test(
+  "ranked class weapon relics are visible in status and project their attack abilities",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    await primeRankedClass(page, "archer", 1);
+    await page.goto(applicationPath);
+    await openStatus(page);
+    await expect(page.getByTestId("weapon-relic-status")).toContainText(
+      "Twinwind Relic rank 1",
+    );
+    // Observe actual rendered frames: both arrows may hit between wall-time polls.
+    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
+    const canvas = page.getByTestId("world-canvas");
+    let projectileCount = await canvas.getAttribute("data-projectile-count");
+    for (
+      let elapsed = 0;
+      projectileCount !== "2" && elapsed < 8_000;
+      elapsed += 16
+    ) {
+      await page.clock.runFor(16);
+      projectileCount = await canvas.getAttribute("data-projectile-count");
+    }
+    await expect(canvas).toHaveAttribute("data-projectile-count", "2", {
+      timeout: 8_000,
+    });
+  },
+);
 
 test("the icon HUD exposes compact uncapped resources and the current skill tree", async ({
   page,
@@ -791,6 +793,14 @@ test(
     await expect(page.getByTestId("class-progression")).toContainText(
       "level 3 · Wizard",
     );
+    const upgradeModal = page.getByTestId("upgrade-modal");
+    if (await upgradeModal.isVisible()) {
+      const upgradeChoice = upgradeModal.getByRole("button").first();
+      const upgradeId = await upgradeChoice.getAttribute("data-testid");
+      if (!upgradeId) throw new Error("Boss choice lacks public identity");
+      await upgradeChoice.click();
+      await expect(upgradeModal).toBeHidden();
+    }
     await clickWithPendingUpgradeResolution(
       page,
       page.getByTestId("save-button"),
