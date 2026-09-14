@@ -175,9 +175,7 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
   expect(["60", "48", "36", "24", "12"]).toContain(observedHealth.value);
   expect(observedHealth.text).toBe(`${observedHealth.value} / 72 HP`);
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(true);
-  await expect(page.getByTestId("upgrade-modal")).toBeVisible({
-    timeout: 4_000,
-  });
+  await expect(page.getByTestId("upgrade-modal")).toBeVisible();
   await expect(boss).toHaveCount(0, { timeout: 4_000 });
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(false);
   expect(
