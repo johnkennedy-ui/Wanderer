@@ -6,6 +6,7 @@ import type { RetainedProjection } from "../../platform/render/retainedProjectio
 
 export const rendererSnapshot = (): GameRendererSnapshot => ({
   ...new GameSession().presentation().renderer,
+  playerClass: null,
   playerHitRecovery: { active: false, flashOn: false },
   visibleBuildings: [
     {

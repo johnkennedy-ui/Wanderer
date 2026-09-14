@@ -164,6 +164,8 @@ export interface PlayerHitRecoveryPresentation {
 /** The disposable Three renderer receives only world-projection fields. */
 export interface GameRendererSnapshot {
   readonly player: PlayerState;
+  /** Authoritative selected class for disposable player presentation; never saved by rendering. */
+  readonly playerClass: PlayerClass | null;
   readonly playerHitRecovery: PlayerHitRecoveryPresentation;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];

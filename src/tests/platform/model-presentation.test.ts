@@ -126,4 +126,27 @@ describe("model presentation assets", () => {
     expect(projection.group.children).toHaveLength(0);
     expect(fallback).not.toHaveBeenCalledWith("player", true);
   });
+
+  it("loads the selected player class while idle before any attack exists", () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(
+      new ModelTemplateCache(loader, "/Wanderer/"),
+    );
+    projection.render(
+      {
+        ...rendererSnapshot(),
+        playerClass: "archer",
+        visibleChunks: [],
+        visibleBuildings: [],
+        enemies: [],
+        projectiles: [],
+        crescentAttacks: [],
+      },
+      vi.fn(),
+    );
+    expect(calls.map((call) => call.url)).toEqual([
+      "/Wanderer/assets/models/player_archer.glb",
+    ]);
+    projection.dispose();
+  });
 });

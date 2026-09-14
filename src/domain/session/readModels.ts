@@ -208,6 +208,7 @@ export const projectGamePresentation = (
   };
   const renderer = {
     player,
+    playerClass: input.classProgression.playerClass,
     playerHitRecovery,
     enemies,
     projectiles,
