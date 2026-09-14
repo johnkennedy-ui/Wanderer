@@ -835,22 +835,34 @@ test(
     await classModal.getByTestId("class-skill-wizard-arcane-haste").click();
     await expect(classModal).toBeHidden();
 
+    // Class and skill selections above are the manual choices under test. A
+    // live boss reward can surface immediately afterwards, so resolve only
+    // that incidental public choice before it can block the explicit save.
+    const upgradeModal = page.getByTestId("upgrade-modal");
+    await page.addLocatorHandler(
+      upgradeModal,
+      async (modal) => {
+        const choices = page.getByTestId("upgrade-choices");
+        const key = await choices.getAttribute("data-choice-key");
+        if (!key) throw new Error("Boss choice lacks public key");
+        await expect(modal.getByRole("button")).toHaveCount(3);
+        const choice = modal.getByRole("button").first();
+        const id = await choice.getAttribute("data-testid");
+        if (!id) throw new Error("Boss choice lacks public identity");
+        await choice.click();
+      },
+      { noWaitAfter: true },
+    );
+
     await openStatus(page);
     await expect(page.getByTestId("class-progression")).toContainText(
       "level 3 · Wizard",
     );
-    const upgradeModal = page.getByTestId("upgrade-modal");
-    if (await upgradeModal.isVisible()) {
-      const upgradeChoice = upgradeModal.getByRole("button").first();
-      const upgradeId = await upgradeChoice.getAttribute("data-testid");
-      if (!upgradeId) throw new Error("Boss choice lacks public identity");
-      await upgradeChoice.click();
-      await expect(upgradeModal).toBeHidden();
-    }
     await clickWithPendingUpgradeResolution(
       page,
       page.getByTestId("save-button"),
     );
+    await expect(upgradeModal).toBeHidden();
     await expect(page.getByTestId("save-message")).toContainText(
       "Saved explicitly",
     );
