@@ -2,12 +2,14 @@ import { classSkillDefinitionFor } from "../../data/definitions";
 import {
   allocatablePlayerStatKinds,
   classSkillIds,
+  legacyClassSkillIds,
   maximumClassSkillTier,
   playerClasses,
 } from "../types";
 import type {
   ClassProgression,
   ClassSkillId,
+  LegacyClassSkillId,
   PlayerClass,
   PlayerStatAllocations,
 } from "../types";
@@ -69,11 +71,32 @@ const isContiguousClassSkillPrefix = (
   return true;
 };
 
+/**
+ * V2/V3 accepted any unique known legacy IDs for a selected class. Most
+ * runtime-produced documents were canonical prefixes, but a decoder-valid
+ * historical selection must not become unloadable merely because V4 adds
+ * route continuity. The explicit marker keeps this compatibility lane bounded
+ * to the frozen legacy catalogue rather than relaxing ordinary V4 validation.
+ */
+const isMarkedLegacySkillSelection = (
+  playerClass: PlayerClass | null,
+  skillIds: readonly ClassSkillId[],
+): boolean =>
+  playerClass !== null &&
+  skillIds.every((id) =>
+    legacyClassSkillIds.includes(id as LegacyClassSkillId),
+  );
+
 /** Validates current progression, including route continuity after tier 5. */
 export const isClassProgressionV4 = (
   value: unknown,
 ): value is ClassProgression => {
   if (!isRecord(value) || !isAllocationRecord(value.allocatedStats))
+    return false;
+  if (
+    value.legacySkillSelection !== undefined &&
+    value.legacySkillSelection !== true
+  )
     return false;
   if (
     !Number.isInteger(value.experience) ||
@@ -97,12 +120,16 @@ export const isClassProgressionV4 = (
     0,
   );
   if (allocationTotal > (value.level as number) * 3) return false;
-  if (value.playerClass === null)
+  const playerClass = value.playerClass as PlayerClass | null;
+  const skillIds = value.skillIds as readonly ClassSkillId[];
+  if (value.legacySkillSelection === true)
+    return isMarkedLegacySkillSelection(playerClass, skillIds);
+  if (playerClass === null)
     return allocationTotal === 0 && value.skillIds.length === 0;
   return isContiguousClassSkillPrefix(
-    value.playerClass as PlayerClass,
+    playerClass,
     value.level as number,
-    value.skillIds as readonly ClassSkillId[],
+    skillIds,
   );
 };
 

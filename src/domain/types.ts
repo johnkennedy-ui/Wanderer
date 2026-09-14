@@ -274,6 +274,13 @@ export interface ClassProgression {
   readonly level: PlayerLevel;
   readonly playerClass: PlayerClass | null;
   readonly skillIds: readonly ClassSkillId[];
+  /**
+   * Narrow V4 compatibility marker for a V2/V3 selection that its frozen
+   * validator accepted but which is not a current class/tier route prefix.
+   * New progression never sets it; migrations retain it so an explicit later
+   * campfire save cannot discard a historical player selection.
+   */
+  readonly legacySkillSelection?: true;
   /** Normalized persistent player allocations; class bases never enter here. */
   readonly allocatedStats: PlayerStatAllocations;
   /**

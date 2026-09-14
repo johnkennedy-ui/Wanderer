@@ -59,7 +59,7 @@ it is not evidence that a deployment has occurred.
 Use a feature branch, make reviewable bounded commits, and do not push directly
 to `main`. See `AGENTS.md` for the compatibility workflow and required
 completion report, `ARCHITECTURE.md` for dependency boundaries, `SAVE_FORMAT.md`
-for current schema-3 storage and frozen schema-2 compatibility, and
+for current schema-4 storage and frozen schema-2/schema-3 compatibility, and
 `WORLD_GENERATION.md` for released generator compatibility.
 
 ## Implemented slice
@@ -74,7 +74,7 @@ for current schema-3 storage and frozen schema-2 compatibility, and
   multiplicative, and Chain Strike hit-resolution behavior;
 - exactly Campfire, Workshop, Farm, Storage, and Healer, each with real L1-L3
   effects, placement, relocation, upgrades, and demolition/refunds; and
-- explicit campfire-only schema-3 browser saves (with schema-2 recovery) plus
+- explicit campfire-only schema-4 browser saves (with schema-2/schema-3 recovery) plus
   save-point respawn, 25% carried-resource death loss,
   temporary/primary/backup recovery, and no automatic persistence.
 

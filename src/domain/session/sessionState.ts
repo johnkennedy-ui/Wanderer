@@ -156,6 +156,9 @@ export const cloneClassProgression = (
   level: playerLevelForExperience(progression?.experience ?? 0),
   playerClass: progression?.playerClass ?? null,
   skillIds: [...(progression?.skillIds ?? [])],
+  ...(progression?.legacySkillSelection === true
+    ? { legacySkillSelection: true as const }
+    : {}),
   allocatedStats: {
     ...emptyPlayerStatAllocations(),
     ...(progression?.allocatedStats ?? {}),

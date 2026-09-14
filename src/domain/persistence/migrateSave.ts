@@ -6,6 +6,7 @@ import type { CurrentSave } from "./currentSave";
 import type { LegacyClassProgression } from "./currentSave";
 import type { SaveV2Document } from "./saveV2";
 import type { SaveV3Document } from "./saveV3";
+import { isClassProgressionV4 } from "./saveV4";
 
 const defaultClassProgression = (): ClassProgression => ({
   experience: 0,
@@ -20,7 +21,7 @@ const normalizeLegacyProgression = (
   legacy: LegacyClassProgression | undefined,
 ): ClassProgression => {
   if (legacy === undefined) return defaultClassProgression();
-  return {
+  const progression: ClassProgression = {
     experience: legacy.experience,
     level: playerLevelForExperience(legacy.experience),
     playerClass: legacy.playerClass,
@@ -31,6 +32,10 @@ const normalizeLegacyProgression = (
     },
     weaponRank: legacy.weaponRank ?? 0,
   };
+  const isCurrentProgression = isClassProgressionV4(progression as unknown);
+  return isCurrentProgression
+    ? progression
+    : { ...progression, legacySkillSelection: true };
 };
 
 /**

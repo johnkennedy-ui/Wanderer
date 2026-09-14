@@ -280,6 +280,60 @@ describe("schema-2 persistence boundary", () => {
     });
   });
 
+  it("preserves each frozen-validator legacy skill selection through V4", () => {
+    const base = validSave();
+    const legacyProgression = {
+      experience: 300,
+      level: 5 as const,
+      playerClass: "knight" as const,
+      skillIds: ["wizard-flame-orb"] as const,
+      weaponRank: 0,
+    };
+    const historicalV2 = {
+      ...toSaveV2Document(base),
+      classProgression: legacyProgression,
+    };
+    const historicalV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        ...legacyProgression,
+        allocatedStats: emptyPlayerStatAllocations(),
+      },
+    };
+
+    for (const historical of [historicalV2, historicalV3]) {
+      expect(isSaveDocument(historical)).toBe(true);
+      const decoded = decodeSave(JSON.stringify(historical));
+      expect(decoded).toMatchObject({
+        ok: true,
+        document: {
+          schemaVersion: 4,
+          classProgression: {
+            experience: 300,
+            level: 5,
+            playerClass: "knight",
+            skillIds: ["wizard-flame-orb"],
+            legacySkillSelection: true,
+          },
+        },
+      });
+      if (!decoded.ok) throw new Error("Expected frozen legacy save to load");
+
+      const current = toCurrentSaveStorageDocument(decoded.document);
+      expect(isSaveDocument(current)).toBe(true);
+      expect(decodeSave(JSON.stringify(current))).toMatchObject({
+        ok: true,
+        document: {
+          classProgression: {
+            skillIds: ["wizard-flame-orb"],
+            legacySkillSelection: true,
+          },
+        },
+      });
+    }
+  });
+
   it("accepts only contiguous V4 class-route skill prefixes", () => {
     const base = validSave();
     const validBossRoute = {
@@ -337,6 +391,19 @@ describe("schema-2 persistence boundary", () => {
         failure: "invalid-document",
       });
     }
+
+    const invalidLegacyMarker = {
+      ...validBossRoute,
+      classProgression: {
+        ...validBossRoute.classProgression,
+        legacySkillSelection: true,
+      },
+    };
+    expect(isSaveDocument(invalidLegacyMarker)).toBe(false);
+    expect(decodeSave(JSON.stringify(invalidLegacyMarker))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
   });
 
   it("rejects duplicate and unknown persisted content through the frozen V2 decoder", () => {
