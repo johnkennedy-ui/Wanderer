@@ -189,7 +189,11 @@ describe("model presentation assets", () => {
 
   it("reports only attached model instances and their live fallback state", async () => {
     const { loader, calls } = loaderDouble();
-    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const onStateChange = vi.fn();
+    const projection = new ModelProjection(
+      new ModelTemplateCache(loader, "/"),
+      onStateChange,
+    );
     const fallback = vi.fn();
     projection.render(playerOnlySnapshot(), fallback);
     expect(projection.diagnostics()).toMatchObject({
@@ -208,6 +212,7 @@ describe("model presentation assets", () => {
       fallbackKeys: [],
     });
     expect(fallback).toHaveBeenLastCalledWith("player", true);
+    expect(onStateChange).toHaveBeenCalledOnce();
     projection.dispose();
   });
 

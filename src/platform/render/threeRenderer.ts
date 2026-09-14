@@ -56,8 +56,6 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   scene.add(floor);
   const projection = new RetainedProjection();
   scene.add(projection.group);
-  const models = new ModelProjection();
-  scene.add(models.group);
   const playerHealthLabel = document.createElement("div");
   playerHealthLabel.dataset.testid = "world-player-hp";
   playerHealthLabel.className = "world-player-hp";
@@ -117,6 +115,17 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const setDataset = (key: string, value: string): void => {
     if (canvas.dataset[key] !== value) canvas.dataset[key] = value;
   };
+  let models: ModelProjection;
+  const writeModelDiagnostics = (): void => {
+    const modelDiagnostics = models.diagnostics();
+    setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
+    setDataset("modelPendingCount", String(modelDiagnostics.pendingInstances));
+    setDataset("modelActiveKeys", modelDiagnostics.activeKeys.join(","));
+    setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
+    setDataset("modelFailureCount", String(modelDiagnostics.failures));
+  };
+  models = new ModelProjection(undefined, writeModelDiagnostics);
+  scene.add(models.group);
 
   return {
     canvas,
@@ -128,15 +137,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       models.render(snapshot, (id, visible) =>
         projection.setModelVisible(id, visible),
       );
-      const modelDiagnostics = models.diagnostics();
-      setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
-      setDataset(
-        "modelPendingCount",
-        String(modelDiagnostics.pendingInstances),
-      );
-      setDataset("modelActiveKeys", modelDiagnostics.activeKeys.join(","));
-      setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
-      setDataset("modelFailureCount", String(modelDiagnostics.failures));
+      writeModelDiagnostics();
       camera.position.set(
         snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
         defaultThreeCameraTuning.playerOffset.y,

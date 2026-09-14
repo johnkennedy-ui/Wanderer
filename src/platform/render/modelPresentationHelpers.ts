@@ -244,7 +244,10 @@ export class ModelProjection {
   private readonly instances = new Map<string, ModelInstance>();
   private disposed = false;
 
-  constructor(private readonly templates = new ModelTemplateCache()) {}
+  constructor(
+    private readonly templates = new ModelTemplateCache(),
+    private readonly onStateChange: () => void = () => {},
+  ) {}
 
   render(
     snapshot: GameRendererSnapshot,
@@ -383,17 +386,19 @@ export class ModelProjection {
       this.group.add(root);
       const expected = instance;
       void this.templates.acquire(descriptor.asset).then((model) => {
-        if (
-          model === undefined ||
-          this.disposed ||
-          this.instances.get(descriptor.id) !== expected
-        ) {
+        if (model === undefined) {
+          if (!this.disposed && this.instances.get(descriptor.id) === expected)
+            this.onStateChange();
+          return;
+        }
+        if (this.disposed || this.instances.get(descriptor.id) !== expected) {
           if (model !== undefined) disposeObject(model);
           return;
         }
         expected.model = model;
         expected.root.add(model);
         this.syncVisibility(descriptor.id, expected, setFallbackModelVisible);
+        this.onStateChange();
       });
     }
     instance.playerHitRecovery = descriptor.playerHitRecovery === true;
