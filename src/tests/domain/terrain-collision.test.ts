@@ -229,6 +229,54 @@ describe("terrain collision", () => {
     expect(calls).toBe(firstSearchCalls * 2);
   });
 
+  it("reaches the final deterministic candidate in its bounded 96-probe search", () => {
+    const origin = { x: 0, y: 0 };
+    const radii = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
+    const directions = [
+      { x: 1, y: 0 },
+      { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+      { x: 0, y: 1 },
+      { x: -Math.SQRT1_2, y: Math.SQRT1_2 },
+      { x: -1, y: 0 },
+      { x: -Math.SQRT1_2, y: -Math.SQRT1_2 },
+      { x: 0, y: -1 },
+      { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+    ];
+    const candidates = radii.flatMap((radius) =>
+      directions.map((direction) =>
+        roundVector({
+          x: direction.x * radius,
+          y: direction.y * radius,
+        }),
+      ),
+    );
+    expect(candidates).toHaveLength(96);
+    const finalCandidate = candidates.at(-1);
+    if (finalCandidate === undefined)
+      throw new Error("expected a final bounded spawn candidate");
+    const blockedPositions = [origin, ...candidates.slice(0, -1)];
+    const finalCandidateSource = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => ({
+      coordinate,
+      key: `${coordinate.x},${coordinate.y}`,
+      domainSeeds: {},
+      obstacles: blockedPositions.map((position, index) => ({
+        id: `rock:probe:${index}`,
+        kind: "rock" as const,
+        radius: 0.001,
+        position,
+      })),
+      campfires: [],
+      spawns: [],
+    });
+
+    expect(
+      nearestTerrainSafePosition(world, origin, finalCandidateSource),
+    ).toEqual(finalCandidate);
+  });
+
   it("collects recipes once per covered chunk instead of probing every 8cm", () => {
     const calls: { x: number; y: number }[] = [];
     const countingSource = (
