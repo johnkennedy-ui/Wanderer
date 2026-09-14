@@ -6,14 +6,13 @@ const MAX_TAP_TRAVEL_PIXELS = 12;
 /** Backwards-compatible name for the narrow disposable tap input adapter. */
 export type TapToMoveInput = InputAdapter;
 
-/** Translates enabled primary canvas taps into explicit domain destination commands. */
+/** Translates ordinary primary canvas taps into explicit domain destinations. */
 export const createTapToMoveInput = (
   canvas: HTMLCanvasElement,
   worldPositionFromClientPoint: (
     clientX: number,
     clientY: number,
   ) => Vector2 | null,
-  isEnabled: () => boolean,
   sink: DestinationSink,
   isClaimedByPlacement: () => boolean = () => false,
 ): TapToMoveInput => {
@@ -26,12 +25,7 @@ export const createTapToMoveInput = (
     | undefined;
 
   const down = (event: PointerEvent): void => {
-    if (
-      !isEnabled() ||
-      isClaimedByPlacement() ||
-      !event.isPrimary ||
-      event.button !== 0
-    )
+    if (isClaimedByPlacement() || !event.isPrimary || event.button !== 0)
       return;
     pendingTap = {
       pointerId: event.pointerId,
@@ -48,7 +42,6 @@ export const createTapToMoveInput = (
     if (
       tap === undefined ||
       tap.pointerId !== event.pointerId ||
-      !isEnabled() ||
       isClaimedByPlacement() ||
       Math.hypot(event.clientX - tap.clientX, event.clientY - tap.clientY) >
         MAX_TAP_TRAVEL_PIXELS

@@ -84,7 +84,7 @@ test("M5 standalone real-DOM consumers: fixed explicit inputs retain nodes with 
     ]);
     const effects = Object.freeze([
       "Campfire L1: fixed consumer effect",
-      "Experience: 29 / 30 · choose a class at level 1.",
+      "Experience: 5 / 6 · choose a class at level 1.",
     ]);
     const rows = new RetainedBuildingRows(rowHost, {
       startRelocation() {},
@@ -159,7 +159,7 @@ test("M5 standalone real-DOM consumers: fixed explicit inputs retain nodes with 
       observer.observe(effectHost, observerOptions);
       effectList.render([
         effects[0],
-        "Experience: 28 / 30 · choose a class at level 1.",
+        "Experience: 4 / 6 · choose a class at level 1.",
       ]);
       const changedXpWrites = observer.takeRecords().length;
       observer.disconnect();
@@ -188,7 +188,7 @@ test("M5 standalone real-DOM consumers: fixed explicit inputs retain nodes with 
     Array(8).fill(observation.inputBefore),
   );
   expect(observation.inputAfter).toBe(observation.inputBefore);
-  expect(observation.inputBefore).toContain("Experience: 29 / 30");
+  expect(observation.inputBefore).toContain("Experience: 5 / 6");
   expect(observation.stable).toEqual({
     writes: 0,
     rowsStable: true,
@@ -196,7 +196,7 @@ test("M5 standalone real-DOM consumers: fixed explicit inputs retain nodes with 
     effectsStable: true,
   });
   expect(observation.changedXpWrites).toBeGreaterThan(0);
-  expect(observation.changedXpText).toContain("Experience: 28 / 30");
+  expect(observation.changedXpText).toContain("Experience: 4 / 6");
   expect(observation.changedXpReplacedEffects).toBe(true);
   expect(observation.changedXpRetainedRows).toBe(true);
   await expect(page.locator("#rows")).toBeEmpty();

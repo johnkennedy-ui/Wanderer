@@ -60,7 +60,7 @@ describe("GameSession settlement", () => {
     );
   });
 
-  it("applies distinct L1-L3 Workshop, Farm, Storage, and Healer effects", () => {
+  it("applies distinct L1-L3 Workshop, Farm, and Healer effects", () => {
     for (const [level, damage] of [
       [1, 16],
       [2, 21],
@@ -75,16 +75,6 @@ describe("GameSession settlement", () => {
         combatStatsFor(request.document.buildings, request.document.upgrades)
           .attackDamage,
       ).toBe(damage);
-    }
-
-    for (const [level, capacity] of [
-      [1, 180],
-      [2, 260],
-      [3, 360],
-    ] as const) {
-      const session = new GameSession();
-      placeAndUpgradeTo(session, "Storage", level);
-      expect(session.presentation().ui.materialCapacity).toBe(capacity);
     }
 
     for (const [level, harvest] of [
@@ -180,13 +170,13 @@ describe("GameSession settlement", () => {
     expect(session.presentation().ui.player.hp).toBeCloseTo(50.1, 6);
   });
 
-  it("enforces Storage capacity for all common materials while exempting Boss Core", () => {
+  it("keeps legacy Storage loadable and demolishable without a resource effect", () => {
     const base = savedAtHome();
     const session = new GameSession({
       saved: {
         ...base,
         resources: {
-          wood: 180,
+          wood: 480,
           stone: 180,
           scrap: 180,
           essence: 180,
@@ -208,16 +198,43 @@ describe("GameSession settlement", () => {
         ],
       },
     });
+    expect(session.presentation().renderer.visibleBuildings).toContainEqual(
+      expect.objectContaining({ id: "storage:l1", kind: "Storage" }),
+    );
+    expect(session.presentation().ui.resources.wood).toBe(480);
+    expect(session.placeBuilding("Storage", { x: 4, y: 1 })).toMatchObject({
+      ok: false,
+      rejection: { kind: "unknown-building" },
+    });
+    expect(session.upgradeBuilding("storage:l1")).toMatchObject({
+      ok: false,
+      rejection: { kind: "unknown-building" },
+    });
+    expect(
+      session.relocateBuilding("storage:l1", { x: 4, y: 1 }),
+    ).toMatchObject({
+      ok: false,
+      rejection: { kind: "unknown-building" },
+    });
     advance(session, gameplayTuning.farmHarvestEverySeconds);
     expect(session.presentation().ui.resources).toEqual({
-      wood: 180,
-      stone: 180,
-      scrap: 180,
-      essence: 180,
+      wood: 486,
+      stone: 183,
+      scrap: 182,
+      essence: 181,
       bossCore: 4,
     });
-    expect(session.presentation().ui.effects.join(" ")).toContain(
-      "Boss Core is exempt",
-    );
+    expect(session.demolishBuilding("storage:l1")).toMatchObject({
+      ok: true,
+      outcome: "demolished",
+      building: expect.objectContaining({ kind: "Storage" }),
+    });
+    expect(session.presentation().ui.resources).toEqual({
+      wood: 496,
+      stone: 187,
+      scrap: 183,
+      essence: 181,
+      bossCore: 4,
+    });
   });
 });

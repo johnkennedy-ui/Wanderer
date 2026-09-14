@@ -108,6 +108,31 @@ describe("retained Three CPU projection", () => {
     projection.dispose();
   });
 
+  it("renders and clears one retained visible destination marker", () => {
+    const projection = new RetainedProjection();
+    const snapshot = rendererSnapshot();
+    projection.render({ ...snapshot, destination: { x: 4, y: -3 } });
+    const marker = meshFor(projection, "destination-marker");
+    expect((marker.geometry as THREE.RingGeometry).parameters).toMatchObject({
+      innerRadius: 0.34,
+      outerRadius: 0.52,
+      thetaSegments: 40,
+    });
+    expect(marker.position.toArray()).toEqual([4, 0.03, 3]);
+    expect(marker.rotation.x).toBe(-Math.PI / 2);
+    expect(marker.material).toMatchObject({
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    projection.render({ ...snapshot, destination: null });
+    expect(
+      projection.group.getObjectByName("destination-marker"),
+    ).toBeUndefined();
+    projection.dispose();
+  });
+
   it("creates no geometry/material/mesh for identical frames, including all released variants", () => {
     const projection = new RetainedProjection();
     const snapshot = visualVariantSnapshot();

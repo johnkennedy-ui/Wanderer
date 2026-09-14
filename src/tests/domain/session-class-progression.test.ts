@@ -22,7 +22,7 @@ const progression = (
   playerClass: ClassProgression["playerClass"],
   level: ClassProgression["level"] = 5,
   skillIds: ClassProgression["skillIds"] = [],
-): ClassProgression => ({ experience: 1500, level, playerClass, skillIds });
+): ClassProgression => ({ experience: 300, level, playerClass, skillIds });
 
 const enemy = (
   id: string,
@@ -46,11 +46,9 @@ const enemy = (
 
 describe("class progression", () => {
   it("uses cumulative deterministic experience thresholds for five levels", () => {
-    expect(gameplayTuning.experienceThresholds).toEqual([
-      30, 100, 250, 600, 1500,
-    ]);
+    expect(gameplayTuning.experienceThresholds).toEqual([6, 20, 50, 120, 300]);
     expect(
-      [0, 29, 30, 99, 100, 249, 250, 599, 600, 1499, 1500, 9999].map(
+      [0, 5, 6, 19, 20, 49, 50, 119, 120, 299, 300, 9999].map(
         playerLevelForExperience,
       ),
     ).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
@@ -149,7 +147,7 @@ describe("class progression", () => {
     expect(skilled.presentation().ui.player).toEqual(beforeSkill);
     const request = skilled.createValidCampfireSaveRequest(11);
     expect(request?.document.classProgression).toEqual({
-      experience: 1500,
+      experience: 300,
       level: 5,
       playerClass: "wizard",
       skillIds: ["wizard-wide-blast"],

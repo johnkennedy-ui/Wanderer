@@ -117,7 +117,7 @@ describe("GameSession combat", () => {
     });
   });
 
-  it("leaves lethal projectile drops on the floor until contact, preserves capacity, and excludes them from saves", () => {
+  it("leaves lethal projectile drops on the floor until contact, collects all resources, and excludes them from saves", () => {
     const base = savedAtHome();
     const session = new GameSession({
       saved: {
@@ -162,11 +162,9 @@ describe("GameSession combat", () => {
       advance(session, 1);
     }
     const afterContact = session.presentation();
-    expect(afterContact.ui.resources.wood).toBe(120);
+    expect(afterContact.ui.resources.wood).toBe(123);
     expect(afterContact.ui.resources.stone).toBe(120);
-    expect(afterContact.renderer.floorDrops).toEqual([
-      expect.objectContaining({ resource: "wood", amount: 3 }),
-    ]);
+    expect(afterContact.renderer.floorDrops).toEqual([]);
 
     session.setDestination({
       destination: { x: 0, y: 0 },

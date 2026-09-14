@@ -15,6 +15,18 @@ export const openBuild = async (page: Page): Promise<void> => {
   await expect(page.getByTestId("build-menu-panel")).toBeVisible();
 };
 
+/** M5 paths that synchronously establish a closed Build panel can avoid a
+ * redundant read before the normal user-facing toggle click. An unexpected
+ * open panel fails the explicit postcondition rather than silently passing. */
+export const openKnownClosedBuild = async (page: Page): Promise<void> => {
+  const toggle = page.getByTestId("build-menu-toggle");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("build-menu-panel")).not.toHaveAttribute(
+    "hidden",
+  );
+};
+
 /** Resolve distinct public choices, never retry a failed selection. The class
  * container is reused for consecutive skill tiers, so identity/key progress,
  * not container disappearance, is the completion witness. */
@@ -62,46 +74,70 @@ export const installIncidentalChoiceHandlers = async (
       await expect(modal.getByRole("button")).toHaveCount(3);
       const button = modal.getByRole("button").first();
       const id = await button.getAttribute("data-testid");
-      const label = (await button.innerText()).split(":")[0];
-      if (!id || !label) throw new Error("Boss choice lacks public identity");
+      if (!id) throw new Error("Boss choice lacks public identity");
       await button.click();
-      await expect(modal.getByTestId(id)).toHaveCount(0);
-      await expect(choices).not.toHaveAttribute("data-choice-key", key);
-      await expect(page.getByTestId("effects")).toContainText(label);
+      // Returning lets Playwright wait for its intercepted overlay to close.
+      // Post-click locators here would re-enter this same handler while the
+      // modal remains visible, so behavior-specific assertions live in their
+      // dedicated manual-choice acceptance scenarios instead.
     },
-    { noWaitAfter: true },
   );
 };
 
 export const openM5World = async (page: Page): Promise<void> => {
   await installIncidentalChoiceHandlers(page);
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? "/");
-  await expect(page.getByTestId("world-canvas")).toBeVisible();
+  const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
+  await expect(canvas).toHaveCSS("visibility", "visible");
+  const bounds = await canvas.boundingBox();
+  if (
+    bounds === null ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  )
+    throw new Error("World canvas did not have a nonzero visible layout box");
   // These are fresh placement/retention scenarios, not a second boss-route
   // test. Live combat remains enabled. Fixed-input zero writes is separately
   // exercised against the real DOM consumer, including an explicit XP value.
 };
 
+type FreshStationaryM5Projection = Readonly<{
+  x: number;
+  y: number;
+  positionText: string;
+}>;
+
+/** Fresh M5 placement scenarios begin at a public, stationary origin. Capture
+ * that real UI witness once; do not derive it from test-owned state. */
+export const captureFreshStationaryM5Projection = async (
+  page: Page,
+): Promise<FreshStationaryM5Projection> => {
+  await openStatus(page);
+  const position = page.getByTestId("position");
+  const positionText = await position.innerText();
+  expect(positionText).toBe("Position: 0.0, 0.0 · input: system");
+  await page.getByTestId("close-character-status").click();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  return Object.freeze({ x: 0, y: 0, positionText });
+};
+
 /** Project a desired world point to a trusted canvas click using the released
- * camera constants and visible position text. This is not a gameplay hook or
- * coordinate-entry UI. Rounded public player text introduces <=0.05m/axis. */
+ * camera constants and a fresh, visibly observed player position. This is not
+ * a gameplay hook or coordinate-entry UI. */
 export const tapWorldPosition = async (
   page: Page,
+  player: FreshStationaryM5Projection,
   x: number,
   y: number,
 ): Promise<void> => {
-  await openStatus(page);
-  const match = /^Position: (-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)/.exec(
-    await page.getByTestId("position").innerText(),
-  );
-  if (match === null) throw new Error("Missing visible player coordinates");
-  const playerX = Number(match[1]),
-    playerY = Number(match[2]);
-  await page.getByTestId("close-character-status").click();
-  const buildToggle = page.getByTestId("build-menu-toggle");
-  if ((await buildToggle.getAttribute("aria-expanded")) === "true")
-    await page.getByTestId("close-build-menu").click();
+  await expect(page.getByTestId("placement-mode")).toBeVisible();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
   const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
   const bounds = await canvas.boundingBox();
   if (bounds === null) throw new Error("World canvas was not laid out");
   const tuning = defaultThreeCameraTuning;
@@ -112,11 +148,11 @@ export const tapWorldPosition = async (
     100,
   );
   camera.position.set(
-    playerX + tuning.playerOffset.x,
+    player.x + tuning.playerOffset.x,
     tuning.playerOffset.y,
-    -playerY + tuning.playerOffset.z,
+    -player.y + tuning.playerOffset.z,
   );
-  camera.lookAt(playerX, 0, -playerY);
+  camera.lookAt(player.x, 0, -player.y);
   camera.updateMatrixWorld();
   const point = new Vector3(x, 0, -y).project(camera);
   const position = {
@@ -128,6 +164,8 @@ export const tapWorldPosition = async (
   expect(position.y).toBeGreaterThan(0);
   expect(position.y).toBeLessThan(bounds.height);
   await canvas.click({ position });
+  await expect(page.getByTestId("position")).toHaveText(player.positionText);
+  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
 };
 
 export const expectRowPosition = async (

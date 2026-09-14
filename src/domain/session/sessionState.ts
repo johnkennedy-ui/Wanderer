@@ -1,5 +1,6 @@
 import { DEFAULT_WORLD_GENERATOR_VERSION } from "../world";
 import type { GameNotice } from "../notices";
+import { playerLevelForExperience } from "./progressionRules";
 import type {
   BuildingState,
   AttackStyle,
@@ -142,7 +143,7 @@ export const cloneClassProgression = (
   progression: ClassProgression | undefined,
 ): ClassProgression => ({
   experience: progression?.experience ?? 0,
-  level: progression?.level ?? 0,
+  level: playerLevelForExperience(progression?.experience ?? 0),
   playerClass: progression?.playerClass ?? null,
   skillIds: [...(progression?.skillIds ?? [])],
   weaponRank: progression?.weaponRank ?? 0,

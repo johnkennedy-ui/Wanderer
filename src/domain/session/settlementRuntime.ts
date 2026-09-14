@@ -24,9 +24,7 @@ import type { ChunkRecipeSource } from "./chunkRecipeCache";
 import {
   addResourceBags,
   canAffordResources,
-  clampResourcesToCapacity,
   collectResourcesWithinCapacity,
-  materialCapacityFor,
   resourcesForLevel,
   scaleResourceBag,
   subtractResourceBags,
@@ -135,6 +133,8 @@ export class SettlementRuntime {
     seed: string,
     input: SettlementInputs,
   ): SettlementCommandOutcome {
+    if (kind === "Storage")
+      return this.rejected({ kind: "unknown-building" }, resources);
     const rejection = this.validate(kind, position, input);
     if (rejection) return this.rejected(rejection, resources);
     const cost = resourcesForLevel(buildingDefinitions[kind].baseCost, 1);
@@ -163,6 +163,8 @@ export class SettlementRuntime {
     const building = this.buildings.find((candidate) => candidate.id === id);
     if (!building)
       return this.rejected({ kind: "unknown-building" }, resources);
+    if (building.kind === "Storage")
+      return this.rejected({ kind: "unknown-building" }, resources);
     const rejection = this.validate(building.kind, position, input, id);
     if (rejection) return this.rejected(rejection, resources);
     const moved = { ...building, position: roundVector(position) };
@@ -179,6 +181,8 @@ export class SettlementRuntime {
     const building = this.buildings.find((candidate) => candidate.id === id);
     if (!building)
       return this.rejected({ kind: "unknown-building" }, resources);
+    if (building.kind === "Storage")
+      return this.rejected({ kind: "unknown-building" }, resources);
     if (building.level === 3)
       return this.rejected({ kind: "already-level-3" }, resources);
     const nextLevel = (building.level + 1) as 2 | 3;
@@ -192,10 +196,7 @@ export class SettlementRuntime {
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? upgraded : candidate,
     );
-    const nextResources = clampResourcesToCapacity(
-      subtractResourceBags(resources, cost),
-      materialCapacityFor(this.buildings),
-    );
+    const nextResources = subtractResourceBags(resources, cost);
     return this.outcome(
       { ok: true, outcome: "upgraded", building: upgraded },
       nextResources,
@@ -219,11 +220,7 @@ export class SettlementRuntime {
     );
     return this.outcome(
       { ok: true, outcome: "demolished", building },
-      collectResourcesWithinCapacity(
-        resources,
-        refund,
-        materialCapacityFor(this.buildings),
-      ),
+      collectResourcesWithinCapacity(resources, refund),
     );
   }
 
@@ -268,11 +265,7 @@ export class SettlementRuntime {
       .reduce(addResourceBags, emptyResources());
     return {
       hp: nextHp,
-      resources: collectResourcesWithinCapacity(
-        resources,
-        harvest,
-        materialCapacityFor(this.buildings),
-      ),
+      resources: collectResourcesWithinCapacity(resources, harvest),
       harvested: true,
     };
   }

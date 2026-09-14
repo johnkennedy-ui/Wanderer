@@ -207,6 +207,33 @@ describe("retained UI list operations", () => {
     rows.dispose();
   });
 
+  it("keeps a legacy Storage row visible but removes its upgrade and relocation actions", () => {
+    installDom();
+    const host = new ElementDouble();
+    const intents = {
+      startRelocation: vi.fn(),
+      upgradeBuilding: vi.fn(),
+      demolish: vi.fn(),
+    };
+    const rows = new RetainedBuildingRows(asElement(host), intents);
+    rows.render([{ ...building("legacy"), kind: "Storage" }]);
+    const [row] = host.children;
+    const [label, upgrade, move, demolish] = row.children;
+    expect(label.textContent).toBe("Legacy Storage L1 @ 1.0, 1.0");
+    expect(upgrade.disabled).toBe(true);
+    expect(upgrade.getAttribute("title")).toBe(
+      "Legacy Storage cannot be upgraded.",
+    );
+    expect(move.disabled).toBe(true);
+    expect(move.getAttribute("title")).toBe(
+      "Legacy Storage cannot be relocated.",
+    );
+    expect(demolish.disabled).toBe(false);
+    demolish.click();
+    expect(intents.demolish).toHaveBeenCalledExactlyOnceWith("legacy");
+    rows.dispose();
+  });
+
   it("uses an unambiguous effects value signature and suppresses identical text writes", () => {
     installDom();
     const host = new ElementDouble();
@@ -249,7 +276,6 @@ const snapshot = (
     magicDefense: 0,
   },
   resources: { wood: 120, stone: 120, scrap: 120, essence: 120, bossCore: 1 },
-  materialCapacity: 120,
   buildRadius: 6,
   inputSource: "system",
   combatStatus: "Ready",
@@ -367,7 +393,7 @@ describe("current HUD placement port", () => {
     ui.render(snapshot());
   });
 
-  it("keeps four icon panels, exclusive resources/skills, placement visibility and save/quick stats", () => {
+  it("keeps icon panels, exclusive resources/skills, placement visibility and save/quick stats", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot());
     for (const name of [
@@ -387,9 +413,7 @@ describe("current HUD placement port", () => {
     expect(get("skill-tree-panel").hidden).toBe(true);
     get("character-status-toggle").click();
     get("build-menu-toggle").click();
-    get("tap-to-move-toggle").checked = true;
     get("build-buttons").children[0].click();
-    expect(ui.isTapToMoveEnabled()).toBe(true);
     expect(ui.isWorldPlacementEnabled()).toBe(true);
     expect(intents.place).not.toHaveBeenCalled();
     for (const name of [
@@ -417,9 +441,6 @@ describe("current HUD placement port", () => {
     expect(get("placement-message").textContent).toContain("Campfire placed");
     expect(get("quick-health").textContent).toBe("♥ 90/100");
     expect(get("quick-level").textContent).toBe("✦ L0 · 0 XP");
-    expect(get("resource-capacity").textContent).toContain(
-      "Boss Core is exempt",
-    );
     expect(
       get("resources").children.map((chip) => chip.getAttribute("aria-label")),
     ).toEqual([
@@ -430,8 +451,9 @@ describe("current HUD placement port", () => {
       "Boss Core: 1",
     ]);
     expect(get("resources").children[4].textContent).toBe("◉ 1");
-    expect(get("build-buttons").children[4].textContent).toBe("✚");
-    expect(get("build-buttons").children[4].getAttribute("aria-label")).toBe(
+    expect(get("build-buttons").children).toHaveLength(4);
+    expect(get("build-buttons").children[3].textContent).toBe("✚");
+    expect(get("build-buttons").children[3].getAttribute("aria-label")).toBe(
       "Place Healing Hut",
     );
     const save = get("save-button"),

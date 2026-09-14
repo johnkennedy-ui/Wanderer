@@ -150,6 +150,10 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         "playerHitFlash",
         snapshot.playerHitRecovery.flashOn ? "on" : "off",
       );
+      setDataset(
+        "destinationMarker",
+        snapshot.destination === null ? "inactive" : "active",
+      );
       const healingHutAuras = snapshot.visibleBuildings.filter(
         (building) => building.kind === "Healer",
       );

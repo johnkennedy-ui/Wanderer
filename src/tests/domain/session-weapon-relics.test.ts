@@ -30,7 +30,7 @@ const progression = (
   playerClass: PlayerClass | null,
   weaponRank = 0,
 ): ClassProgression => ({
-  experience: 1500,
+  experience: 300,
   level: 5,
   playerClass,
   skillIds: [],

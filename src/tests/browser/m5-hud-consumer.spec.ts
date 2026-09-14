@@ -99,7 +99,6 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
         essence: 20,
         bossCore: 0,
       },
-      materialCapacity: 120,
       buildRadius: 6,
       inputSource: "system",
       combatStatus: "Stationary: seeking a target",

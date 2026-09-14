@@ -25,6 +25,7 @@ export class RetainedProjection {
   private readonly drops: MarkerMap = new Map();
   private readonly relicDrops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
+  private destination: THREE.Mesh | undefined;
   private meshesRemoved = 0;
   private disposed = false;
 
@@ -65,6 +66,24 @@ export class RetainedProjection {
     }
     this.removeMissing(this.obstacles, obstacles);
     this.removeMissing(this.campfires, campfires);
+    if (snapshot.destination === null) {
+      if (this.destination !== undefined) {
+        this.destination.removeFromParent();
+        this.destination = undefined;
+        this.meshesRemoved += 1;
+      }
+    } else {
+      if (this.destination === undefined) {
+        this.destination = this.resources.mesh(
+          this.resources.destinationMarker(),
+          this.resources.destinationMarkerMaterial(),
+        );
+        this.destination.name = "destination-marker";
+        this.destination.rotation.x = -Math.PI / 2;
+        this.group.add(this.destination);
+      }
+      this.position(this.destination, snapshot.destination, 0.03);
+    }
     const buildings = new Set<string>();
     const auras = new Set<string>();
     for (const building of snapshot.visibleBuildings) {
@@ -243,6 +262,11 @@ export class RetainedProjection {
       map.clear();
     }
     this.meshesRemoved += 1;
+    if (this.destination !== undefined) {
+      this.destination.removeFromParent();
+      this.destination = undefined;
+      this.meshesRemoved += 1;
+    }
     this.group.clear();
     this.group.removeFromParent();
     this.resources.dispose();

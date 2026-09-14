@@ -22,6 +22,7 @@ interface BuildingRow {
   readonly element: HTMLDivElement;
   readonly label: HTMLSpanElement;
   readonly upgrade: HTMLButtonElement;
+  readonly move: HTMLButtonElement;
   kind: BuildingKind;
   aura: HTMLSpanElement | null;
   dispose(): void;
@@ -53,9 +54,10 @@ export class RetainedBuildingRows {
         this.rows.set(building.id, row);
       }
       row.kind = building.kind;
+      const legacyStorage = building.kind === "Storage";
       setText(
         row.label,
-        `${buildingDefinitions[building.kind].label} L${building.level} @ ${building.position.x.toFixed(1)}, ${building.position.y.toFixed(1)}`,
+        `${legacyStorage ? "Legacy Storage" : buildingDefinitions[building.kind].label} L${building.level} @ ${building.position.x.toFixed(1)}, ${building.position.y.toFixed(1)}`,
       );
       if (building.kind === "Healer") {
         if (row.aura === null) {
@@ -81,8 +83,21 @@ export class RetainedBuildingRows {
         row.aura.remove();
         row.aura = null;
       }
-      const disabled = building.level === 3;
-      if (row.upgrade.disabled !== disabled) row.upgrade.disabled = disabled;
+      const upgradeDisabled = legacyStorage || building.level === 3;
+      if (row.upgrade.disabled !== upgradeDisabled)
+        row.upgrade.disabled = upgradeDisabled;
+      setAttribute(
+        row.upgrade,
+        "title",
+        legacyStorage ? "Legacy Storage cannot be upgraded." : "",
+      );
+      if (row.move.disabled !== legacyStorage)
+        row.move.disabled = legacyStorage;
+      setAttribute(
+        row.move,
+        "title",
+        legacyStorage ? "Legacy Storage cannot be relocated." : "",
+      );
       const expected: ChildNode | null =
         previous === null ? this.host.firstChild : previous.nextSibling;
       if (expected !== row.element)
@@ -120,6 +135,7 @@ export class RetainedBuildingRows {
       element,
       label,
       upgrade,
+      move,
       kind: building.kind,
       aura: null,
       dispose(): void {

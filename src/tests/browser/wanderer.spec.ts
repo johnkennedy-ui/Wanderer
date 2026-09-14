@@ -47,7 +47,7 @@ const primeClassChoice = async (page: Page): Promise<void> => {
         savePointId: "campfire:home",
         savePointPosition: { x: 0, y: 0 },
         classProgression: {
-          experience: 30,
+          experience: 6,
           level: 1,
           playerClass: null,
           skillIds: [],
@@ -88,7 +88,7 @@ const primeRankedClass = async (
           savePointId: "campfire:home",
           savePointPosition: { x: 0, y: 0 },
           classProgression: {
-            experience: 1500,
+            experience: 300,
             level: 5,
             playerClass: savedClass,
             skillIds: [],
@@ -101,20 +101,13 @@ const primeRankedClass = async (
   );
 };
 
-const checkWithPendingClassResolution = async (
-  _page: Page,
-  target: Locator,
-): Promise<void> => {
-  await target.check({ timeout: 5_000 });
-};
-
 test(
-  "gameplay earns the class threshold from a valid 29 XP level-0 save fixture",
+  "gameplay earns the class threshold from a valid 5 XP level-0 save fixture",
   {
     tag: "@manual-choices",
   },
   async ({ page }) => {
-    // A supported below-threshold save, NOT a fresh 0-to-30 claim and NOT an
+    // A supported below-threshold save, NOT a fresh 0-to-6 claim and NOT an
     // already-earned class. No runtime state is written after application boot.
     const saved = JSON.stringify({
       schemaVersion: 2,
@@ -138,7 +131,7 @@ test(
       savePointId: "campfire:home",
       savePointPosition: { x: 0, y: 0 },
       classProgression: {
-        experience: 29,
+        experience: 5,
         level: 0,
         playerClass: null,
         skillIds: [],
@@ -148,7 +141,7 @@ test(
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) throw new Error(decoded.message);
     expect(decoded.document.classProgression).toEqual({
-      experience: 29,
+      experience: 5,
       level: 0,
       playerClass: null,
       skillIds: [],
@@ -164,7 +157,7 @@ test(
     // Missing this precondition fails; the test never reloads/retries until green.
     await expect(
       page.locator('[data-testid="quick-level"]:visible'),
-    ).toHaveText("✦ L0 · 29 XP");
+    ).toHaveText("✦ L0 · 5 XP");
     const classModal = page.getByTestId("class-modal");
     await expect(classModal).toBeVisible({ timeout: 8_000 });
     const earned = /L(\d+) · (\d+) XP/.exec(
@@ -172,7 +165,7 @@ test(
     );
     if (earned === null) throw new Error("Missing public earned-XP witness");
     expect(Number(earned[1])).toBeGreaterThanOrEqual(1);
-    expect(Number(earned[2])).toBeGreaterThanOrEqual(30);
+    expect(Number(earned[2])).toBeGreaterThanOrEqual(6);
     await expect(page.getByTestId("world-canvas")).toHaveAttribute(
       "data-floor-drop-count",
       /[1-9]/,
@@ -198,21 +191,6 @@ test("HUD reports the deterministic next-wave schedule", async ({ page }) => {
     /Next wave in 1(?:[01]\d|20)s/,
   );
 });
-
-test(
-  "earned experience opens a class choice and the selected class is visible after reload",
-  { tag: "@manual-choices" },
-  async ({ page }) => {
-    await primeClassChoice(page);
-    await page.goto(applicationPath);
-    const classModal = page.getByTestId("class-modal");
-    await expect(classModal).toBeVisible({ timeout: 8_000 });
-    await classModal.getByTestId("class-wizard").click();
-    await expect(classModal).toBeHidden();
-    await openStatus(page);
-    await expect(page.getByTestId("class-progression")).toContainText("Wizard");
-  },
-);
 
 test(
   "earned experience opens a class choice and the selected class is visible",
@@ -250,37 +228,48 @@ test(
   },
 );
 
-test("ranked class weapon relics are visible in status and project their attack abilities", async ({
+test(
+  "ranked class weapon relics are visible in status and project their attack abilities",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    await primeRankedClass(page, "archer", 1);
+    await page.goto(applicationPath);
+    await openStatus(page);
+    await expect(page.getByTestId("weapon-relic-status")).toContainText(
+      "Twinwind Relic rank 1",
+    );
+    // Observe actual rendered frames: both arrows may hit between wall-time polls.
+    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
+    const canvas = page.getByTestId("world-canvas");
+    let projectileCount = await canvas.getAttribute("data-projectile-count");
+    for (
+      let elapsed = 0;
+      projectileCount !== "2" && elapsed < 8_000;
+      elapsed += 16
+    ) {
+      await page.clock.runFor(16);
+      projectileCount = await canvas.getAttribute("data-projectile-count");
+    }
+    await expect(canvas).toHaveAttribute("data-projectile-count", "2", {
+      timeout: 8_000,
+    });
+  },
+);
+
+test("the icon HUD exposes compact uncapped resources and the current skill tree", async ({
   page,
 }) => {
-  await primeRankedClass(page, "archer", 1);
-  await page.goto(applicationPath);
-  await openStatus(page);
-  await expect(page.getByTestId("weapon-relic-status")).toContainText(
-    "Twinwind Relic rank 1",
-  );
-  await expect(page.getByTestId("world-canvas")).toHaveAttribute(
-    "data-projectile-count",
-    "2",
-    { timeout: 8_000 },
-  );
-});
-
-test("the icon HUD exposes compact resources and the current skill tree", async ({
-  page,
-}) => {
   await page.goto(applicationPath);
 
-  const storage = page.getByTestId("build-Storage");
-  await expect(storage).toHaveAttribute("aria-label", "Place Storage");
-  await expect(storage).toHaveText("▣");
+  await expect(page.getByTestId("build-Storage")).toHaveCount(0);
 
   const resourcesToggle = page.getByTestId("resources-toggle");
   await expect(resourcesToggle).toHaveAttribute("aria-label", "Resources");
   await resourcesToggle.click();
   await expect(page.getByTestId("resources-panel")).toBeVisible();
   await expect(page.getByTestId("resources")).toContainText("◫");
-  await expect(page.getByTestId("resource-capacity")).toContainText("Capacity");
+  await expect(page.getByTestId("resource-capacity")).toHaveCount(0);
 
   const skillTreeToggle = page.getByTestId("skill-tree-toggle");
   await expect(skillTreeToggle).toHaveAttribute("aria-label", "Skill Tree");
@@ -350,7 +339,7 @@ test("initial browser load uses compact circular actions with accessible hidden 
   const statusToggle = page.getByTestId("character-status-toggle");
   await expect(canvas).toBeVisible();
   await expect(page.getByTestId("world-player-hp")).toHaveText("100 / 100 HP");
-  await expect(page.getByTestId("virtual-stick")).toBeVisible();
+  await expect(page.getByTestId("virtual-stick")).toHaveCount(0);
   await expect(buildToggle).toHaveAttribute("aria-expanded", "false");
   await expect(statusToggle).toHaveAttribute("aria-expanded", "false");
   await expect(buildToggle).toHaveAttribute(
@@ -381,7 +370,7 @@ test("initial browser load uses compact circular actions with accessible hidden 
 
   await openStatus(page);
   await expect(page.getByTestId("seed")).toContainText("wanderer-known-seed");
-  await expect(page.getByTestId("tap-to-move-toggle")).not.toBeChecked();
+  await expect(page.getByTestId("tap-to-move-toggle")).toHaveCount(0);
   await expect(page.getByTestId("save-button")).toBeEnabled();
   await expect(
     page.getByTestId("resources").getByTitle("Wood", { exact: true }),
@@ -426,23 +415,23 @@ test("a present corrupt save is surfaced and left untouched on built-output boot
   ).resolves.toBe(corruptPrimary);
 });
 
-test("enabled primary canvas taps travel to a destination when no build mode is active", async ({
+test("ordinary primary canvas taps travel to a marked destination when no build mode is active", async ({
   page,
 }) => {
   await page.goto(applicationPath);
   await openStatus(page);
   const position = page.getByTestId("position");
-  const toggle = page.getByTestId("tap-to-move-toggle");
+  const canvas = page.getByTestId("world-canvas");
   const initialPosition = await position.textContent();
   if (initialPosition === null)
     throw new Error("World position text was not available");
 
-  await checkWithPendingClassResolution(page, toggle);
   await clickWithPendingUpgradeResolution(
     page,
     page.getByTestId("close-character-status"),
   );
   await tapCanvas(page, 0.4, 0.62);
+  await expect(canvas).toHaveAttribute("data-destination-marker", "active");
   // The incidental Boss Core handler may legitimately run after the tap. Read
   // the public position text without another locator action so that handler
   // does not delay observation until the short tap-to-move interval has ended.
@@ -478,24 +467,35 @@ test("completed lethal projectiles leave visible renderer-owned floor drops with
 test("enemy hits visibly flash the player during a finite recovery window", async ({
   page,
 }) => {
+  // GameSession caps frame deltas: wall time cannot measure simulation expiry.
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
   await page.goto(applicationPath);
+  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
   const canvas = page.getByTestId("world-canvas");
-  await expect
-    .poll(
-      async () =>
-        `${await canvas.getAttribute("data-player-hit-recovery")}:${await canvas.getAttribute("data-player-hit-flash")}`,
-      {
-        intervals: [50, 50, 100],
-        timeout: 12_000,
-      },
-    )
-    .toBe("active:on");
-  await expect
-    .poll(() => canvas.getAttribute("data-player-hit-recovery"), {
-      intervals: [50, 50, 100],
-      timeout: 1_000,
-    })
-    .toBe("inactive");
+  const recoveryState = () =>
+    canvas.evaluate(
+      (element) =>
+        `${element.getAttribute("data-player-hit-recovery")}:${element.getAttribute("data-player-hit-flash")}`,
+    );
+  let state = await recoveryState();
+  for (
+    let elapsed = 0;
+    state !== "active:on" && elapsed < 12_000;
+    elapsed += 50
+  ) {
+    await page.clock.runFor(50);
+    state = await recoveryState();
+  }
+  expect(state).toBe("active:on");
+  for (
+    let elapsed = 0;
+    state !== "inactive:off" && elapsed < 1_000;
+    elapsed += 50
+  ) {
+    await page.clock.runFor(50);
+    state = await recoveryState();
+  }
+  expect(state).toBe("inactive:off");
 });
 
 test("a Healing Hut is selected and placed through the canvas without moving the player", async ({
@@ -512,10 +512,6 @@ test("a Healing Hut is selected and placed through the canvas without moving the
   if (beforePosition === null || beforeResources === null)
     throw new Error("Initial player state was not available");
 
-  await checkWithPendingClassResolution(
-    page,
-    page.getByTestId("tap-to-move-toggle"),
-  );
   await clickWithPendingUpgradeResolution(
     page,
     page.getByTestId("build-Healer"),
@@ -587,18 +583,18 @@ test("invalid canvas placement remains selected, non-mutating, and explains the 
   const resources = page.getByTestId("resources");
   await clickWithPendingUpgradeResolution(
     page,
-    page.getByTestId("build-Storage"),
+    page.getByTestId("build-Workshop"),
   );
   await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   const before = await resources.textContent();
   if (before === null)
-    throw new Error("Storage placement did not update resources");
+    throw new Error("Workshop placement did not update resources");
 
   await openBuildMenu(page);
   await clickWithPendingUpgradeResolution(
     page,
-    page.getByTestId("build-Workshop"),
+    page.getByTestId("build-Healer"),
   );
   await expect(page.getByTestId("character-status-panel")).toBeHidden();
   await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
@@ -609,11 +605,11 @@ test("invalid canvas placement remains selected, non-mutating, and explains the 
     "overlaps an existing building",
   );
   await expect(page.getByTestId("placement-mode")).toContainText(
-    "Workshop selected",
+    "Healing Hut selected",
   );
-  await expect(page.getByTestId("building-list")).toContainText("Storage L1");
+  await expect(page.getByTestId("building-list")).toContainText("Workshop L1");
   await expect(page.getByTestId("building-list")).not.toContainText(
-    "Workshop L1",
+    "Healing Hut L1",
   );
   await expect(resources).toHaveText(before);
 });
@@ -640,29 +636,70 @@ test("status and build circle actions independently open and close their panels"
   await buildToggle.click();
   await expect(buildPanel).toBeHidden();
   await expect(page.getByTestId("world-canvas")).toBeVisible();
-  await expect(page.getByTestId("virtual-stick")).toBeVisible();
+  await expect(page.getByTestId("virtual-stick")).toHaveCount(0);
 });
 
-test("Storage exposes an enforced common-material capacity while Boss Core is exempt", async ({
+test("new Storage is unavailable while released legacy Storage remains visible and inactive", async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wanderer.save.primary",
+      JSON.stringify({
+        schemaVersion: 2,
+        world: {
+          seed: "wanderer-known-seed",
+          generatorVersion: "wanderer-web-v2",
+        },
+        player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+        resources: {
+          wood: 480,
+          stone: 180,
+          scrap: 180,
+          essence: 180,
+          bossCore: 4,
+        },
+        buildings: [
+          {
+            id: "building:legacy:0001",
+            kind: "Storage",
+            position: { x: 1, y: 1 },
+            level: 1,
+          },
+        ],
+        defeatedBossIds: [],
+        upgrades: [],
+        nextBuildingSerial: 2,
+        committedAt: 0,
+        savePointId: "campfire:home",
+        savePointPosition: { x: 0, y: 0 },
+      }),
+    );
+  });
   await page.goto(applicationPath);
-  await openStatus(page);
   await openBuildMenu(page);
-  await clickWithPendingUpgradeResolution(
-    page,
-    page.getByTestId("build-Storage"),
-  );
-  await tapCanvas(page, 0.5, 0.5);
-  await expect(page.getByTestId("resource-capacity")).toHaveText(
-    "Capacity 180 each; Boss Core is exempt.",
-  );
-  await expect(page.getByTestId("effects")).toContainText(
-    "Boss Core is exempt",
-  );
+  await expect(page.getByTestId("build-Storage")).toHaveCount(0);
+  const legacyRow = page
+    .getByTestId("building-list")
+    .locator(".building-row")
+    .filter({ hasText: "Legacy Storage L1" });
+  await expect(legacyRow).toHaveCount(1);
+  await expect(
+    legacyRow.getByRole("button", { name: "Upgrade" }),
+  ).toBeDisabled();
+  await expect(
+    legacyRow.getByRole("button", { name: "Relocate on canvas" }),
+  ).toBeDisabled();
+  await expect(
+    legacyRow.getByRole("button", { name: "Demolish" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByTestId("resources").getByTitle("Wood", { exact: true }),
+  ).toHaveAttribute("aria-label", "Wood: 480");
+  await expect(page.getByTestId("resource-capacity")).toHaveCount(0);
 });
 
-test("keyboard movement and touch-stick movement share the stationary auto-attack gate", async ({
+test("keyboard movement retains the stationary auto-attack gate", async ({
   page,
 }) => {
   await page.goto(applicationPath);
@@ -673,85 +710,6 @@ test("keyboard movement and touch-stick movement share the stationary auto-attac
   await expect(combat).toContainText("suppressed");
   await page.keyboard.up("d");
   await page.waitForTimeout(650);
-  await expect(combat).toContainText("Auto-attacking");
-
-  const stick = page.getByTestId("virtual-stick");
-  const box = await stick.boundingBox();
-  if (box === null) throw new Error("Virtual stick was not laid out");
-  await stick.dispatchEvent("pointerdown", {
-    pointerId: 1,
-    clientX: box.x + box.width / 2,
-    clientY: box.y + box.height / 2,
-  });
-  await stick.dispatchEvent("pointermove", {
-    pointerId: 1,
-    clientX: box.x + box.width - 8,
-    clientY: box.y + box.height / 2,
-  });
-  await page.waitForTimeout(100);
-  await expect(stick).toHaveAttribute("data-active", "true");
-  await expect(page.getByTestId("position")).toContainText("virtual-stick");
-  await expect(combat).toContainText("suppressed");
-  await stick.dispatchEvent("pointerup", {
-    pointerId: 1,
-    clientX: box.x + box.width - 8,
-    clientY: box.y + box.height / 2,
-  });
-  await expect(stick).toHaveAttribute("data-active", "false");
-  await expect(combat).toContainText("Auto-attacking");
-});
-
-test("virtual-stick short drag, cancellation, capture loss, and blur safely clear movement", async ({
-  page,
-}) => {
-  await page.goto(applicationPath);
-  await openStatus(page);
-  const combat = page.getByTestId("combat-status");
-  const stick = page.getByTestId("virtual-stick");
-  const box = await stick.boundingBox();
-  if (box === null) throw new Error("Virtual stick was not laid out");
-  const right = {
-    clientX: box.x + box.width - 8,
-    clientY: box.y + box.height / 2,
-  };
-  const center = {
-    clientX: box.x + box.width / 2,
-    clientY: box.y + box.height / 2,
-  };
-  const shortRight = {
-    clientX: box.x + box.width * 0.55,
-    clientY: box.y + box.height / 2,
-  };
-
-  await stick.dispatchEvent("pointerdown", { pointerId: 11, ...shortRight });
-  await expect(stick).toHaveAttribute("data-active", "true");
-  await expect(combat).toContainText("suppressed");
-  await stick.dispatchEvent("pointerup", { pointerId: 11, ...shortRight });
-  await expect(stick).toHaveAttribute("data-active", "false");
-  await expect(combat).toContainText("Auto-attacking");
-
-  await stick.dispatchEvent("pointerdown", { pointerId: 12, ...center });
-  await expect(stick).toHaveAttribute("data-active", "false");
-  await stick.dispatchEvent("pointermove", { pointerId: 12, ...right });
-  await expect(stick).toHaveAttribute("data-active", "true");
-  await expect(combat).toContainText("suppressed");
-  await stick.dispatchEvent("pointercancel", { pointerId: 12, ...right });
-  await expect(stick).toHaveAttribute("data-active", "false");
-  await expect(combat).toContainText("Auto-attacking");
-
-  await stick.dispatchEvent("pointerdown", { pointerId: 13, ...right });
-  await expect(stick).toHaveAttribute("data-active", "true");
-  await stick.dispatchEvent("lostpointercapture", {
-    pointerId: 13,
-    ...right,
-  });
-  await expect(stick).toHaveAttribute("data-active", "false");
-  await expect(combat).toContainText("Auto-attacking");
-
-  await stick.dispatchEvent("pointerdown", { pointerId: 14, ...right });
-  await expect(stick).toHaveAttribute("data-active", "true");
-  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
-  await expect(stick).toHaveAttribute("data-active", "false");
   await expect(combat).toContainText("Auto-attacking");
 });
 
@@ -783,6 +741,106 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
     "Position: 0.0, 0.0",
   );
 });
+
+test(
+  "an explicit campfire save reloads the XP-derived level, chosen class, and exact skills",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.addInitScript(() => {
+      if (window.localStorage.getItem("wanderer.save.primary") !== null) return;
+      window.localStorage.setItem(
+        "wanderer.save.primary",
+        JSON.stringify({
+          schemaVersion: 2,
+          world: {
+            seed: "wanderer-known-seed",
+            generatorVersion: "wanderer-web-v2",
+          },
+          player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+          resources: {
+            wood: 120,
+            stone: 120,
+            scrap: 120,
+            essence: 20,
+            bossCore: 0,
+          },
+          buildings: [],
+          defeatedBossIds: [],
+          upgrades: [],
+          nextBuildingSerial: 1,
+          committedAt: 0,
+          savePointId: "campfire:home",
+          savePointPosition: { x: 0, y: 0 },
+          classProgression: {
+            experience: 50,
+            level: 0,
+            playerClass: null,
+            skillIds: [],
+          },
+        }),
+      );
+    });
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible();
+    await classModal.getByTestId("class-wizard").click();
+    await classModal.getByTestId("class-skill-wizard-flame-orb").click();
+    await classModal.getByTestId("class-skill-wizard-arcane-haste").click();
+    await expect(classModal).toBeHidden();
+
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText(
+      "level 3 · Wizard",
+    );
+    const upgradeModal = page.getByTestId("upgrade-modal");
+    if (await upgradeModal.isVisible()) {
+      const upgradeChoice = upgradeModal.getByRole("button").first();
+      const upgradeId = await upgradeChoice.getAttribute("data-testid");
+      if (!upgradeId) throw new Error("Boss choice lacks public identity");
+      await upgradeChoice.click();
+      await expect(upgradeModal).toBeHidden();
+    }
+    await clickWithPendingUpgradeResolution(
+      page,
+      page.getByTestId("save-button"),
+    );
+    await expect(page.getByTestId("save-message")).toContainText(
+      "Saved explicitly",
+    );
+    const committed = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem("wanderer.save.primary") ?? "{}"),
+    );
+    expect(committed.classProgression).toMatchObject({
+      level: 3,
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb", "wizard-arcane-haste"],
+      weaponRank: 0,
+    });
+    expect(committed.classProgression.experience).toBeGreaterThanOrEqual(50);
+
+    await page.reload();
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText(
+      "level 3 · Wizard",
+    );
+    await page.getByTestId("skill-tree-toggle").click();
+    await expect(page.getByTestId("skill-tree-summary")).toContainText("2/4");
+    await expect(page.getByTestId("skill-tree-skills")).toContainText(
+      "Flame Orb: selected",
+    );
+    await expect(page.getByTestId("skill-tree-skills")).toContainText(
+      "Arcane Haste: selected",
+    );
+    await expect(
+      page.evaluate(() =>
+        JSON.parse(
+          window.localStorage.getItem("wanderer.save.primary") ?? "{}",
+        ),
+      ),
+    ).resolves.toMatchObject({ classProgression: committed.classProgression });
+  },
+);
 
 test(
   "public keyboard play defeats the real boss, selects one upgrade, and never saves implicitly",

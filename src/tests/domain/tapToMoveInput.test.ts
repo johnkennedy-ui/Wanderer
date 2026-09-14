@@ -22,31 +22,23 @@ const primaryPointerEvent = (
 };
 
 describe("tap-to-move input", () => {
-  it("emits enabled primary taps and ignores disabled pointer sequences", () => {
+  it("emits ordinary primary taps without a mode toggle", () => {
     const canvas = new EventTarget() as HTMLCanvasElement;
-    let enabled = false;
     const commands: DestinationCommand[] = [];
     const input = createTapToMoveInput(
       canvas,
       (clientX, clientY) => ({ x: clientX, y: clientY }),
-      () => enabled,
       (command) => commands.push(command),
     );
 
     canvas.dispatchEvent(primaryPointerEvent("pointerdown", 1, 10, 20));
     canvas.dispatchEvent(primaryPointerEvent("pointerup", 1, 10, 20));
-    expect(commands).toHaveLength(0);
-
-    enabled = true;
-    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 2, 12, 24));
-    canvas.dispatchEvent(primaryPointerEvent("pointerup", 2, 12, 24));
     expect(commands).toMatchObject([
-      { destination: { x: 12, y: 24 }, source: "tap-to-move" },
+      { destination: { x: 10, y: 20 }, source: "tap-to-move" },
     ]);
 
-    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 3, 14, 28));
-    enabled = false;
-    canvas.dispatchEvent(primaryPointerEvent("pointerup", 3, 14, 28));
+    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 2, 12, 24));
+    canvas.dispatchEvent(primaryPointerEvent("pointerup", 2, 30, 24));
     expect(commands).toHaveLength(1);
 
     input.dispose();
@@ -54,7 +46,6 @@ describe("tap-to-move input", () => {
 
   it("keeps an enabled world-placement tap separate from tap-to-move", () => {
     const canvas = new EventTarget() as HTMLCanvasElement;
-    let tapToMoveEnabled = true;
     let placementEnabled = false;
     const destinations: DestinationCommand[] = [];
     const placements: Vector2[] = [];
@@ -65,7 +56,6 @@ describe("tap-to-move input", () => {
     const tapInput = createTapToMoveInput(
       canvas,
       toWorld,
-      () => tapToMoveEnabled,
       (command) => destinations.push(command),
       () => placementEnabled,
     );

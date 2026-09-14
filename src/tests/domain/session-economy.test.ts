@@ -53,8 +53,8 @@ describe("session economy policy", () => {
       addResourceBags(left, right),
       subtractResourceBags(left, right),
       scaleResourceBag(left, 0.5),
-      clampResourcesToCapacity(left, 3),
-      collectResourcesWithinCapacity(left, right, 3),
+      clampResourcesToCapacity(left),
+      collectResourcesWithinCapacity(left, right),
     ];
 
     for (const output of outputs) {
@@ -62,7 +62,7 @@ describe("session economy policy", () => {
       expect(output).not.toBe(right);
     }
     expect(canAffordResources(left, right)).toBe(false);
-    expect(materialCapacityFor(buildings)).toBe(260);
+    expect(materialCapacityFor(buildings)).toBe(Number.POSITIVE_INFINITY);
     expect(left).toEqual(leftBefore);
     expect(right).toEqual(rightBefore);
     expect(buildings).toEqual(buildingsBefore);
@@ -165,14 +165,14 @@ describe("session economy policy", () => {
     });
   });
 
-  it("calculates capacity for zero, L1, L2, and L3 Storage", () => {
-    expect(materialCapacityFor([])).toBe(120);
-    expect(materialCapacityFor([storage(1)])).toBe(180);
-    expect(materialCapacityFor([storage(2)])).toBe(260);
-    expect(materialCapacityFor([storage(3)])).toBe(360);
+  it("reports no active capacity for fresh or legacy Storage building lists", () => {
+    expect(materialCapacityFor([])).toBe(Number.POSITIVE_INFINITY);
+    expect(materialCapacityFor([storage(1)])).toBe(Number.POSITIVE_INFINITY);
+    expect(materialCapacityFor([storage(2)])).toBe(Number.POSITIVE_INFINITY);
+    expect(materialCapacityFor([storage(3)])).toBe(Number.POSITIVE_INFINITY);
   });
 
-  it("clamps common resources to capacity while Boss Core remains exempt", () => {
+  it("normalizes only negative resources and never caps common materials", () => {
     expect(
       clampResourcesToCapacity(
         resources({
@@ -182,27 +182,25 @@ describe("session economy policy", () => {
           essence: 119,
           bossCore: 999,
         }),
-        120,
       ),
     ).toEqual({
       wood: 0,
-      stone: 120,
+      stone: 121,
       scrap: 120,
       essence: 119,
       bossCore: 999,
     });
     expect(
-      clampResourcesToCapacity(resources({ wood: 1, bossCore: -1 }), 0),
-    ).toEqual(resources());
+      clampResourcesToCapacity(resources({ wood: 1, bossCore: -1 })),
+    ).toEqual(resources({ wood: 1 }));
   });
 
-  it("adds incoming resources before clamping them to capacity", () => {
+  it("adds incoming resources without a Storage-derived cap", () => {
     expect(
       collectResourcesWithinCapacity(
         resources({ wood: 119, stone: -2, bossCore: 3 }),
         resources({ wood: 4, stone: 1, bossCore: 5 }),
-        120,
       ),
-    ).toEqual(resources({ wood: 120, stone: 0, bossCore: 8 }));
+    ).toEqual(resources({ wood: 123, stone: 0, bossCore: 8 }));
   });
 });

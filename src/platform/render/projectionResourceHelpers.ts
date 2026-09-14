@@ -57,6 +57,7 @@ export class ProjectionResources {
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
   private auraMaterial: THREE.MeshBasicMaterial | undefined;
   private crescentMaterial: THREE.MeshBasicMaterial | undefined;
+  private destinationMarkerStyle: THREE.MeshBasicMaterial | undefined;
   private geometriesCreated = 0;
   private materialsCreated = 0;
   private meshesCreated = 0;
@@ -125,6 +126,26 @@ export class ProjectionResources {
     }
     return this.auraMaterial;
   }
+  destinationMarker(): THREE.BufferGeometry {
+    return this.geometry(
+      "destination-marker",
+      () => new THREE.RingGeometry(0.34, 0.52, 40),
+    );
+  }
+  destinationMarkerMaterial(): THREE.MeshBasicMaterial {
+    this.assertLive();
+    if (this.destinationMarkerStyle === undefined) {
+      this.destinationMarkerStyle = new THREE.MeshBasicMaterial({
+        color: 0xffe082,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      this.materialsCreated += 1;
+    }
+    return this.destinationMarkerStyle;
+  }
   drop(): THREE.BufferGeometry {
     return this.geometry("drop", () => new THREE.DodecahedronGeometry(0.22, 0));
   }
@@ -191,6 +212,11 @@ export class ProjectionResources {
       this.crescentMaterial.dispose();
       this.materialsDisposed += 1;
       this.crescentMaterial = undefined;
+    }
+    if (this.destinationMarkerStyle !== undefined) {
+      this.destinationMarkerStyle.dispose();
+      this.materialsDisposed += 1;
+      this.destinationMarkerStyle = undefined;
     }
     this.geometries.clear();
     this.materials.clear();

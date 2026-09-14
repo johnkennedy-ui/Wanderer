@@ -1,5 +1,4 @@
-import { gameplayTuning, resourceDefinitions } from "../../data/definitions";
-import { commonResourceKinds, emptyResources, resourceKinds } from "../types";
+import { emptyResources, resourceKinds } from "../types";
 import type { BuildingState, ReadonlyResourceBag, ResourceBag } from "../types";
 
 /** Returns a fresh resource bag with every amount multiplied by a level. */
@@ -49,36 +48,27 @@ export const canAffordResources = (
   cost: ReadonlyResourceBag,
 ): boolean => resourceKinds.every((kind) => have[kind] >= cost[kind]);
 
-/** Calculates the shared common-material capacity supplied by Storage buildings. */
+/**
+ * Legacy compatibility helper retained for an older progression-description
+ * consumer. Runtime collection no longer reads this value, so Storage has no
+ * active resource effect.
+ */
 export const materialCapacityFor = (
-  buildings: readonly BuildingState[],
-): number =>
-  gameplayTuning.baseMaterialCapacity +
-  buildings
-    .filter((building) => building.kind === "Storage")
-    .reduce(
-      (total, building) =>
-        total + gameplayTuning.storageCapacityBonusByLevel[building.level - 1],
-      0,
-    );
+  _buildings: readonly BuildingState[],
+): number => Number.POSITIVE_INFINITY;
 
-/** Returns a fresh bag with common materials capped and Boss Core non-negative. */
+/** Returns a fresh non-negative resource bag without applying a cap. */
 export const clampResourcesToCapacity = (
   resources: ReadonlyResourceBag,
-  capacity: number,
 ): ResourceBag => {
-  const clamped = { ...resources };
-  for (const kind of commonResourceKinds)
-    if (resourceDefinitions[kind].storageLimited)
-      clamped[kind] = Math.min(capacity, Math.max(0, resources[kind]));
-  clamped.bossCore = Math.max(0, resources.bossCore);
+  const clamped = emptyResources();
+  for (const kind of resourceKinds)
+    clamped[kind] = Math.max(0, resources[kind]);
   return clamped;
 };
 
-/** Adds an incoming bag before applying the current capacity policy. */
+/** Adds an incoming bag without applying a Storage-derived cap. */
 export const collectResourcesWithinCapacity = (
   current: ReadonlyResourceBag,
   delta: ReadonlyResourceBag,
-  capacity: number,
-): ResourceBag =>
-  clampResourcesToCapacity(addResourceBags(current, delta), capacity);
+): ResourceBag => clampResourcesToCapacity(addResourceBags(current, delta));

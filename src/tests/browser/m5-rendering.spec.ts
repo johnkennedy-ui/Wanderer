@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import {
+  captureFreshStationaryM5Projection,
   expectRowPosition,
   openBuild,
+  openKnownClosedBuild,
   openM5World,
   openStatus,
   tapWorldPosition,
@@ -14,19 +16,23 @@ test("M5 live DOM retains rows through updates and current next-tap relocation, 
   page,
 }) => {
   await openM5World(page);
+  const player = await captureFreshStationaryM5Projection(page);
   await openBuild(page);
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, 1, 1);
+  await tapWorldPosition(page, player, 1, 1);
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   const list = page.getByTestId("building-list");
   await expect(list.locator(".building-row")).toHaveCount(1);
+  await expectRowPosition(list.locator(".building-row").nth(0), 1, 1);
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, 4, 0);
+  await tapWorldPosition(page, player, 4, 0);
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   const rows = list.locator(".building-row");
   await expect(rows).toHaveCount(2);
+  await expectRowPosition(rows.nth(0), 1, 1);
+  await expectRowPosition(rows.nth(1), 4, 0);
   const first = await rows.nth(0).elementHandle();
   const second = await rows.nth(1).elementHandle();
   const move = await rows
@@ -70,12 +76,19 @@ test("M5 live DOM retains rows through updates and current next-tap relocation, 
   );
   await expect(page.getByTestId("build-menu-panel")).toBeHidden();
   // A different next tap, not the old build coordinate, is authoritative.
-  await tapWorldPosition(page, 1, 0);
-  await expect(page.getByTestId("placement-mode")).toBeHidden();
+  await tapWorldPosition(page, player, 1, 0);
+  await expect(page.getByTestId("placement-mode")).toHaveAttribute(
+    "hidden",
+    "",
+  );
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "inactive",
+  );
   await expect(page.getByTestId("placement-message")).toContainText(
     "Campfire relocated",
   );
-  await openBuild(page);
+  await openKnownClosedBuild(page);
   await expectRowPosition(rows.nth(0), 1, 0);
   expect(await first.evaluate((node) => node.isConnected)).toBe(true);
   await rows
@@ -133,18 +146,15 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
   page,
 }) => {
   await openM5World(page);
-  await openStatus(page);
-  await page.getByTestId("tap-to-move-toggle").check();
-  const playerBefore = await page.getByTestId("position").innerText();
-  await page.getByTestId("close-character-status").click();
+  const player = await captureFreshStationaryM5Projection(page);
   await openBuild(page);
   await page.getByTestId("build-Healer").click();
-  await tapWorldPosition(page, 1, 1);
+  await tapWorldPosition(page, player, 1, 1);
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openStatus(page);
-  await expect(page.getByTestId("position")).toHaveText(playerBefore);
+  await expect(page.getByTestId("position")).toHaveText(player.positionText);
   await page.getByTestId("close-character-status").click();
-  await openBuild(page);
+  await openKnownClosedBuild(page);
   const row = page
     .getByTestId("building-list")
     .locator(".building-row")
@@ -176,16 +186,22 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
     row.getByRole("button", { name: "Upgrade", exact: true }),
   ).toBeDisabled();
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, 4, 0);
+  await tapWorldPosition(page, player, 4, 0);
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   await relocate.click();
-  await tapWorldPosition(page, 4, 0);
+  await tapWorldPosition(page, player, 4, 0);
   await expect(page.getByTestId("placement-message")).toContainText(
     "overlaps an existing building",
   );
-  await expect(page.getByTestId("placement-mode")).toContainText(
+  const placementMode = page.getByTestId("placement-mode");
+  expect(await placementMode.textContent()).toContain(
     "Healing Hut relocation selected",
+  );
+  await expect(placementMode).not.toHaveAttribute("hidden");
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "active",
   );
   await openBuild(page);
   await expectRowPosition(row, 1, 1);
@@ -203,16 +219,35 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
     "data-healing-hut-aura-count",
     "0",
   );
-  // Reset also cancels a pending next-tap operation and clears its feedback.
-  await page.getByTestId("build-Campfire").click();
-  await openStatus(page);
-  await page.getByTestId("new-world").click();
-  await expect(page.getByTestId("placement-mode")).toBeHidden();
-  await expect(page.getByTestId("placement-message")).toBeEmpty();
-  expect(
-    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
-  ).toBeNull();
   await rowHandle.dispose();
   await auraHandle.dispose();
   await relocate.dispose();
+});
+
+// This remains a live public reset assertion, isolated from the long retention
+// journey so incidental progression choices cannot consume its fixed watchdog.
+test("M5 reset cancels a pending next-tap operation and clears feedback without persistence", async ({
+  page,
+}) => {
+  await openM5World(page);
+  await openBuild(page);
+  await page.getByTestId("build-Campfire").click();
+  const placementMode = page.getByTestId("placement-mode");
+  await expect(placementMode).toContainText("Campfire selected");
+  await expect(placementMode).not.toHaveAttribute("hidden");
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "active",
+  );
+  await openStatus(page);
+  await page.getByTestId("new-world").click();
+  await expect(placementMode).toBeHidden();
+  await expect(page.getByTestId("placement-message")).toBeEmpty();
+  await expect(page.locator(".world-host")).toHaveAttribute(
+    "data-placement-mode",
+    "inactive",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+  ).toBeNull();
 });
