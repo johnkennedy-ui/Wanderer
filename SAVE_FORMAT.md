@@ -64,7 +64,10 @@ Boss/AoE route from the tier-5 skill rather than persisting a separate route
 field. If a frozen V2/V3 validator had accepted a non-canonical but known
 legacy skill selection, pure migration retains those exact IDs with the narrow
 `legacySkillSelection: true` V4 compatibility marker so a later explicit save
-does not discard them. New progression never creates that marker.
+does not discard them. New progression never creates that marker, and a marked
+ambiguous selection does not receive new route-continuation choices. V4 accepts
+only the listed progression fields; a persisted `route` field is rejected
+because the current route remains derived from the tier-5 skill.
 
 The current in-memory hydration model is separate. Loading performs a pure sequence:
 

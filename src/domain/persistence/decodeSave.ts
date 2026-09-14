@@ -39,8 +39,13 @@ const cloneSaveV4 = (document: SaveV4Document): CurrentSave => ({
   savePointId: document.savePointId,
   savePointPosition: { ...document.savePointPosition },
   classProgression: {
-    ...document.classProgression,
+    experience: document.classProgression.experience,
+    level: document.classProgression.level,
+    playerClass: document.classProgression.playerClass,
     skillIds: [...document.classProgression.skillIds],
+    ...(document.classProgression.legacySkillSelection === true
+      ? { legacySkillSelection: true as const }
+      : {}),
     allocatedStats: { ...document.classProgression.allocatedStats },
     weaponRank: document.classProgression.weaponRank ?? 0,
   },

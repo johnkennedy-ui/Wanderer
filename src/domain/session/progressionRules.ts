@@ -213,6 +213,7 @@ export const pendingClassSkillChoicesFor = (
   progression: ClassProgression,
 ): readonly ClassSkillId[] => {
   if (progression.playerClass === null) return [];
+  if (progression.legacySkillSelection === true) return [];
   const tier = progression.skillIds.length + 1;
   if (tier > maximumClassSkillTier || progression.level < tier + 1) return [];
   const selectedRoute = progression.skillIds

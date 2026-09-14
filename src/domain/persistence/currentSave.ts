@@ -108,8 +108,13 @@ export const toCurrentSaveStorageDocument = (
   ...toSaveV2Document(save),
   schemaVersion: 4,
   classProgression: {
-    ...save.classProgression,
+    experience: save.classProgression.experience,
+    level: save.classProgression.level,
+    playerClass: save.classProgression.playerClass,
     skillIds: [...save.classProgression.skillIds],
+    ...(save.classProgression.legacySkillSelection === true
+      ? { legacySkillSelection: true as const }
+      : {}),
     allocatedStats: { ...save.classProgression.allocatedStats },
     weaponRank: save.classProgression.weaponRank ?? 0,
   },

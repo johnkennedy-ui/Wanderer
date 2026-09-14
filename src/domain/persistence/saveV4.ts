@@ -28,6 +28,23 @@ export interface SaveV4Document extends Omit<SaveV2Document, "schemaVersion"> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const classProgressionKeys = Object.freeze([
+  "experience",
+  "level",
+  "playerClass",
+  "skillIds",
+  "legacySkillSelection",
+  "allocatedStats",
+  "weaponRank",
+] as const);
+
+type ClassProgressionKey = (typeof classProgressionKeys)[number];
+
+const hasOnlyClassProgressionKeys = (value: Record<string, unknown>): boolean =>
+  Object.keys(value).every((key) =>
+    classProgressionKeys.includes(key as ClassProgressionKey),
+  );
+
 const isAllocationRecord = (value: unknown): value is PlayerStatAllocations => {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value).sort();
@@ -80,18 +97,28 @@ const isContiguousClassSkillPrefix = (
  */
 const isMarkedLegacySkillSelection = (
   playerClass: PlayerClass | null,
+  level: number,
   skillIds: readonly ClassSkillId[],
-): boolean =>
-  playerClass !== null &&
-  skillIds.every((id) =>
-    legacyClassSkillIds.includes(id as LegacyClassSkillId),
-  );
+): boolean => {
+  if (
+    !skillIds.every((id) =>
+      legacyClassSkillIds.includes(id as LegacyClassSkillId),
+    )
+  )
+    return false;
+  if (playerClass === null) return skillIds.length > 0;
+  return !isContiguousClassSkillPrefix(playerClass, level, skillIds);
+};
 
 /** Validates current progression, including route continuity after tier 5. */
 export const isClassProgressionV4 = (
   value: unknown,
 ): value is ClassProgression => {
-  if (!isRecord(value) || !isAllocationRecord(value.allocatedStats))
+  if (
+    !isRecord(value) ||
+    !hasOnlyClassProgressionKeys(value) ||
+    !isAllocationRecord(value.allocatedStats)
+  )
     return false;
   if (
     value.legacySkillSelection !== undefined &&
@@ -123,7 +150,11 @@ export const isClassProgressionV4 = (
   const playerClass = value.playerClass as PlayerClass | null;
   const skillIds = value.skillIds as readonly ClassSkillId[];
   if (value.legacySkillSelection === true)
-    return isMarkedLegacySkillSelection(playerClass, skillIds);
+    return isMarkedLegacySkillSelection(
+      playerClass,
+      value.level as number,
+      skillIds,
+    );
   if (playerClass === null)
     return allocationTotal === 0 && value.skillIds.length === 0;
   return isContiguousClassSkillPrefix(
