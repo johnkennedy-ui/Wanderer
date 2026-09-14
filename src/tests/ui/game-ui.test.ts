@@ -327,6 +327,7 @@ const setupUi = () => {
     chooseClass: vi.fn(),
     chooseClassSkill: vi.fn(),
     allocateStat: vi.fn(),
+    setSimulationSpeed: vi.fn(),
   } satisfies UiIntents;
   const ui = createGameUi(asElement(root), intents);
   const shell = root.children[1];
@@ -339,6 +340,52 @@ const setupUi = () => {
 };
 
 describe("current HUD placement port", () => {
+  it("opens Settings above runtime-only 1×, 2×, and 5× speed controls", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render(snapshot());
+    const settings = get("settings-toggle");
+    const controls = get("settings-speed-controls");
+    const atOne = get("speed-1x");
+    const atTwo = get("speed-2x");
+    const atFive = get("speed-5x");
+
+    expect(settings.getAttribute("aria-label")).toBe("Settings");
+    expect(settings.getAttribute("aria-controls")).toBe(
+      "settings-speed-controls",
+    );
+    expect(settings.getAttribute("aria-expanded")).toBe("false");
+    expect(controls.hidden).toBe(true);
+    expect(atOne.getAttribute("aria-pressed")).toBe("true");
+    expect(atTwo.getAttribute("aria-pressed")).toBe("false");
+    expect(atFive.getAttribute("aria-pressed")).toBe("false");
+
+    settings.click();
+    expect(controls.hidden).toBe(false);
+    expect(settings.getAttribute("aria-expanded")).toBe("true");
+    atTwo.click();
+    expect(intents.setSimulationSpeed).toHaveBeenLastCalledWith(2);
+    expect(atOne.getAttribute("aria-pressed")).toBe("false");
+    expect(atTwo.getAttribute("aria-pressed")).toBe("true");
+    expect(atFive.getAttribute("aria-pressed")).toBe("false");
+    atFive.click();
+    expect(intents.setSimulationSpeed).toHaveBeenLastCalledWith(5);
+    expect(atTwo.getAttribute("aria-pressed")).toBe("false");
+    expect(atFive.getAttribute("aria-pressed")).toBe("true");
+    atOne.click();
+    expect(intents.setSimulationSpeed).toHaveBeenLastCalledWith(1);
+    expect(atOne.getAttribute("aria-pressed")).toBe("true");
+
+    get("resources-toggle").click();
+    expect(controls.hidden).toBe(true);
+    settings.click();
+    get("build-menu-toggle").click();
+    expect(controls.hidden).toBe(true);
+    get("build-buttons").children[0].click();
+    expect(ui.isWorldPlacementEnabled()).toBe(true);
+    expect(controls.hidden).toBe(true);
+    ui.dispose();
+  });
+
   it("projects six primary stat controls through intents without changing the eight-stat list", () => {
     const { ui, intents, get } = setupUi();
     ui.render({

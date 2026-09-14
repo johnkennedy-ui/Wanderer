@@ -75,6 +75,7 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
       chooseClass() {},
       chooseClassSkill() {},
       allocateStat() {},
+      setSimulationSpeed() {},
       place: () => ({ ok: false, rejection: { kind: "blocked-terrain" } }),
       relocate: () => ({ ok: false, rejection: { kind: "unknown-building" } }),
     };
