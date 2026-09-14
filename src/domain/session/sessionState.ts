@@ -40,6 +40,11 @@ export interface RuntimeEnemy {
   maxHp: number;
   damage: number;
   dangerTier: number;
+  /**
+   * Runtime-only health provenance used when a player class or level changes.
+   * Direct legacy fixtures may omit it; runtime refresh treats that as one.
+   */
+  spawnHealthMultiplier?: number;
   dropMultiplier: number;
   moveSpeed: number;
   attackEverySeconds: number;

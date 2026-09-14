@@ -7,6 +7,7 @@ import {
   missingVisibleRuntimeEnemyDraftsFor,
   visibleChunksFor,
 } from "../../domain/session/worldRuntime";
+import { maxEnemyHpFor } from "../../domain/session/enemyHealthScaling";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
 import {
   generateChunk,
@@ -236,6 +237,7 @@ describe("session world runtime coordination", () => {
         ),
       ),
       dangerTier: scoutSpawn.danger.tier,
+      spawnHealthMultiplier: scoutSpawn.danger.healthMultiplier,
       dropMultiplier: scoutSpawn.danger.dropMultiplier,
       moveSpeed: enemyDefinitions.scout.moveSpeed,
       attackEverySeconds: enemyDefinitions.scout.attackEverySeconds,
@@ -259,8 +261,38 @@ describe("session world runtime coordination", () => {
       "moveSpeed",
       "position",
       "respawnAt",
+      "spawnHealthMultiplier",
       "spawnPosition",
     ]);
+  });
+
+  it("applies the selected hit floor after each world spawn's danger multiplier", () => {
+    const visibleChunks = visibleChunksFor(world, { x: 0, y: 0 });
+    const enemyHealthContext = { level: 10, normalPrimaryDamage: 30 };
+    const drafts = missingVisibleRuntimeEnemyDraftsFor({
+      visibleChunks,
+      existingEnemies: new Map(),
+      defeatedBossIds: new Set(),
+      enemyHealthContext,
+    });
+    const spawnsById = new Map(
+      visibleChunks
+        .flatMap((chunk) => chunk.spawns)
+        .map((spawn) => [spawn.id, spawn]),
+    );
+
+    for (const draft of drafts) {
+      const spawn = spawnsById.get(draft.id);
+      if (spawn === undefined) throw new Error(`missing spawn for ${draft.id}`);
+      expect(draft.spawnHealthMultiplier).toBe(spawn.danger.healthMultiplier);
+      expect(draft.maxHp).toBe(
+        maxEnemyHpFor({
+          authoredMaxHp: enemyDefinitions[draft.kind].maxHp,
+          spawnHealthMultiplier: spawn.danger.healthMultiplier,
+          context: enemyHealthContext,
+        }),
+      );
+    }
   });
 
   it("keeps visible IDs unique and a moved runtime enemy intact across repeated presentation and tick setup", () => {

@@ -4,6 +4,7 @@ import {
   waveEnemyDraftsFor,
   wavePhaseFor,
 } from "../../domain/session/wavePolicy";
+import { maxEnemyHpFor } from "../../domain/session/enemyHealthScaling";
 
 describe("timed wave policy", () => {
   it("starts at two minutes, runs for exactly thirty seconds, then schedules the next interval", () => {
@@ -55,5 +56,39 @@ describe("timed wave policy", () => {
         enemyDefinitions.boss.damage * gameplayTuning.waveBossDamageMultiplier,
       dropMultiplier: gameplayTuning.waveBossDropMultiplier,
     });
+  });
+
+  it("uses identical damage-relative policy for normal waves and wave bosses", () => {
+    const enemyHealthContext = { level: 10, normalPrimaryDamage: 30 };
+    const drafts = waveEnemyDraftsFor({
+      seed: "wave-policy-health-seed",
+      waveIndex: 1,
+      center: { x: 10, y: -4 },
+      enemyHealthContext,
+    });
+    const normal = drafts.filter((enemy) => !enemy.isWaveBoss);
+    const boss = drafts.find((enemy) => enemy.isWaveBoss);
+    if (boss === undefined) throw new Error("missing wave boss");
+
+    for (const enemy of normal) {
+      expect(enemy.spawnHealthMultiplier).toBe(1);
+      expect(enemy.maxHp).toBe(
+        maxEnemyHpFor({
+          authoredMaxHp: enemyDefinitions[enemy.kind].maxHp,
+          spawnHealthMultiplier: 1,
+          context: enemyHealthContext,
+        }),
+      );
+    }
+    expect(boss.spawnHealthMultiplier).toBe(
+      gameplayTuning.waveBossHealthMultiplier,
+    );
+    expect(boss.maxHp).toBe(
+      maxEnemyHpFor({
+        authoredMaxHp: enemyDefinitions.boss.maxHp,
+        spawnHealthMultiplier: gameplayTuning.waveBossHealthMultiplier,
+        context: enemyHealthContext,
+      }),
+    );
   });
 });
