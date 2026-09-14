@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { Vector2 } from "../../domain/types";
-import { EnemyHealthOverlay } from "./enemyHealthOverlay";
+import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";

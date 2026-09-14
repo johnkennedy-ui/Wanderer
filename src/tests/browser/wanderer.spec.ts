@@ -145,6 +145,14 @@ test(
       level: 0,
       playerClass: null,
       skillIds: [],
+      allocatedStats: {
+        strength: 0,
+        agility: 0,
+        vitality: 0,
+        magic: 0,
+        dexterity: 0,
+        luck: 0,
+      },
       weaponRank: 0,
     });
     await page.addInitScript(
