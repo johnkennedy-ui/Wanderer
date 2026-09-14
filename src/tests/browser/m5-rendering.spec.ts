@@ -146,6 +146,10 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
   page,
 }) => {
   await openM5World(page);
+  // Boss defeat itself is the lifecycle boundary under test. Do not let the
+  // shared incidental handler consume that public modal while this assertion
+  // is polling; the terminal state must remain observable here.
+  await page.removeLocatorHandler(page.getByTestId("upgrade-modal"));
   const boss = page.locator(
     '[data-testid="world-enemy-hp"][data-enemy-id="boss:ember-wyrm"]',
   );
@@ -171,6 +175,9 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
   expect(["60", "48", "36", "24", "12"]).toContain(observedHealth.value);
   expect(observedHealth.text).toBe(`${observedHealth.value} / 72 HP`);
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(page.getByTestId("upgrade-modal")).toBeVisible({
+    timeout: 4_000,
+  });
   await expect(boss).toHaveCount(0, { timeout: 4_000 });
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(false);
   expect(
