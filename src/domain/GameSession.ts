@@ -130,6 +130,7 @@ export class GameSession {
   private attackElapsed!: number;
   private playerHitRecoveryEndsAt = 0;
   private startedWaveIndices = new Set<number>();
+  private pendingWaveIndices = new Set<number>();
   private notice!: GameNotice;
   private combatStatus!: string;
   constructor(options: SessionOptions = {}) {
@@ -177,6 +178,7 @@ export class GameSession {
     this.attackElapsed = state.attackElapsed;
     this.playerHitRecoveryEndsAt = 0;
     this.startedWaveIndices = new Set();
+    this.pendingWaveIndices = new Set();
     this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
@@ -531,49 +533,64 @@ export class GameSession {
         this.enemies.delete(id);
 
     const phase = wavePhaseFor(this.elapsed);
-    if (!phase.active || this.startedWaveIndices.has(phase.waveIndex)) return;
-    const drafts = waveEnemyDraftsFor({
-      seed: this.world.seed,
-      waveIndex: phase.waveIndex,
-      center: this.player.position,
-      enemyHealthContext: this.enemyHealthContext(),
-    });
-    const safeDrafts = drafts.map((enemy) => ({
-      enemy,
-      position: nearestTerrainSafePosition(
-        this.world,
-        enemy.position,
-        this.chunkRecipes.get,
-        enemyTerrainClearanceFor(enemy.kind),
-      ),
-    }));
-    // Do not partially materialize a required wave. Leaving its index unstarted
-    // makes the active lifecycle retry the complete deterministic draft set.
-    if (safeDrafts.some((draft) => draft.position === null)) return;
-    for (const { enemy, position } of safeDrafts) {
-      if (position === null) return;
-      this.enemies.set(
-        enemy.id,
-        position === enemy.position
-          ? enemy
-          : {
-              ...enemy,
-              position: copyVector(position),
-              spawnPosition: copyVector(position),
-            },
+    if (
+      phase.active &&
+      !this.startedWaveIndices.has(phase.waveIndex) &&
+      !this.pendingWaveIndices.has(phase.waveIndex)
+    )
+      this.pendingWaveIndices.add(phase.waveIndex);
+
+    for (const waveIndex of this.pendingWaveIndices) {
+      const drafts = waveEnemyDraftsFor({
+        seed: this.world.seed,
+        waveIndex,
+        center: this.player.position,
+        enemyHealthContext: this.enemyHealthContext(),
+      });
+      const safeDrafts = drafts.map((enemy) => ({
+        enemy,
+        position: nearestTerrainSafePosition(
+          this.world,
+          enemy.position,
+          this.chunkRecipes.get,
+          enemyTerrainClearanceFor(enemy.kind),
+        ),
+      }));
+      // Do not partially materialize a required wave. A bounded V3 search can
+      // exhaust while terrain blocks every draft, so retain the complete wave
+      // for a later retry rather than treating that failure as progression.
+      if (safeDrafts.some((draft) => draft.position === null)) return;
+      for (const { enemy, position } of safeDrafts) {
+        if (position === null) return;
+        const waveExpiresAt =
+          enemy.waveExpiresAt !== undefined &&
+          this.elapsed >= enemy.waveExpiresAt
+            ? this.elapsed + gameplayTuning.waveDurationSeconds
+            : enemy.waveExpiresAt;
+        this.enemies.set(enemy.id, {
+          ...enemy,
+          ...(waveExpiresAt === undefined ? {} : { waveExpiresAt }),
+          ...(position === enemy.position
+            ? {}
+            : {
+                position: copyVector(position),
+                spawnPosition: copyVector(position),
+              }),
+        });
+      }
+      this.pendingWaveIndices.delete(waveIndex);
+      this.startedWaveIndices.add(waveIndex);
+      const boss = [...this.enemies.values()].find(
+        (enemy) => enemy.waveIndex === waveIndex && enemy.isWaveBoss === true,
       );
+      if (boss?.bossName !== undefined)
+        this.notice = {
+          kind: "wave.started",
+          waveIndex,
+          bossName: boss.bossName,
+        };
+      return;
     }
-    this.startedWaveIndices.add(phase.waveIndex);
-    const boss = [...this.enemies.values()].find(
-      (enemy) =>
-        enemy.waveIndex === phase.waveIndex && enemy.isWaveBoss === true,
-    );
-    if (boss?.bossName !== undefined)
-      this.notice = {
-        kind: "wave.started",
-        waveIndex: phase.waveIndex,
-        bossName: boss.bossName,
-      };
   }
   private waveStatus() {
     const phase = wavePhaseFor(this.elapsed);

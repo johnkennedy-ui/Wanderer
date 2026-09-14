@@ -112,12 +112,11 @@ describe("GameSession timed waves", () => {
     ).not.toEqual(rawDrafts[0].spawnPosition);
   });
 
-  it("retries a fully blocked V3 wave without inserting blocked drafts", () => {
+  it("keeps a blocked V3 wave pending across its window and retries in the same session", () => {
     const world = {
       seed: "fully-blocked-wave",
       generatorVersion: WANDERER_WEB_V3,
     };
-    let blocked = true;
     const recipeSource = (
       _world: WorldIdentity,
       coordinate: { x: number; y: number },
@@ -126,24 +125,31 @@ describe("GameSession timed waves", () => {
         coordinate,
         key: `${coordinate.x},${coordinate.y}`,
         domainSeeds: {},
-        obstacles: blocked
-          ? [
-              {
-                id: "water:wave-exhaustion",
-                kind: "water",
-                waterKind: "lake",
-                radius: 20,
-                position: { x: 0, y: 0 },
-              },
-            ]
-          : [],
+        obstacles: [
+          {
+            id: "water:wave-exhaustion",
+            kind: "water",
+            waterKind: "lake",
+            radius: 30,
+            position: { x: 0, y: 0 },
+          },
+        ],
         campfires: [],
         spawns: [],
       };
     };
-    const session = new GameSession({ world, chunkRecipeSource: recipeSource });
-    advance(session, 119.9);
-    session.tick(0.1);
+    const saved = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...saved,
+        world,
+        // Start fractionally off-center so keyboard input can retreat from the
+        // static footprint through the normal outward-movement resolver.
+        player: { ...saved.player, position: { x: 1, y: 1 } },
+      },
+      chunkRecipeSource: recipeSource,
+    });
+    advance(session, 120);
 
     expect(
       session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
@@ -154,9 +160,18 @@ describe("GameSession timed waves", () => {
       bossActive: false,
     });
 
-    blocked = false;
-    session.resetWorld(world.seed);
-    session.tick(0.1);
+    // The original window has closed, but no reset clears the pending work.
+    advance(session, 30);
+    expect(
+      session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
+    ).toEqual([]);
+    expect(session.presentation().ui.wave.active).toBe(false);
+
+    // Keyboard retreat is an ordinary supported movement input. Once the
+    // player has left the static blocked region, the retained full wave can
+    // safely materialize around that current position in this same session.
+    session.move({ intent: { x: 1, y: 1 }, source: "keyboard", at: 151 });
+    advance(session, 25);
     const expected = waveEnemyDraftsFor({
       seed: world.seed,
       waveIndex: 1,
@@ -171,6 +186,12 @@ describe("GameSession timed waves", () => {
       expected.map((enemy) => enemy.id).sort(),
     );
     expect(session.presentation().ui.wave.bossActive).toBe(true);
+    expect(session.presentation().ui.wave.active).toBe(false);
+    const normalEnemies = retried.filter((enemy) => !enemy.isWaveBoss);
+    expect(normalEnemies).toHaveLength(15);
+    expect(
+      normalEnemies.every((enemy) => (enemy.waveExpiresAt ?? 0) > 175),
+    ).toBe(true);
     session.tick(0.1);
     expect(
       session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
