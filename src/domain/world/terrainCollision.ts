@@ -185,6 +185,45 @@ const firstCircleContact = (
   return contact >= 0 && contact <= 1 ? contact : null;
 };
 
+const roundedPositionIsClearOf = (
+  position: Vector2,
+  obstacles: readonly ChunkObstacle[],
+  clearance: number,
+): boolean =>
+  obstacles.every(
+    (obstacle) =>
+      distance(obstacle.position, roundVector(position)) >=
+      radiusFor(obstacle.radius) + clearance,
+  );
+
+const endpointWithSafeRounding = (
+  start: Vector2,
+  endpoint: Vector2,
+  obstacles: readonly ChunkObstacle[],
+  clearance: number,
+): Vector2 => {
+  if (roundedPositionIsClearOf(endpoint, obstacles, clearance)) return endpoint;
+  // A saved/player position can predate V3 terrain and already be rounded into
+  // a footprint. Keep the existing resolver's outward-retreat behaviour in
+  // that state rather than claiming there is a safe point behind it.
+  if (!roundedPositionIsClearOf(start, obstacles, clearance)) return endpoint;
+
+  let safe = start;
+  let unsafe = endpoint;
+  // The rounded endpoint is the invariant. A fixed, local bisection finds the
+  // last two-decimal-safe point without more terrain recipe queries.
+  for (let index = 0; index < 16; index += 1) {
+    const candidate = {
+      x: (safe.x + unsafe.x) / 2,
+      y: (safe.y + unsafe.y) / 2,
+    };
+    if (roundedPositionIsClearOf(candidate, obstacles, clearance))
+      safe = candidate;
+    else unsafe = candidate;
+  }
+  return safe;
+};
+
 /**
  * Analytic circle sweeping performs one bounded recipe collection per move,
  * rather than nine chunk lookups for every fixed-distance probe. Legacy
@@ -199,14 +238,9 @@ export const sweepTerrainMovement = (
 ): Vector2 => {
   if (world.generatorVersion !== WANDERER_WEB_V3) return desired;
   const end = cappedDestinationFor(start, desired);
+  const obstacles = v3ObstaclesFor(world, start, end, clearance, recipeSource);
   let firstContact = 1;
-  for (const obstacle of v3ObstaclesFor(
-    world,
-    start,
-    end,
-    clearance,
-    recipeSource,
-  )) {
+  for (const obstacle of obstacles) {
     const contact = firstCircleContact(
       start,
       end,
@@ -215,14 +249,20 @@ export const sweepTerrainMovement = (
     );
     if (contact !== null && contact < firstContact) firstContact = contact;
   }
-  if (firstContact === 1) return end;
+  if (firstContact === 1)
+    return endpointWithSafeRounding(start, end, obstacles, clearance);
   const travel = Math.hypot(end.x - start.x, end.y - start.y);
   const safeFraction = Math.max(
     0,
     firstContact - ROUNDING_CLEARANCE / Math.max(travel, 1),
   );
-  return {
-    x: start.x + (end.x - start.x) * safeFraction,
-    y: start.y + (end.y - start.y) * safeFraction,
-  };
+  return endpointWithSafeRounding(
+    start,
+    {
+      x: start.x + (end.x - start.x) * safeFraction,
+      y: start.y + (end.y - start.y) * safeFraction,
+    },
+    obstacles,
+    clearance,
+  );
 };

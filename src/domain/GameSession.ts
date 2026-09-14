@@ -697,18 +697,22 @@ export class GameSession {
       };
       return false;
     }
-    const next = roundVector(
-      sweepTerrainMovement(
-        this.world,
-        this.player.position,
-        add(this.player.position, scale(normalize(offset), maximumTravel)),
-        this.chunkRecipes.get,
-      ),
+    const desired = add(
+      this.player.position,
+      scale(normalize(offset), maximumTravel),
     );
+    const swept = sweepTerrainMovement(
+      this.world,
+      this.player.position,
+      desired,
+      this.chunkRecipes.get,
+    );
+    const next = roundVector(swept);
     if (
       next.x === this.player.position.x &&
       next.y === this.player.position.y
     ) {
+      if (swept.x === desired.x && swept.y === desired.y) return true;
       this.destination = null;
       this.input = {
         intent: { x: 0, y: 0 },

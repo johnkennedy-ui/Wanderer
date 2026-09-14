@@ -110,6 +110,43 @@ describe("terrain collision", () => {
     ).toBeGreaterThan(1.28);
   });
 
+  it("keeps every rounded V3 sweep endpoint outside an isolated rock", () => {
+    const center = { x: 82, y: 82 };
+    const isolatedRock = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => ({
+      coordinate,
+      key: `${coordinate.x},${coordinate.y}`,
+      domainSeeds: {},
+      obstacles: [
+        {
+          id: "rock:isolated",
+          kind: "rock",
+          radius: 0.38,
+          position: center,
+        },
+      ],
+      campfires: [],
+      spawns: [],
+    });
+    const start = { x: 82.67, y: 82.11 };
+    const clearance = 0.28;
+    const radius = 0.38 + clearance;
+
+    for (const desired of [
+      { x: 82.64, y: 82.11 },
+      { x: 82.652, y: 82.11 },
+    ]) {
+      const rounded = roundVector(
+        sweepTerrainMovement(world, start, desired, isolatedRock, clearance),
+      );
+      expect(
+        Math.hypot(rounded.x - center.x, rounded.y - center.y),
+      ).toBeGreaterThanOrEqual(radius);
+    }
+  });
+
   it("collects recipes once per covered chunk instead of probing every 8cm", () => {
     const calls: { x: number; y: number }[] = [];
     const countingSource = (
