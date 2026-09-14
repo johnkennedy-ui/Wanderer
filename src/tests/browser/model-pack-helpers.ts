@@ -64,7 +64,8 @@ export const captureBrowserFaults = (page: Page): readonly string[] => {
   const faults: string[] = [];
   page.on("pageerror", (error) => faults.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error") faults.push(`console: ${message.text()}`);
+    if (message.type() === "error")
+      faults.push(`console: ${message.location().url} ${message.text()}`);
   });
   page.on("requestfailed", (request) =>
     faults.push(
@@ -80,7 +81,7 @@ export const expectOnlyMissingModelFaults = (
   faults: readonly string[],
 ): void => {
   for (const fault of faults)
-    expect(fault).toMatch(/(?:\.glb|model).*404|404.*(?:\.glb|model)/i);
+    expect(fault).toMatch(/^console: .*\/player_knight\.glb\s+.*\b404\b/i);
 };
 
 export const activeModelKeys = async (
