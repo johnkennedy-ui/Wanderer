@@ -244,6 +244,24 @@ export class RetainedProjection {
     });
   }
 
+  /** Keeps the proven geometric marker as an async GLB fallback. */
+  setModelVisible(id: string, visible: boolean): void {
+    const mesh =
+      id === "player"
+        ? this.player
+        : [
+            this.obstacles,
+            this.campfires,
+            this.buildings,
+            this.enemies,
+            this.projectiles,
+            this.crescents,
+          ]
+            .map((map) => map.get(id))
+            .find((candidate) => candidate !== undefined);
+    if (mesh !== undefined) mesh.visible = !visible;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

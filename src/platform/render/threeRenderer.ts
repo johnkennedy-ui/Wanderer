@@ -3,6 +3,7 @@ import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { Vector2 } from "../../domain/types";
 import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
+import { ModelProjection } from "./modelPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
@@ -55,6 +56,8 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   scene.add(floor);
   const projection = new RetainedProjection();
   scene.add(projection.group);
+  const models = new ModelProjection();
+  scene.add(models.group);
   const playerHealthLabel = document.createElement("div");
   playerHealthLabel.dataset.testid = "world-player-hp";
   playerHealthLabel.className = "world-player-hp";
@@ -122,6 +125,9 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     render(snapshot: GameRendererSnapshot): void {
       if (disposed) return;
       projection.render(snapshot);
+      models.render(snapshot, (id, visible) =>
+        projection.setModelVisible(id, visible),
+      );
       camera.position.set(
         snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
         defaultThreeCameraTuning.playerOffset.y,
@@ -177,6 +183,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       disposed = true;
       observer.disconnect();
       projection.dispose();
+      models.dispose();
       enemyHealthOverlay.dispose();
       floor.geometry.dispose();
       floor.material.dispose();
