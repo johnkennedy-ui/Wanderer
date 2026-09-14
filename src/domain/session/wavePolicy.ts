@@ -132,6 +132,7 @@ const draftFor = ({
     respawnAt: null,
     defeated: false,
     attackElapsed: 0,
+    attackEventOrdinal: 0,
     waveIndex,
     ...(waveExpiresAt === undefined ? {} : { waveExpiresAt }),
     ...(isWaveBoss ? { isWaveBoss: true, bossName } : {}),

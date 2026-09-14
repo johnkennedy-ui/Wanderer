@@ -1,5 +1,6 @@
 import type {
   BuildingKind,
+  AllocatablePlayerStatKind,
   BuildingState,
   ClassProgression,
   ClassSkillId,
@@ -84,6 +85,15 @@ export type GameNotice =
   | { readonly kind: "class.selected"; readonly playerClass: PlayerClass }
   | { readonly kind: "class-skill.rejected.invalid-choice" }
   | { readonly kind: "class-skill.selected"; readonly skillId: ClassSkillId }
+  | {
+      readonly kind: "stat-allocation.applied";
+      readonly stat: AllocatablePlayerStatKind;
+      readonly allocated: number;
+      readonly statPointsAvailable: number;
+    }
+  | { readonly kind: "stat-allocation.rejected.no-class" }
+  | { readonly kind: "stat-allocation.rejected.no-points" }
+  | { readonly kind: "stat-allocation.rejected.invalid-stat" }
   | { readonly kind: "save.rejected.not-near-campfire" }
   | { readonly kind: "save.committed"; readonly savePointId: string }
   | {
@@ -128,6 +138,8 @@ export interface GameUiSnapshot {
   readonly classProgression: ClassProgression;
   readonly pendingClassChoices: readonly PlayerClass[];
   readonly pendingClassSkillChoices: readonly ClassSkillId[];
+  /** Earned but unspent level-up points; allocation remains class-gated. */
+  readonly statPointsAvailable: number;
   readonly weaponRelicDropCount: number;
   readonly canSave: boolean;
   readonly savePointLabel: string | null;

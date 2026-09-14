@@ -1,44 +1,69 @@
 import { classSkillIds, playerClasses } from "../types";
-import type { ClassProgression, CurrentSave } from "../types";
+import type {
+  ClassProgression,
+  CurrentSave,
+  PlayerStatAllocations,
+} from "../types";
 import { isSupportedWorldGeneratorVersion } from "../world";
-import { isSaveV2Document } from "./saveV2";
+import { isClassProgressionV3, isSaveV3Document } from "./saveV3";
+import type { SaveV3Document } from "./saveV3";
 import type { SaveV2Document } from "./saveV2";
 
 /**
  * The canonical in-memory save/hydration representation may evolve with the
- * runtime. The historical wire representation in saveV2.ts may not.
+ * runtime. The historical wire representation in saveV2.ts remains frozen.
  */
 export type { CurrentSave } from "../types";
 
-export const isClassProgression = (
+/** Strict V3 validation is also the current progression validator. */
+export const isClassProgression = isClassProgressionV3;
+
+/**
+ * Released schema-2 documents could carry a non-wire progression extension.
+ * It predates allocations, so its level is intentionally normalized during
+ * pure migration rather than trusted as a current V3 value.
+ */
+export type LegacyClassProgression = Omit<
+  ClassProgression,
+  "allocatedStats"
+> & {
+  readonly allocatedStats?: PlayerStatAllocations;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+/** Validates only fields that historical V2 extensions could safely contain. */
+export const isLegacyClassProgression = (
   value: unknown,
-): value is ClassProgression => {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
+): value is LegacyClassProgression => {
+  if (!isRecord(value)) return false;
   return (
-    Number.isInteger(candidate.experience) &&
-    (candidate.experience as number) >= 0 &&
-    (candidate.level === 0 ||
-      candidate.level === 1 ||
-      candidate.level === 2 ||
-      candidate.level === 3 ||
-      candidate.level === 4 ||
-      candidate.level === 5) &&
-    (candidate.playerClass === null ||
+    Number.isInteger(value.experience) &&
+    (value.experience as number) >= 0 &&
+    (value.level === 0 ||
+      value.level === 1 ||
+      value.level === 2 ||
+      value.level === 3 ||
+      value.level === 4 ||
+      value.level === 5) &&
+    (value.playerClass === null ||
       playerClasses.includes(
-        candidate.playerClass as (typeof playerClasses)[number],
+        value.playerClass as (typeof playerClasses)[number],
       )) &&
-    Array.isArray(candidate.skillIds) &&
-    candidate.skillIds.every((id) =>
+    Array.isArray(value.skillIds) &&
+    value.skillIds.every((id) =>
       classSkillIds.includes(id as (typeof classSkillIds)[number]),
     ) &&
-    new Set(candidate.skillIds).size === candidate.skillIds.length &&
-    (candidate.weaponRank === undefined ||
-      (Number.isInteger(candidate.weaponRank) &&
-        (candidate.weaponRank as number) >= 0))
+    new Set(value.skillIds).size === value.skillIds.length &&
+    (value.weaponRank === undefined ||
+      (Number.isInteger(value.weaponRank) &&
+        (value.weaponRank as number) >= 0)) &&
+    value.allocatedStats === undefined
   );
 };
 
+/** Retains an exact frozen V2 projection for historical fixture comparisons. */
 export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
   schemaVersion: 2,
   world: {
@@ -74,32 +99,21 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
   },
 });
 
-/**
- * Browser storage can retain released current-save extensions while the
- * historical `toSaveV2Document` helper remains an exact frozen V2 DTO.
- */
+/** Copies the active V3 wire document without retaining runtime aliases. */
 export const toCurrentSaveStorageDocument = (
   save: CurrentSave,
-): CurrentSave => ({
+): SaveV3Document => ({
   ...toSaveV2Document(save),
-  ...(save.classProgression === undefined
-    ? {}
-    : {
-        classProgression: {
-          ...save.classProgression,
-          skillIds: [...save.classProgression.skillIds],
-          weaponRank: save.classProgression.weaponRank ?? 0,
-        },
-      }),
+  schemaVersion: 3,
+  classProgression: {
+    ...save.classProgression,
+    skillIds: [...save.classProgression.skillIds],
+    allocatedStats: { ...save.classProgression.allocatedStats },
+    weaponRank: save.classProgression.weaponRank ?? 0,
+  },
 });
 
-/** Current runtime validation is intentionally separate from V2 wire parsing. */
+/** Current runtime validation is intentionally separate from historical V2 parsing. */
 export const isCurrentSave = (value: unknown): value is CurrentSave =>
-  isSaveV2Document(value) &&
-  isSupportedWorldGeneratorVersion(value.world.generatorVersion) &&
-  (typeof value !== "object" ||
-    value === null ||
-    !("classProgression" in value) ||
-    isClassProgression(
-      (value as { readonly classProgression?: unknown }).classProgression,
-    ));
+  isSaveV3Document(value) &&
+  isSupportedWorldGeneratorVersion(value.world.generatorVersion);

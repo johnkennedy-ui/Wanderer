@@ -41,7 +41,7 @@ export const projectCurrentSave = (
   committedAt: number,
   savePoint: SettlementCampfire,
 ): CurrentSave => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   world: copyWorldIdentity(state.world),
   player: {
     position: copyVector(state.player.position),
@@ -59,6 +59,7 @@ export const projectCurrentSave = (
   classProgression: {
     ...state.classProgression,
     skillIds: [...state.classProgression.skillIds],
+    allocatedStats: { ...state.classProgression.allocatedStats },
     weaponRank: state.classProgression.weaponRank ?? 0,
   },
 });

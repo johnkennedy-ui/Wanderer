@@ -4,6 +4,7 @@ import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
+  AllocatablePlayerStatKind,
   ClassSkillId,
   DestinationCommand,
   FloorDropState,
@@ -17,6 +18,7 @@ import type {
   WeaponRelicDropState,
   WorldIdentity,
 } from "./types";
+import { allocatablePlayerStatKinds } from "./types";
 import {
   copyVector,
   createFreshSessionState,
@@ -57,11 +59,14 @@ import {
   describeProgressionEffects,
   applyClassSkillToPlayer,
   applyClassPassiveToPlayer,
+  applyAllocatedStatToPlayer,
+  applyLevelGrowthToPlayer,
   isValidClassSkillChoice,
   movingAttackSpeedMultiplierFor,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
   playerStatsFor,
+  statPointsAvailableFor,
 } from "./session/progressionRules";
 import {
   playerHitRecoveryPresentationFor,
@@ -94,6 +99,7 @@ export class GameSession {
   private nextProjectileSerial!: number;
   private nextCrescentSerial!: number;
   private nextFloorDropSerial!: number;
+  private nextAttackEventSerial!: number;
   private committedSavePoint!: SettlementCampfire;
   private input!: MoveCommand;
   private destination!: Vector2 | null;
@@ -136,6 +142,7 @@ export class GameSession {
     this.nextProjectileSerial = state.nextProjectileSerial;
     this.nextCrescentSerial = state.nextCrescentSerial;
     this.nextFloorDropSerial = state.nextFloorDropSerial;
+    this.nextAttackEventSerial = state.nextAttackEventSerial;
     this.committedSavePoint = state.committedSavePoint;
     this.input = state.input;
     this.destination = state.destination;
@@ -262,8 +269,44 @@ export class GameSession {
       return false;
     }
     this.classProgression = { ...this.classProgression, playerClass };
-    this.player = applyClassPassiveToPlayer(this.player, playerClass);
+    this.player = applyClassPassiveToPlayer(
+      this.player,
+      playerClass,
+      this.classProgression.level,
+    );
     this.notice = { kind: "class.selected", playerClass };
+    return true;
+  }
+  /** Allocates one earned point without implying persistence or UI wording. */
+  allocateStat(stat: AllocatablePlayerStatKind): boolean {
+    if (!allocatablePlayerStatKinds.includes(stat)) {
+      this.notice = { kind: "stat-allocation.rejected.invalid-stat" };
+      return false;
+    }
+    if (this.classProgression.playerClass === null) {
+      this.notice = { kind: "stat-allocation.rejected.no-class" };
+      return false;
+    }
+    const statPointsAvailable = statPointsAvailableFor(this.classProgression);
+    if (statPointsAvailable <= 0) {
+      this.notice = { kind: "stat-allocation.rejected.no-points" };
+      return false;
+    }
+    const allocated = this.classProgression.allocatedStats[stat] + 1;
+    this.classProgression = {
+      ...this.classProgression,
+      allocatedStats: {
+        ...this.classProgression.allocatedStats,
+        [stat]: allocated,
+      },
+    };
+    this.player = applyAllocatedStatToPlayer(this.player, stat);
+    this.notice = {
+      kind: "stat-allocation.applied",
+      stat,
+      allocated,
+      statPointsAvailable: statPointsAvailable - 1,
+    };
     return true;
   }
   chooseClassSkill(skillId: ClassSkillId): boolean {
@@ -391,6 +434,7 @@ export class GameSession {
       pendingClassSkillChoices: pendingClassSkillChoicesFor(
         this.classProgression,
       ),
+      statPointsAvailable: statPointsAvailableFor(this.classProgression),
       canSave: savePoint !== null,
       savePointLabel: savePoint?.label ?? null,
       notice: this.notice,
@@ -495,12 +539,15 @@ export class GameSession {
       attackElapsed: this.attackElapsed,
       nextProjectileSerial: this.nextProjectileSerial,
       nextCrescentSerial: this.nextCrescentSerial,
+      nextAttackEventSerial: this.nextAttackEventSerial,
+      worldSeed: this.world.seed,
     });
     this.projectiles = result.projectiles;
     this.crescentAttacks = result.crescentAttacks;
     this.attackElapsed = result.attackElapsed;
     this.nextProjectileSerial = result.nextProjectileSerial;
     this.nextCrescentSerial = result.nextCrescentSerial;
+    this.nextAttackEventSerial = result.nextAttackEventSerial;
     this.combatStatus = result.combatStatus;
     if (result.meleeImpacts.length > 0)
       this.updateMeleeCombat(result.meleeImpacts);
@@ -527,15 +574,8 @@ export class GameSession {
     this.defeatedBossIds = result.defeatedBossIds;
     this.pendingUpgradeChoices = result.pendingUpgradeChoices;
     this.nextFloorDropSerial = result.nextFloorDropSerial;
-    if (result.experienceEarned > 0) {
-      const experience =
-        this.classProgression.experience + result.experienceEarned;
-      this.classProgression = {
-        ...this.classProgression,
-        experience,
-        level: playerLevelForExperience(experience),
-      };
-    }
+    if (result.experienceEarned > 0)
+      this.grantExperience(result.experienceEarned);
     if (result.notice !== null) this.notice = result.notice;
   }
   private updateProjectiles(delta: number): void {
@@ -563,15 +603,8 @@ export class GameSession {
     this.weaponRelicDrops = result.weaponRelicDrops;
     this.defeatedBossIds = result.defeatedBossIds;
     this.pendingUpgradeChoices = result.pendingUpgradeChoices;
-    if (result.experienceEarned > 0) {
-      const experience =
-        this.classProgression.experience + result.experienceEarned;
-      this.classProgression = {
-        ...this.classProgression,
-        experience,
-        level: playerLevelForExperience(experience),
-      };
-    }
+    if (result.experienceEarned > 0)
+      this.grantExperience(result.experienceEarned);
     this.nextFloorDropSerial = result.nextFloorDropSerial;
     if (result.notice !== null) this.notice = result.notice;
   }
@@ -615,6 +648,11 @@ export class GameSession {
     return true;
   }
   private updateEnemyCombat(delta: number): void {
+    const combatStats = combatStatsFor(
+      this.settlement.buildingState,
+      this.upgrades,
+      this.classProgression,
+    );
     const result = advanceEnemyCombatPhase({
       delta,
       elapsed: this.elapsed,
@@ -629,6 +667,9 @@ export class GameSession {
       deathResourceLossRate: gameplayTuning.deathResourceLossRate,
       playerHitRecoveryEndsAt: this.playerHitRecoveryEndsAt,
       playerHitRecoverySeconds: gameplayTuning.playerHitRecoverySeconds,
+      playerPhysicalDefense: combatStats.physicalDefense,
+      playerDodgeChance: combatStats.dodgeChance,
+      worldSeed: this.world.seed,
     });
     this.player = result.player;
     this.resources = result.resources;
@@ -689,6 +730,18 @@ export class GameSession {
     this.resources = outcome.resources;
     this.notice = outcome.noticeDraft;
     return outcome.result;
+  }
+  /** Applies XP and the identical next-level base-stat grant exactly once. */
+  private grantExperience(amount: number): void {
+    const previous = this.classProgression;
+    const experience = previous.experience + amount;
+    const next = {
+      ...previous,
+      experience,
+      level: playerLevelForExperience(experience),
+    };
+    this.classProgression = next;
+    this.player = applyLevelGrowthToPlayer(this.player, previous, next);
   }
   private clampPlayerState(): void {
     this.player.hp = Math.max(0, Math.min(this.player.hp, this.player.maxHp));

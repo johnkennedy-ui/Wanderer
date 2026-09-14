@@ -85,6 +85,7 @@ export interface PresentationProjectionInput {
   readonly classProgression: ClassProgression;
   readonly pendingClassChoices: readonly PlayerClass[];
   readonly pendingClassSkillChoices: readonly ClassSkillId[];
+  readonly statPointsAvailable: number;
   readonly canSave: boolean;
   readonly savePointLabel: string | null;
   readonly notice: GameNotice;
@@ -194,10 +195,12 @@ export const projectGamePresentation = (
     classProgression: {
       ...input.classProgression,
       skillIds: [...input.classProgression.skillIds],
+      allocatedStats: { ...input.classProgression.allocatedStats },
       weaponRank: input.classProgression.weaponRank ?? 0,
     },
     pendingClassChoices: [...input.pendingClassChoices],
     pendingClassSkillChoices: [...input.pendingClassSkillChoices],
+    statPointsAvailable: input.statPointsAvailable,
     weaponRelicDropCount: weaponRelicDrops.length,
     canSave: input.canSave,
     savePointLabel: input.savePointLabel,

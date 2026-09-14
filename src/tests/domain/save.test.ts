@@ -8,6 +8,7 @@ import {
   toSaveV2Document,
 } from "../../domain/persistence/currentSave";
 import type { SaveDocument } from "../../domain/types";
+import { emptyPlayerStatAllocations } from "../../domain/types";
 import {
   createBrowserSaveStorage,
   SAVE_KEYS,
@@ -117,7 +118,7 @@ describe("schema-2 persistence boundary", () => {
     });
     expect(decodeSave('{"schemaVersion":3}')).toMatchObject({
       ok: false,
-      failure: "unsupported-schema",
+      failure: "invalid-document",
     });
     expect(
       decodeSave(
@@ -244,7 +245,7 @@ describe("browser save validation and recovery", () => {
     expect(store.getItem(SAVE_KEYS.backup)).toBe(beforeBackup);
   });
 
-  it("keeps frozen V2 projection exact while browser storage retains current extensions", () => {
+  it("keeps frozen V2 projection exact while browser storage writes V3 progression", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
     const document = {
@@ -254,6 +255,7 @@ describe("browser save validation and recovery", () => {
         level: 1 as const,
         playerClass: "wizard" as const,
         skillIds: [],
+        allocatedStats: emptyPlayerStatAllocations(),
         weaponRank: 2,
       },
     };
@@ -265,7 +267,7 @@ describe("browser save validation and recovery", () => {
       toCurrentSaveStorageDocument(document),
     );
     expect(toSaveV2Document(document)).not.toHaveProperty("classProgression");
-    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 2 });
+    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 3 });
   });
 
   it("stages and validates temporary and backup data before an interrupted primary write", () => {

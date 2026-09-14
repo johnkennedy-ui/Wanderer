@@ -9,16 +9,22 @@ import {
   type UpgradeEffect,
 } from "../../data/definitions";
 import type {
+  AllocatablePlayerStatKind,
   BuildingState,
   ClassProgression,
   ClassSkillId,
   CombatStats,
+  PlayerStatAllocations,
   PlayerState,
   PlayerClass,
   PlayerStats,
   UpgradeId,
 } from "../types";
-import { emptyPlayerStats } from "../types";
+import {
+  allocatablePlayerStatKinds,
+  emptyPlayerStatAllocations,
+  emptyPlayerStats,
+} from "../types";
 
 export interface ProjectileUpgradeEffects {
   readonly chainDamageMultiplier: number;
@@ -35,6 +41,16 @@ export interface WeaponRelicEffects {
   readonly crescentRadiusBonus: number;
   readonly crescentDamageMultiplier: number;
 }
+
+/** A full V3 progression value for APIs that permit a no-class default. */
+export const defaultClassProgression = (): ClassProgression => ({
+  experience: 0,
+  level: 0,
+  playerClass: null,
+  skillIds: [],
+  allocatedStats: emptyPlayerStatAllocations(),
+  weaponRank: 0,
+});
 
 const noWeaponRelicEffects = (): WeaponRelicEffects => ({
   rank: 0,
@@ -122,19 +138,72 @@ export const movingAttackSpeedMultiplierFor = (
     ? 0.5
     : 0;
 
-export const playerStatsFor = (progression: ClassProgression): PlayerStats =>
-  progression.playerClass === null
-    ? emptyPlayerStats()
-    : { ...classDefinitionFor(progression.playerClass).passiveStats };
+/** Clones a complete allocation record so callers never retain save aliases. */
+export const normalizedAllocatedStatsFor = (
+  progression: Pick<ClassProgression, "allocatedStats">,
+): PlayerStatAllocations => {
+  const source = progression.allocatedStats ?? emptyPlayerStatAllocations();
+  return {
+    strength: source.strength ?? 0,
+    agility: source.agility ?? 0,
+    vitality: source.vitality ?? 0,
+    magic: source.magic ?? 0,
+    dexterity: source.dexterity ?? 0,
+    luck: source.luck ?? 0,
+  };
+};
+
+export const allocatedStatTotalFor = (
+  progression: Pick<ClassProgression, "allocatedStats">,
+): number => {
+  const allocated = normalizedAllocatedStatsFor(progression);
+  return allocatablePlayerStatKinds.reduce(
+    (total, stat) => total + allocated[stat],
+    0,
+  );
+};
+
+/** Every earned level grants three extra points, held until the player selects a class. */
+export const statPointsAvailableFor = (progression: ClassProgression): number =>
+  Math.max(0, progression.level * 3 - allocatedStatTotalFor(progression));
+
+/**
+ * Builds effective RO-inspired stats from an identical class-base grant at
+ * every level plus persistent player allocations. Defense values are derived,
+ * never stored or allocatable.
+ */
+export const playerStatsFor = (progression: ClassProgression): PlayerStats => {
+  if (progression.playerClass === null) return emptyPlayerStats();
+  const base = classDefinitionFor(progression.playerClass).passiveStats;
+  const allocated = normalizedAllocatedStatsFor(progression);
+  const atLevel = (stat: AllocatablePlayerStatKind): number =>
+    base[stat] * progression.level + allocated[stat];
+  const vitality = atLevel("vitality");
+  const magic = atLevel("magic");
+  return {
+    strength: atLevel("strength"),
+    dexterity: atLevel("dexterity"),
+    agility: atLevel("agility"),
+    luck: atLevel("luck"),
+    vitality,
+    magic,
+    defense: Math.floor(vitality / 2),
+    magicDefense: Math.floor(magic / 2),
+  };
+};
 
 export const applyClassPassiveToPlayer = (
   player: PlayerState,
   playerClass: PlayerClass,
+  level = 1,
 ): PlayerState => {
   const vitality = classDefinitionFor(playerClass).passiveStats.vitality;
   return vitality === 0
     ? { ...player }
-    : applyMaximumHealth(player, vitality * 5);
+    : applyMaximumHealth(
+        player,
+        vitality * Math.max(1, level) * gameplayTuning.vitalityHealthPerPoint,
+      );
 };
 
 export const pendingClassSkillChoicesFor = (
@@ -166,6 +235,39 @@ const applyMaximumHealth = (
   return { ...player, maxHp, hp: Math.min(maxHp, player.hp + amount) };
 };
 
+/** Applies only base-class vitality newly earned by one or more levels. */
+export const applyLevelGrowthToPlayer = (
+  player: PlayerState,
+  previous: ClassProgression,
+  next: ClassProgression,
+): PlayerState => {
+  if (
+    previous.playerClass === null ||
+    previous.playerClass !== next.playerClass ||
+    next.level <= previous.level
+  )
+    return { ...player };
+  const vitality = classDefinitionFor(previous.playerClass).passiveStats
+    .vitality;
+  return vitality === 0
+    ? { ...player }
+    : applyMaximumHealth(
+        player,
+        (next.level - previous.level) *
+          vitality *
+          gameplayTuning.vitalityHealthPerPoint,
+      );
+};
+
+/** Only a Vitality allocation changes persisted health immediately. */
+export const applyAllocatedStatToPlayer = (
+  player: PlayerState,
+  stat: AllocatablePlayerStatKind,
+): PlayerState =>
+  stat === "vitality"
+    ? applyMaximumHealth(player, gameplayTuning.vitalityHealthPerPoint)
+    : { ...player };
+
 export const applyClassSkillToPlayer = (
   player: PlayerState,
   skillId: ClassSkillId,
@@ -183,12 +285,7 @@ const exhaustUpgradeEffect = (effect: never): never => {
 export const combatStatsFor = (
   buildings: readonly BuildingState[],
   upgrades: Iterable<UpgradeId>,
-  progression: ClassProgression = {
-    experience: 0,
-    level: 0,
-    playerClass: null,
-    skillIds: [],
-  },
+  progression: ClassProgression = defaultClassProgression(),
 ): CombatStats => {
   let attackDamage =
     gameplayTuning.baseAttackDamage +
@@ -231,8 +328,13 @@ export const combatStatsFor = (
   if (attackStyle === "magic") attackDamage += playerStats.magic;
   else if (attackStyle === "arrow") attackDamage += playerStats.dexterity;
   else if (attackStyle === "slash") attackDamage += playerStats.strength;
-  attackIntervalSeconds *= Math.max(0.5, 1 - playerStats.dexterity * 0.01);
-  moveSpeed += playerStats.agility * 0.05;
+  attackIntervalSeconds *= Math.max(
+    0.5,
+    1 -
+      playerStats.agility *
+        gameplayTuning.agilityAttackIntervalReductionPerPoint,
+  );
+  moveSpeed += playerStats.agility * gameplayTuning.agilityMoveSpeedPerPoint;
 
   for (const id of upgrades) {
     const effect = upgradeDefinitionFor(id).effect;
@@ -316,17 +418,28 @@ export const combatStatsFor = (
     weaponProjectileCount: weaponRelic.projectileCount,
     weaponProjectileDamageMultiplier: weaponRelic.projectileDamageMultiplier,
     weaponProjectileHoming: weaponRelic.projectileHoming,
+    physicalDefense: playerStats.defense,
+    magicDefense: playerStats.magicDefense,
+    dodgeChance: Math.min(
+      gameplayTuning.maximumDodgeChance,
+      playerStats.agility * gameplayTuning.agilityDodgeChancePerPoint,
+    ),
+    physicalCriticalChance:
+      attackStyle === "magic"
+        ? 0
+        : Math.min(
+            gameplayTuning.maximumPhysicalCriticalChance,
+            playerStats.luck *
+              gameplayTuning.luckPhysicalCriticalChancePerPoint,
+          ),
+    physicalCriticalDamageMultiplier:
+      gameplayTuning.physicalCriticalDamageMultiplier,
   };
 };
 
 export const projectileUpgradeEffectsFor = (
   upgrades: Iterable<UpgradeId>,
-  progression: ClassProgression = {
-    experience: 0,
-    level: 0,
-    playerClass: null,
-    skillIds: [],
-  },
+  progression: ClassProgression = defaultClassProgression(),
 ): ProjectileUpgradeEffects => {
   let chainDamageMultiplier = 0;
   let hitHeal = 0;
@@ -384,12 +497,7 @@ export const applyUpgradeEffectToPlayer = (
 export const describeProgressionEffects = (
   buildings: readonly BuildingState[],
   upgrades: Iterable<UpgradeId>,
-  progression: ClassProgression = {
-    experience: 0,
-    level: 0,
-    playerClass: null,
-    skillIds: [],
-  },
+  progression: ClassProgression = defaultClassProgression(),
 ): string[] => {
   const effects = [
     "Resources: uncapped. Legacy Storage remains visible but cannot be upgraded or relocated.",

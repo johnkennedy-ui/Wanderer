@@ -17,6 +17,7 @@ import type {
   WeaponRelicDropState,
   WorldIdentity,
 } from "../types";
+import { emptyPlayerStatAllocations } from "../types";
 
 /** Immutable default identity used only when a caller did not supply a world. */
 export const DEFAULT_WORLD = Object.freeze({
@@ -45,6 +46,8 @@ export interface RuntimeEnemy {
   respawnAt: number | null;
   defeated: boolean;
   attackElapsed: number;
+  /** Per-enemy attempt ordinal for frame-partition-independent dodge rolls. */
+  attackEventOrdinal?: number;
   /** Runtime-only wave ownership; omitted for generator-owned enemies. */
   waveIndex?: number;
   /** Wave normal enemies disappear at this time; wave bosses persist. */
@@ -113,6 +116,8 @@ export interface SessionState {
   nextProjectileSerial: number;
   nextCrescentSerial: number;
   nextFloorDropSerial: number;
+  /** Runtime-only player attack event serial for deterministic physical crits. */
+  nextAttackEventSerial: number;
   committedSavePoint: SettlementCampfire;
   input: MoveCommand;
   destination: Vector2 | null;
@@ -146,6 +151,10 @@ export const cloneClassProgression = (
   level: playerLevelForExperience(progression?.experience ?? 0),
   playerClass: progression?.playerClass ?? null,
   skillIds: [...(progression?.skillIds ?? [])],
+  allocatedStats: {
+    ...emptyPlayerStatAllocations(),
+    ...(progression?.allocatedStats ?? {}),
+  },
   weaponRank: progression?.weaponRank ?? 0,
 });
 
@@ -210,6 +219,7 @@ export const createFreshSessionState = (
     nextProjectileSerial: 1,
     nextCrescentSerial: 1,
     nextFloorDropSerial: 1,
+    nextAttackEventSerial: 1,
     committedSavePoint: homeSavePoint(),
     input: idleInput(elapsed),
     destination: null,
@@ -247,6 +257,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   nextProjectileSerial: 1,
   nextCrescentSerial: 1,
   nextFloorDropSerial: 1,
+  nextAttackEventSerial: 1,
   committedSavePoint: {
     id: saved.savePointId,
     label: "committed campfire",

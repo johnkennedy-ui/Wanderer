@@ -7,7 +7,10 @@ import {
   hydrateSessionState,
 } from "../../domain/session/sessionState";
 import { projectCurrentSave } from "../../domain/session/saveProjection";
-import type { SaveDocument } from "../../domain/types";
+import {
+  emptyPlayerStatAllocations,
+  type SaveDocument,
+} from "../../domain/types";
 import {
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
@@ -94,12 +97,15 @@ describe("GameSession lifecycle", () => {
     expect(projected.resources.wood).toBe(90);
     expect(projected.buildings[0]?.position).toEqual({ x: 1, y: 1 });
     const { classProgression, ...historicalProjection } = projected;
-    expect(historicalProjection).toEqual(toSaveV2Document(projected));
+    expect({ ...historicalProjection, schemaVersion: 2 }).toEqual(
+      toSaveV2Document(projected),
+    );
     expect(classProgression).toEqual({
       experience: 0,
       level: 0,
       playerClass: null,
       skillIds: [],
+      allocatedStats: emptyPlayerStatAllocations(),
       weaponRank: 0,
     });
 
@@ -144,6 +150,7 @@ describe("GameSession lifecycle", () => {
         level: 2,
         playerClass: "wizard",
         skillIds: ["wizard-flame-orb"],
+        allocatedStats: emptyPlayerStatAllocations(),
         weaponRank: 0,
       },
     };
@@ -154,6 +161,7 @@ describe("GameSession lifecycle", () => {
       level: 3,
       playerClass: "wizard",
       skillIds: ["wizard-flame-orb"],
+      allocatedStats: emptyPlayerStatAllocations(),
       weaponRank: 0,
     });
     expect(saved.classProgression).toEqual({
@@ -161,6 +169,7 @@ describe("GameSession lifecycle", () => {
       level: 2,
       playerClass: "wizard",
       skillIds: ["wizard-flame-orb"],
+      allocatedStats: emptyPlayerStatAllocations(),
       weaponRank: 0,
     });
     expect(
