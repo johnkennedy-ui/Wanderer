@@ -32,7 +32,9 @@ export const openKnownClosedBuild = async (page: Page): Promise<void> => {
  * not container disappearance, is the completion witness. */
 export const choosePendingClassChoicesIfOpen = async (
   page: Page,
+  options: Readonly<{ observeEffects?: boolean }> = {},
 ): Promise<void> => {
+  const observeEffects = options.observeEffects ?? true;
   const modal = page.getByTestId("class-modal");
   const choices = page.getByTestId("class-choices");
   const seen = new Set<string>();
@@ -50,7 +52,8 @@ export const choosePendingClassChoicesIfOpen = async (
     await button.click();
     await expect(modal.getByTestId(id)).toHaveCount(0);
     await expect(choices).not.toHaveAttribute("data-choice-key", key);
-    await expect(page.getByTestId("effects")).toContainText(label);
+    if (observeEffects)
+      await expect(page.getByTestId("effects")).toContainText(label);
   }
 };
 
@@ -62,7 +65,11 @@ export const installIncidentalChoiceHandlers = async (
 ): Promise<void> => {
   await page.addLocatorHandler(
     page.getByTestId("class-modal"),
-    async () => choosePendingClassChoicesIfOpen(page),
+    // The class modal remains visible through its sequential skill choices.
+    // Keep handler work inside that overlay so an external effects assertion
+    // cannot re-enter this same handler between choices.
+    async () =>
+      choosePendingClassChoicesIfOpen(page, { observeEffects: false }),
     { noWaitAfter: true },
   );
   await page.addLocatorHandler(
