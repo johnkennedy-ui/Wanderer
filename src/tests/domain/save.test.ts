@@ -369,14 +369,30 @@ describe("schema-2 persistence boundary", () => {
     });
     if (!classlessDecoded.ok)
       throw new Error("Expected classless frozen V2 save to load");
-    const classlessRequest = new GameSession({
+    const classlessSession = new GameSession({
       saved: classlessDecoded.document,
-    }).createValidCampfireSaveRequest(2);
-    expect(classlessRequest?.document.classProgression).toMatchObject({
-      playerClass: null,
-      skillIds: ["wizard-flame-orb"],
-      legacySkillSelection: true,
     });
+    expect(classlessSession.presentation().ui.pendingClassChoices).toEqual([
+      "knight",
+      "wizard",
+      "archer",
+    ]);
+    expect(classlessSession.chooseClass("wizard")).toBe(true);
+    expect(classlessSession.presentation().ui.classProgression).toMatchObject({
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+    });
+    expect(
+      classlessSession.presentation().ui.classProgression.legacySkillSelection,
+    ).toBeUndefined();
+    const classlessRequest = classlessSession.createValidCampfireSaveRequest(2);
+    expect(classlessRequest?.document.classProgression).toMatchObject({
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+    });
+    expect(
+      classlessRequest?.document.classProgression.legacySkillSelection,
+    ).toBeUndefined();
     expect(isSaveDocument(classlessRequest?.document)).toBe(true);
 
     const levelSixV3 = {
@@ -409,6 +425,51 @@ describe("schema-2 persistence boundary", () => {
     });
     const levelSixRequest = levelSixSession.createValidCampfireSaveRequest(2);
     expect(isSaveDocument(levelSixRequest?.document)).toBe(true);
+
+    const delayedCanonicalV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 19,
+        level: 1 as const,
+        playerClass: "knight" as const,
+        skillIds: ["knight-iron-guard"],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(delayedCanonicalV3)).toBe(true);
+    const delayedCanonicalDecoded = decodeSave(
+      JSON.stringify(delayedCanonicalV3),
+    );
+    if (!delayedCanonicalDecoded.ok)
+      throw new Error("Expected delayed canonical V3 save to load");
+    expect(
+      delayedCanonicalDecoded.document.classProgression.legacySkillSelection,
+    ).toBe(true);
+    const delayedCanonicalSession = new GameSession({
+      saved: delayedCanonicalDecoded.document,
+    });
+    (
+      delayedCanonicalSession as unknown as {
+        grantExperience: (amount: number) => void;
+      }
+    ).grantExperience(1);
+    expect(
+      delayedCanonicalSession.presentation().ui.classProgression,
+    ).toMatchObject({
+      experience: 20,
+      level: 2,
+      playerClass: "knight",
+      skillIds: ["knight-iron-guard"],
+    });
+    expect(
+      delayedCanonicalSession.presentation().ui.classProgression
+        .legacySkillSelection,
+    ).toBeUndefined();
+    const delayedCanonicalRequest =
+      delayedCanonicalSession.createValidCampfireSaveRequest(2);
+    expect(isSaveDocument(delayedCanonicalRequest?.document)).toBe(true);
   });
 
   it("leaves canonical frozen V2/V3 skill prefixes unmarked", () => {
@@ -543,6 +604,29 @@ describe("schema-2 persistence boundary", () => {
       ok: false,
       failure: "invalid-document",
     });
+
+    const classlessMarkedAllocation = {
+      ...validBossRoute,
+      classProgression: {
+        experience: 300,
+        level: 5 as const,
+        playerClass: null,
+        skillIds: ["wizard-flame-orb"],
+        legacySkillSelection: true as const,
+        allocatedStats: {
+          ...emptyPlayerStatAllocations(),
+          strength: 1,
+        },
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(classlessMarkedAllocation)).toBe(false);
+    expect(decodeSave(JSON.stringify(classlessMarkedAllocation))).toMatchObject(
+      {
+        ok: false,
+        failure: "invalid-document",
+      },
+    );
   });
 
   it("rejects duplicate and unknown persisted content through the frozen V2 decoder", () => {

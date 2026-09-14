@@ -1,9 +1,7 @@
-import { classSkillDefinitionFor } from "../../data/definitions";
 import {
   allocatablePlayerStatKinds,
   classSkillIds,
   legacyClassSkillIds,
-  maximumClassSkillTier,
   playerClasses,
 } from "../types";
 import type {
@@ -13,7 +11,10 @@ import type {
   PlayerClass,
   PlayerStatAllocations,
 } from "../types";
-import { playerLevelForExperience } from "../session/progressionRules";
+import {
+  isContiguousClassSkillPrefixFor,
+  playerLevelForExperience,
+} from "../session/progressionRules";
 import { isSaveV2Document } from "./saveV2";
 import type { SaveV2Document } from "./saveV2";
 
@@ -58,36 +59,6 @@ const isAllocationRecord = (value: unknown): value is PlayerStatAllocations => {
   );
 };
 
-const isContiguousClassSkillPrefix = (
-  playerClass: PlayerClass,
-  level: number,
-  skillIds: readonly ClassSkillId[],
-): boolean => {
-  if (
-    skillIds.length > maximumClassSkillTier ||
-    skillIds.length > Math.max(0, level - 1)
-  )
-    return false;
-
-  let selectedRoute: "boss" | "aoe" | undefined;
-  for (const [index, skillId] of skillIds.entries()) {
-    const tier = index + 1;
-    const definition = classSkillDefinitionFor(skillId);
-    if (
-      definition.playerClass !== playerClass ||
-      definition.tier !== tier ||
-      (tier < 5 && definition.route !== undefined)
-    )
-      return false;
-    if (tier === 5) {
-      if (definition.route === undefined) return false;
-      selectedRoute = definition.route;
-    }
-    if (tier > 5 && definition.route !== selectedRoute) return false;
-  }
-  return true;
-};
-
 /**
  * V2/V3 accepted any unique known legacy IDs for a selected class. Most
  * runtime-produced documents were canonical prefixes, but a decoder-valid
@@ -107,7 +78,7 @@ const isMarkedLegacySkillSelection = (
   )
     return false;
   if (playerClass === null) return skillIds.length > 0;
-  return !isContiguousClassSkillPrefix(playerClass, level, skillIds);
+  return !isContiguousClassSkillPrefixFor(playerClass, level, skillIds);
 };
 
 /** Validates current progression, including route continuity after tier 5. */
@@ -149,6 +120,12 @@ export const isClassProgressionV4 = (
   if (allocationTotal > (value.level as number) * 3) return false;
   const playerClass = value.playerClass as PlayerClass | null;
   const skillIds = value.skillIds as readonly ClassSkillId[];
+  if (
+    value.legacySkillSelection === true &&
+    playerClass === null &&
+    allocationTotal !== 0
+  )
+    return false;
   if (value.legacySkillSelection === true)
     return isMarkedLegacySkillSelection(
       playerClass,
@@ -157,7 +134,7 @@ export const isClassProgressionV4 = (
     );
   if (playerClass === null)
     return allocationTotal === 0 && value.skillIds.length === 0;
-  return isContiguousClassSkillPrefix(
+  return isContiguousClassSkillPrefixFor(
     playerClass,
     value.level as number,
     skillIds,

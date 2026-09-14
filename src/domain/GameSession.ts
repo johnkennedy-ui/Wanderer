@@ -75,6 +75,7 @@ import {
   applyLevelGrowthToPlayer,
   isValidClassSkillChoice,
   movingAttackSpeedMultiplierFor,
+  normalizeLegacySkillSelectionForCurrentProgression,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
   playerStatsFor,
@@ -280,7 +281,10 @@ export class GameSession {
       this.notice = { kind: "class.rejected.invalid-choice" };
       return false;
     }
-    this.classProgression = { ...this.classProgression, playerClass };
+    this.classProgression = normalizeLegacySkillSelectionForCurrentProgression({
+      ...this.classProgression,
+      playerClass,
+    });
     this.player = applyClassPassiveToPlayer(
       this.player,
       playerClass,
@@ -750,11 +754,11 @@ export class GameSession {
   private grantExperience(amount: number): void {
     const previous = this.classProgression;
     const experience = previous.experience + amount;
-    const next = {
+    const next = normalizeLegacySkillSelectionForCurrentProgression({
       ...previous,
       experience,
       level: playerLevelForExperience(experience),
-    };
+    });
     this.classProgression = next;
     this.player = applyLevelGrowthToPlayer(this.player, previous, next);
     if (next.level > previous.level) this.refreshEnemyHealthForCurrentContext();

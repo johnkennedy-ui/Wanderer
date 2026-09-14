@@ -133,6 +133,62 @@ export const playerLevelForExperience = (experience: number): PlayerLevel => {
   ) as PlayerLevel;
 };
 
+/**
+ * A current V4 selection must be a class-local, contiguous tier prefix. The
+ * tier-five route becomes the required route for each later selection.
+ */
+export const isContiguousClassSkillPrefixFor = (
+  playerClass: PlayerClass,
+  level: number,
+  skillIds: readonly ClassSkillId[],
+): boolean => {
+  if (
+    skillIds.length > maximumClassSkillTier ||
+    skillIds.length > Math.max(0, level - 1)
+  )
+    return false;
+
+  let selectedRoute: "boss" | "aoe" | undefined;
+  for (const [index, skillId] of skillIds.entries()) {
+    const tier = index + 1;
+    const definition = classSkillDefinitionFor(skillId);
+    if (
+      definition.playerClass !== playerClass ||
+      definition.tier !== tier ||
+      (tier < 5 && definition.route !== undefined)
+    )
+      return false;
+    if (tier === 5) {
+      if (definition.route === undefined) return false;
+      selectedRoute = definition.route;
+    }
+    if (tier > 5 && definition.route !== selectedRoute) return false;
+  }
+  return true;
+};
+
+/**
+ * A compatibility marker remains only while its retained V2/V3 selection is
+ * not a current route prefix. Class selection and level gains can make it
+ * canonical without rewriting any historical skill IDs.
+ */
+export const normalizeLegacySkillSelectionForCurrentProgression = (
+  progression: ClassProgression,
+): ClassProgression => {
+  if (
+    progression.legacySkillSelection !== true ||
+    progression.playerClass === null ||
+    !isContiguousClassSkillPrefixFor(
+      progression.playerClass,
+      progression.level,
+      progression.skillIds,
+    )
+  )
+    return progression;
+  const { legacySkillSelection: _ignored, ...normalized } = progression;
+  return normalized;
+};
+
 /** Only the mobile martial classes retain auto-attacks while moving. */
 export const movingAttackSpeedMultiplierFor = (
   progression: ClassProgression,
