@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../../domain/GameSession";
+import { gameplayTuning } from "../../data/definitions";
 import {
   emptyPlayerStatAllocations,
   type ClassProgression,
@@ -25,7 +26,7 @@ import {
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
 import { savedAtHome } from "./session-test-helpers";
 
-const experienceForLevel = [0, 6, 20, 50, 120, 300] as const;
+const experienceForLevel = [0, ...gameplayTuning.experienceThresholds] as const;
 
 const progression = (
   playerClass: PlayerClass | null,
@@ -296,7 +297,7 @@ describe("RO-inspired stat core", () => {
     expect(whole.enemies.get(attacker.id)?.attackEventOrdinal).toBe(1);
   });
 
-  it("migrates V2 class extensions to explicit V3 allocations without mutating the historical wire", () => {
+  it("migrates V2 class extensions to explicit V4 allocations without mutating the historical wire", () => {
     const current = savedAtHome();
     const v2 = {
       ...toSaveV2Document({
@@ -316,7 +317,7 @@ describe("RO-inspired stat core", () => {
       ok: true,
       wireDocument: { schemaVersion: 2 },
       document: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         player: { hp: 200, maxHp: 250 },
         classProgression: {
           level: 5,
@@ -327,7 +328,7 @@ describe("RO-inspired stat core", () => {
     expect(v2.player).toEqual({ ...current.player, hp: 80, maxHp: 130 });
     if (!decoded.ok) throw new Error(decoded.message);
     const storage = toCurrentSaveStorageDocument(decoded.document);
-    expect(storage.schemaVersion).toBe(3);
+    expect(storage.schemaVersion).toBe(4);
     expect(decodeSave(JSON.stringify(storage))).toMatchObject({ ok: true });
   });
 });

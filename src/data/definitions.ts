@@ -1,8 +1,18 @@
-import { classSkillIds, playerClasses, upgradeIds } from "../domain/types";
+import {
+  classSkillIds,
+  classSkillRoutes,
+  playerClasses,
+  upgradeIds,
+} from "../domain/types";
 import type {
   BuildingKind,
   ClassSkillId,
+  ClassSkillRoute,
+  ClassSkillTier,
   EnemyKind,
+  ExtendedClassSkillId,
+  ExtendedClassSkillTier,
+  LegacyClassSkillId,
   PlayerClass,
   PlayerStats,
   ResourceKind,
@@ -81,7 +91,9 @@ export interface ClassDefinition {
 export interface ClassSkillDefinition {
   readonly id: ClassSkillId;
   readonly playerClass: PlayerClass;
-  readonly tier: 1 | 2 | 3 | 4;
+  readonly tier: ClassSkillTier;
+  /** Boss/AoE is selected at tier 5; historical tiers deliberately omit it. */
+  readonly route?: ClassSkillRoute;
   readonly label: string;
   readonly description: string;
   readonly effect: ClassSkillEffect;
@@ -162,7 +174,10 @@ const authoredGameplayTuning = {
   playerHitRecoveryFlashIntervalSeconds: 0.1,
   tapToMoveArrivalDistance: 0.05,
   enemyAttackStandoff: 1.8,
-  experienceThresholds: [6, 20, 50, 120, 300] as const,
+  experienceThresholds: [
+    6, 20, 50, 120, 300, 400, 520, 660, 820, 1000, 1200, 1420, 1660, 1920, 2200,
+    2500, 2820, 3160, 3520, 3900, 4300, 4720, 5160, 5620, 6100,
+  ] as const,
   waveIntervalSeconds: 120,
   waveDurationSeconds: 30,
   waveDensityMultiplier: 5,
@@ -479,8 +494,10 @@ export const weaponRelicDefinitionFor = (
   playerClass: PlayerClass,
 ): WeaponRelicDefinition => weaponRelicDefinitionsByClass[playerClass];
 
-type ClassSkillCatalogue = {
-  readonly [Id in ClassSkillId]: ClassSkillDefinition & { readonly id: Id };
+type LegacyClassSkillCatalogue = {
+  readonly [Id in LegacyClassSkillId]: ClassSkillDefinition & {
+    readonly id: Id;
+  };
 };
 
 const authoredClassSkillsById = {
@@ -677,9 +694,347 @@ const authoredClassSkillsById = {
     description: "Each arrow also hits two nearby targets for half damage.",
     effect: { kind: "secondary-targets", amount: 2 },
   },
-} satisfies ClassSkillCatalogue;
+} satisfies LegacyClassSkillCatalogue;
 
-export const classSkillsById = deepFreeze(authoredClassSkillsById);
+const routeSkillLabels = {
+  knight: {
+    boss: [
+      "Wyrmcleaver",
+      "Duelist's Edge",
+      "Colossus Breaker",
+      "Kingslayer",
+      "Relentless Cuts",
+      "Dragonbone Edge",
+      "Executioner's Tempo",
+      "Giantbane",
+      "Blood-forged Blade",
+      "Sovereign Cut",
+      "Wyrm Rend",
+      "Ravager's Edge",
+      "Final Verdict",
+      "Titan Sever",
+      "Crown Splitter",
+      "Dreadnought Tempo",
+      "Heartpiercer",
+      "Oathbreaker",
+      "Perfect Execution",
+      "Worldbreaker",
+    ],
+    aoe: [
+      "Battlefield Sweep",
+      "Broad Arc",
+      "Cleaving Rhythm",
+      "Crowd Splitter",
+      "Long Crescent",
+      "Open Guard",
+      "Sweeping Tempo",
+      "Hammering Wake",
+      "Warpath",
+      "Half-Moon Form",
+      "Whorl of Steel",
+      "Shattering Wake",
+      "Storm Crescent",
+      "Wide Horizon",
+      "Blade Cyclone",
+      "Rending Tide",
+      "Grand Sweep",
+      "Open Sky Arc",
+      "Endless Whirl",
+      "Cataclysmic Crescent",
+    ],
+  },
+  wizard: {
+    boss: [
+      "Cinder Lance",
+      "Focused Channel",
+      "Pyre Bolt",
+      "Runic Sight",
+      "Arcane Barrage",
+      "Pressure Casting",
+      "Starfire Spear",
+      "Searing Focus",
+      "Void Needle",
+      "Incantation Tempo",
+      "Comet Lance",
+      "Runebreaker",
+      "Astral Tempo",
+      "Sunfall Spear",
+      "Singularity Bolt",
+      "Unbroken Focus",
+      "Dragonfire Ray",
+      "Oblivion Lance",
+      "Grand Channel",
+      "Worldfire Meteor",
+    ],
+    aoe: [
+      "Ember Ring",
+      "Forked Flame",
+      "Conflagration",
+      "Arcane Pulse",
+      "Mana Torrent",
+      "Blast Weave",
+      "Solar Bloom",
+      "Chain Comet",
+      "Nova Resonance",
+      "Astral Field",
+      "Cascade Tempo",
+      "Aether Cascade",
+      "Inferno Halo",
+      "Starstorm",
+      "Spellstorm",
+      "Cosmic Bloom",
+      "Meteor Choir",
+      "Nova Mastery",
+      "Orbiting Embers",
+      "Apocalypse Nova",
+    ],
+  },
+  archer: {
+    boss: [
+      "Bodkin Shot",
+      "Hunter's Draw",
+      "Heartseeker",
+      "Falcon Sight",
+      "Armor Piercer",
+      "Steady Hands",
+      "Wyrmfang Arrow",
+      "Killer's Mark",
+      "Sovereign Shaft",
+      "Rapid Nock",
+      "Giantslayer Arrow",
+      "Deadeye",
+      "Stillness of Hunt",
+      "Dragonspike",
+      "Ranger's Verdict",
+      "Predator's Tempo",
+      "Colossus Pin",
+      "Final Aim",
+      "Perfect Draw",
+      "Sunpiercer",
+    ],
+    aoe: [
+      "Splitshot",
+      "Scatter Arrows",
+      "Wind Volley",
+      "Forked Flight",
+      "Barbed Rain",
+      "Broadside",
+      "Quick Quiver",
+      "Trident Shot",
+      "Ricochet Heads",
+      "Arrow Squall",
+      "Stormdraw",
+      "Rain of Shafts",
+      "Splintered Tips",
+      "Gale Volley",
+      "Tempest Quiver",
+      "Hail of Arrows",
+      "Razor Fletching",
+      "Hurricane Volley",
+      "Storm Nock",
+      "Skyfall Barrage",
+    ],
+  },
+} satisfies Record<PlayerClass, Record<ClassSkillRoute, readonly string[]>>;
+
+const bossTempoMultipliers = [
+  undefined,
+  0.96,
+  undefined,
+  undefined,
+  0.95,
+  undefined,
+  0.94,
+  undefined,
+  undefined,
+  0.93,
+  undefined,
+  undefined,
+  0.92,
+  undefined,
+  undefined,
+  0.91,
+  undefined,
+  undefined,
+  0.9,
+  undefined,
+] as const;
+
+const bossDamageAmounts = [
+  5, 0, 6, 7, 0, 8, 0, 9, 10, 0, 11, 12, 0, 13, 14, 0, 15, 16, 0, 20,
+] as const;
+
+const bossEffectFor = (
+  playerClass: PlayerClass,
+  index: number,
+): ClassSkillEffect => {
+  const tempo = bossTempoMultipliers[index];
+  if (tempo !== undefined)
+    return { kind: "attack-interval", multiplier: tempo };
+  if (index === 3 && playerClass !== "knight")
+    return { kind: "attack-range", multiplier: 1.06 };
+  return { kind: "attack-damage", amount: bossDamageAmounts[index] ?? 5 };
+};
+
+const aoeEffectsByClass = {
+  knight: [
+    { kind: "area-radius", amount: 0.25 },
+    { kind: "arc-cosine", amount: -0.08 },
+    { kind: "attack-interval", multiplier: 0.97 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.3 },
+    { kind: "arc-cosine", amount: -0.08 },
+    { kind: "attack-interval", multiplier: 0.96 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.35 },
+    { kind: "arc-cosine", amount: -0.08 },
+    { kind: "attack-interval", multiplier: 0.95 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.4 },
+    { kind: "arc-cosine", amount: -0.08 },
+    { kind: "attack-interval", multiplier: 0.94 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.45 },
+    { kind: "arc-cosine", amount: -0.08 },
+    { kind: "attack-interval", multiplier: 0.93 },
+    { kind: "secondary-damage-multiplier", amount: 0.1 },
+  ],
+  wizard: [
+    { kind: "area-radius", amount: 0.25 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.3 },
+    { kind: "attack-interval", multiplier: 0.97 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.35 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.4 },
+    { kind: "attack-interval", multiplier: 0.96 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.45 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.5 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "area-radius", amount: 0.55 },
+    { kind: "secondary-targets", amount: 2 },
+  ],
+  archer: [
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "attack-interval", multiplier: 0.97 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "attack-interval", multiplier: 0.96 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "attack-interval", multiplier: 0.95 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "attack-interval", multiplier: 0.94 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "secondary-damage-multiplier", amount: 0.05 },
+    { kind: "secondary-targets", amount: 1 },
+    { kind: "attack-interval", multiplier: 0.93 },
+    { kind: "secondary-targets", amount: 2 },
+  ],
+} satisfies Record<PlayerClass, readonly ClassSkillEffect[]>;
+
+const attackNounFor = (playerClass: PlayerClass): string =>
+  playerClass === "knight"
+    ? "slash"
+    : playerClass === "wizard"
+      ? "spell"
+      : "arrow";
+
+const routeSkillDescriptionFor = (
+  playerClass: PlayerClass,
+  route: ClassSkillRoute,
+  effect: ClassSkillEffect,
+): string => {
+  const prefix = route === "boss" ? "Boss route — " : "AoE route — ";
+  const attackNoun = attackNounFor(playerClass);
+  switch (effect.kind) {
+    case "attack-damage":
+      return `${prefix}+${effect.amount} ${attackNoun} damage.`;
+    case "attack-interval":
+      return `${prefix}${((1 - effect.multiplier) * 100).toFixed(0)}% faster ${attackNoun}s.`;
+    case "attack-range":
+      return `${prefix}${((effect.multiplier - 1) * 100).toFixed(0)}% more ${attackNoun} range.`;
+    case "area-radius":
+      return `${prefix}+${effect.amount}m ${playerClass === "knight" ? "crescent reach" : "impact radius"}.`;
+    case "arc-cosine":
+      return `${prefix}widen the crescent arc.`;
+    case "secondary-targets":
+      return `${prefix}+${effect.amount} nearby target${effect.amount === 1 ? "" : "s"}.`;
+    case "secondary-damage-multiplier":
+      return `${prefix}+${(effect.amount * 100).toFixed(0)}% secondary damage.`;
+    case "move-speed":
+      return `${prefix}${((effect.multiplier - 1) * 100).toFixed(0)}% move speed.`;
+    case "maximum-health":
+      return `${prefix}+${effect.amount} maximum health.`;
+    case "chain-strike":
+      return `${prefix}+${effect.targetCount} chain target${effect.targetCount === 1 ? "" : "s"}.`;
+    case "hit-heal":
+      return `${prefix}restore ${effect.amount} health on hit.`;
+  }
+};
+
+const extendedClassSkillDefinitionFor = (
+  playerClass: PlayerClass,
+  route: ClassSkillRoute,
+  index: number,
+): ClassSkillDefinition & { readonly id: ExtendedClassSkillId } => {
+  const tier = (index + 5) as ExtendedClassSkillTier;
+  const id = `${playerClass}-${route}-${tier}` as ExtendedClassSkillId;
+  const effect =
+    route === "boss"
+      ? bossEffectFor(playerClass, index)
+      : (aoeEffectsByClass[playerClass][index] ?? {
+          kind: "secondary-targets",
+          amount: 1,
+        });
+  return {
+    id,
+    playerClass,
+    tier,
+    route,
+    label: routeSkillLabels[playerClass][route][index] ?? `Tier ${tier}`,
+    description: routeSkillDescriptionFor(playerClass, route, effect),
+    effect,
+  };
+};
+
+const extendedClassSkillsById = Object.fromEntries(
+  playerClasses.flatMap((playerClass) =>
+    classSkillRoutes.flatMap((route) =>
+      Array.from({ length: 20 }, (_, index) => {
+        const definition = extendedClassSkillDefinitionFor(
+          playerClass,
+          route,
+          index,
+        );
+        return [definition.id, definition];
+      }),
+    ),
+  ),
+) as Record<
+  ExtendedClassSkillId,
+  ClassSkillDefinition & { readonly id: ExtendedClassSkillId }
+>;
+
+const allClassSkillsById: Record<ClassSkillId, ClassSkillDefinition> = {
+  ...authoredClassSkillsById,
+  ...extendedClassSkillsById,
+};
+
+export const classSkillsById = deepFreeze(allClassSkillsById);
+
 export const classSkillDefinitions = deepFreeze(
   classSkillIds.map((id) => classSkillsById[id]),
 );

@@ -196,7 +196,16 @@ export const emptyPlayerStats = (): PlayerStats => ({
   magicDefense: 0,
 });
 
-export const classSkillIds = Object.freeze([
+/** Current progression levels. Historical save validators keep their own L5 cap. */
+export const playerLevels = Object.freeze([
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25,
+] as const);
+
+export type PlayerLevel = (typeof playerLevels)[number];
+
+/** IDs shipped in the historical L5 catalogue. Keep append-only. */
+export const legacyClassSkillIds = Object.freeze([
   "knight-iron-guard",
   "knight-wide-slash",
   "knight-heavy-blade",
@@ -223,14 +232,56 @@ export const classSkillIds = Object.freeze([
   "archer-multishot",
 ] as const);
 
-export type ClassSkillId = (typeof classSkillIds)[number];
+export type LegacyClassSkillId = (typeof legacyClassSkillIds)[number];
+
+export const classSkillRoutes = Object.freeze(["boss", "aoe"] as const);
+export type ClassSkillRoute = (typeof classSkillRoutes)[number];
+
+export const classSkillTiers = Object.freeze([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+  23, 24,
+] as const);
+export type ClassSkillTier = (typeof classSkillTiers)[number];
+export type ExtendedClassSkillTier = Exclude<ClassSkillTier, 1 | 2 | 3 | 4>;
+export const maximumClassSkillTier = 24 as const;
+
+export type ExtendedClassSkillId =
+  `${PlayerClass}-${ClassSkillRoute}-${ExtendedClassSkillTier}`;
+export type ClassSkillId = LegacyClassSkillId | ExtendedClassSkillId;
+
+const extendedClassSkillIds: readonly ExtendedClassSkillId[] = Object.freeze(
+  playerClasses.flatMap((playerClass) =>
+    classSkillRoutes.flatMap((route) =>
+      Array.from(
+        { length: maximumClassSkillTier - 4 },
+        (_, index) =>
+          `${playerClass}-${route}-${index + 5}` as ExtendedClassSkillId,
+      ),
+    ),
+  ),
+);
+
+/** Current runtime catalogue; V2/V3 validation deliberately uses legacyClassSkillIds. */
+export const classSkillIds: readonly ClassSkillId[] = Object.freeze([
+  ...legacyClassSkillIds,
+  ...extendedClassSkillIds,
+]);
+
 export type AttackStyle = "basic" | "slash" | "magic" | "arrow";
 
 export interface ClassProgression {
   readonly experience: number;
-  readonly level: 0 | 1 | 2 | 3 | 4 | 5;
+  readonly level: PlayerLevel;
   readonly playerClass: PlayerClass | null;
   readonly skillIds: readonly ClassSkillId[];
+  /**
+   * Narrow V4 compatibility marker for a V2/V3 selection that its frozen
+   * validator accepted but which is not a current class/tier route prefix.
+   * New progression never sets it; migrations retain it so an explicit later
+   * campfire save cannot discard a historical player selection. A marked,
+   * ambiguous selection does not enter new route continuation.
+   */
+  readonly legacySkillSelection?: true;
   /** Normalized persistent player allocations; class bases never enter here. */
   readonly allocatedStats: PlayerStatAllocations;
   /**
@@ -313,7 +364,7 @@ export interface CombatStats {
  * schema-2 wire DTO lives independently in persistence/saveV2.ts.
  */
 export interface CurrentSave {
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
@@ -324,7 +375,7 @@ export interface CurrentSave {
   readonly committedAt: number;
   readonly savePointId: string;
   readonly savePointPosition: Vector2;
-  /** V3 explicitly persists normalized progression and player allocations. */
+  /** V4 explicitly persists normalized progression and player allocations. */
   readonly classProgression: ClassProgression;
 }
 

@@ -14,6 +14,7 @@ import type {
   ClassProgression,
   ClassSkillId,
   CombatStats,
+  PlayerLevel,
   PlayerStatAllocations,
   PlayerState,
   PlayerClass,
@@ -24,6 +25,7 @@ import {
   allocatablePlayerStatKinds,
   emptyPlayerStatAllocations,
   emptyPlayerStats,
+  maximumClassSkillTier,
 } from "../types";
 
 export interface ProjectileUpgradeEffects {
@@ -42,7 +44,7 @@ export interface WeaponRelicEffects {
   readonly crescentDamageMultiplier: number;
 }
 
-/** A full V3 progression value for APIs that permit a no-class default. */
+/** A full V4 progression value for APIs that permit a no-class default. */
 export const defaultClassProgression = (): ClassProgression => ({
   experience: 0,
   level: 0,
@@ -121,13 +123,70 @@ export const weaponRelicEffectsFor = (
   }
 };
 
-export const playerLevelForExperience = (
-  experience: number,
-): 0 | 1 | 2 | 3 | 4 | 5 => {
+export const playerLevelForExperience = (experience: number): PlayerLevel => {
   const reached = gameplayTuning.experienceThresholds.filter(
     (threshold) => experience >= threshold,
   ).length;
-  return Math.min(5, reached) as 0 | 1 | 2 | 3 | 4 | 5;
+  return Math.min(
+    gameplayTuning.experienceThresholds.length,
+    reached,
+  ) as PlayerLevel;
+};
+
+/**
+ * A current V4 selection must be a class-local, contiguous tier prefix. The
+ * tier-five route becomes the required route for each later selection.
+ */
+export const isContiguousClassSkillPrefixFor = (
+  playerClass: PlayerClass,
+  level: number,
+  skillIds: readonly ClassSkillId[],
+): boolean => {
+  if (
+    skillIds.length > maximumClassSkillTier ||
+    skillIds.length > Math.max(0, level - 1)
+  )
+    return false;
+
+  let selectedRoute: "boss" | "aoe" | undefined;
+  for (const [index, skillId] of skillIds.entries()) {
+    const tier = index + 1;
+    const definition = classSkillDefinitionFor(skillId);
+    if (
+      definition.playerClass !== playerClass ||
+      definition.tier !== tier ||
+      (tier < 5 && definition.route !== undefined)
+    )
+      return false;
+    if (tier === 5) {
+      if (definition.route === undefined) return false;
+      selectedRoute = definition.route;
+    }
+    if (tier > 5 && definition.route !== selectedRoute) return false;
+  }
+  return true;
+};
+
+/**
+ * A compatibility marker remains only while its retained V2/V3 selection is
+ * not a current route prefix. Class selection and level gains can make it
+ * canonical without rewriting any historical skill IDs.
+ */
+export const normalizeLegacySkillSelectionForCurrentProgression = (
+  progression: ClassProgression,
+): ClassProgression => {
+  if (
+    progression.legacySkillSelection !== true ||
+    progression.playerClass === null ||
+    !isContiguousClassSkillPrefixFor(
+      progression.playerClass,
+      progression.level,
+      progression.skillIds,
+    )
+  )
+    return progression;
+  const { legacySkillSelection: _ignored, ...normalized } = progression;
+  return normalized;
 };
 
 /** Only the mobile martial classes retain auto-attacks while moving. */
@@ -210,12 +269,19 @@ export const pendingClassSkillChoicesFor = (
   progression: ClassProgression,
 ): readonly ClassSkillId[] => {
   if (progression.playerClass === null) return [];
+  if (progression.legacySkillSelection === true) return [];
   const tier = progression.skillIds.length + 1;
-  if (tier > 4 || progression.level < tier + 1) return [];
+  if (tier > maximumClassSkillTier || progression.level < tier + 1) return [];
+  const selectedRoute = progression.skillIds
+    .map(classSkillDefinitionFor)
+    .find((skill) => skill.tier === 5)?.route;
+  if (tier > 5 && selectedRoute === undefined) return [];
   return classSkillDefinitions
     .filter(
       (skill) =>
-        skill.playerClass === progression.playerClass && skill.tier === tier,
+        skill.playerClass === progression.playerClass &&
+        skill.tier === tier &&
+        (tier <= 5 || skill.route === selectedRoute),
     )
     .map((skill) => skill.id);
 };

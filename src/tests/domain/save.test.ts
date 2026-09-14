@@ -142,7 +142,7 @@ describe("schema-2 persistence boundary", () => {
     });
   });
 
-  it("rejects malformed, overspent, and classless V3 allocation records before hydration", () => {
+  it("rejects malformed, overspent, and classless V4 allocation records before hydration", () => {
     const valid = {
       ...validSave(),
       classProgression: {
@@ -221,6 +221,412 @@ describe("schema-2 persistence boundary", () => {
         failure: "invalid-document",
       });
     }
+  });
+
+  it("migrates a frozen V3 level-5 save into V4 without widening historical validation", () => {
+    const base = validSave();
+    const historicalV3 = {
+      ...toSaveV2Document({
+        ...base,
+        player: { ...base.player, hp: 850, maxHp: 850 },
+      }),
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 9999,
+        level: 5 as const,
+        playerClass: "knight" as const,
+        skillIds: [
+          "knight-iron-guard",
+          "knight-heavy-blade",
+          "knight-execution-arc",
+          "knight-bulwark",
+        ],
+        allocatedStats: {
+          ...emptyPlayerStatAllocations(),
+          strength: 4,
+        },
+        weaponRank: 2,
+      },
+    };
+    expect(isSaveDocument(historicalV3)).toBe(true);
+    const decoded = decodeSave(JSON.stringify(historicalV3));
+    expect(decoded).toMatchObject({
+      ok: true,
+      wireDocument: { schemaVersion: 3 },
+      document: {
+        schemaVersion: 4,
+        player: { hp: 1450, maxHp: 1450 },
+        classProgression: {
+          experience: 9999,
+          level: 25,
+          playerClass: "knight",
+          skillIds: historicalV3.classProgression.skillIds,
+          allocatedStats: historicalV3.classProgression.allocatedStats,
+          weaponRank: 2,
+        },
+      },
+    });
+    if (!decoded.ok) throw new Error("Expected frozen V3 save to load");
+    expect(
+      decoded.document.classProgression.legacySkillSelection,
+    ).toBeUndefined();
+    const widenedAsV3 = {
+      ...historicalV3,
+      classProgression: {
+        ...historicalV3.classProgression,
+        skillIds: ["knight-boss-5"],
+      },
+    };
+    expect(isSaveDocument(widenedAsV3)).toBe(false);
+    expect(decodeSave(JSON.stringify(widenedAsV3))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
+  });
+
+  it("preserves each frozen-validator legacy skill selection through V4", () => {
+    const base = validSave();
+    const legacyProgression = {
+      experience: 300,
+      level: 5 as const,
+      playerClass: "knight" as const,
+      skillIds: ["wizard-flame-orb"] as const,
+      weaponRank: 0,
+    };
+    const historicalV2 = {
+      ...toSaveV2Document(base),
+      classProgression: legacyProgression,
+    };
+    const historicalV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        ...legacyProgression,
+        allocatedStats: emptyPlayerStatAllocations(),
+      },
+    };
+
+    for (const historical of [historicalV2, historicalV3]) {
+      expect(isSaveDocument(historical)).toBe(true);
+      const decoded = decodeSave(JSON.stringify(historical));
+      expect(decoded).toMatchObject({
+        ok: true,
+        document: {
+          schemaVersion: 4,
+          classProgression: {
+            experience: 300,
+            level: 5,
+            playerClass: "knight",
+            skillIds: ["wizard-flame-orb"],
+            legacySkillSelection: true,
+          },
+        },
+      });
+      if (!decoded.ok) throw new Error("Expected frozen legacy save to load");
+
+      const current = toCurrentSaveStorageDocument(decoded.document);
+      expect(isSaveDocument(current)).toBe(true);
+      expect(decodeSave(JSON.stringify(current))).toMatchObject({
+        ok: true,
+        document: {
+          classProgression: {
+            skillIds: ["wizard-flame-orb"],
+            legacySkillSelection: true,
+          },
+        },
+      });
+
+      const session = new GameSession({ saved: decoded.document });
+      const request = session.createValidCampfireSaveRequest(2);
+      expect(request?.document.classProgression).toMatchObject({
+        skillIds: ["wizard-flame-orb"],
+        legacySkillSelection: true,
+      });
+      expect(isSaveDocument(request?.document)).toBe(true);
+    }
+
+    const classlessV2 = {
+      ...toSaveV2Document(base),
+      classProgression: {
+        experience: 300,
+        level: 5 as const,
+        playerClass: null,
+        skillIds: ["wizard-flame-orb"],
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(classlessV2)).toBe(true);
+    const classlessDecoded = decodeSave(JSON.stringify(classlessV2));
+    expect(classlessDecoded).toMatchObject({
+      ok: true,
+      document: {
+        classProgression: {
+          playerClass: null,
+          skillIds: ["wizard-flame-orb"],
+          legacySkillSelection: true,
+        },
+      },
+    });
+    if (!classlessDecoded.ok)
+      throw new Error("Expected classless frozen V2 save to load");
+    const classlessSession = new GameSession({
+      saved: classlessDecoded.document,
+    });
+    expect(classlessSession.presentation().ui.pendingClassChoices).toEqual([
+      "knight",
+      "wizard",
+      "archer",
+    ]);
+    expect(classlessSession.chooseClass("wizard")).toBe(true);
+    expect(classlessSession.presentation().ui.classProgression).toMatchObject({
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+    });
+    expect(
+      classlessSession.presentation().ui.classProgression.legacySkillSelection,
+    ).toBeUndefined();
+    const classlessRequest = classlessSession.createValidCampfireSaveRequest(2);
+    expect(classlessRequest?.document.classProgression).toMatchObject({
+      playerClass: "wizard",
+      skillIds: ["wizard-flame-orb"],
+    });
+    expect(
+      classlessRequest?.document.classProgression.legacySkillSelection,
+    ).toBeUndefined();
+    expect(isSaveDocument(classlessRequest?.document)).toBe(true);
+
+    const levelSixV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 400,
+        level: 5 as const,
+        playerClass: "knight" as const,
+        skillIds: [
+          "wizard-flame-orb",
+          "knight-heavy-blade",
+          "knight-execution-arc",
+          "knight-bulwark",
+        ],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(levelSixV3)).toBe(true);
+    const levelSixDecoded = decodeSave(JSON.stringify(levelSixV3));
+    if (!levelSixDecoded.ok)
+      throw new Error("Expected level-six frozen V3 save to load");
+    const levelSixSession = new GameSession({
+      saved: levelSixDecoded.document,
+    });
+    expect(levelSixSession.presentation().ui).toMatchObject({
+      classProgression: { level: 6, legacySkillSelection: true },
+      pendingClassSkillChoices: [],
+    });
+    const levelSixRequest = levelSixSession.createValidCampfireSaveRequest(2);
+    expect(isSaveDocument(levelSixRequest?.document)).toBe(true);
+
+    const delayedCanonicalV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 19,
+        level: 1 as const,
+        playerClass: "knight" as const,
+        skillIds: ["knight-iron-guard"],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(delayedCanonicalV3)).toBe(true);
+    const delayedCanonicalDecoded = decodeSave(
+      JSON.stringify(delayedCanonicalV3),
+    );
+    if (!delayedCanonicalDecoded.ok)
+      throw new Error("Expected delayed canonical V3 save to load");
+    expect(
+      delayedCanonicalDecoded.document.classProgression.legacySkillSelection,
+    ).toBe(true);
+    const delayedCanonicalSession = new GameSession({
+      saved: delayedCanonicalDecoded.document,
+    });
+    (
+      delayedCanonicalSession as unknown as {
+        grantExperience: (amount: number) => void;
+      }
+    ).grantExperience(1);
+    expect(
+      delayedCanonicalSession.presentation().ui.classProgression,
+    ).toMatchObject({
+      experience: 20,
+      level: 2,
+      playerClass: "knight",
+      skillIds: ["knight-iron-guard"],
+    });
+    expect(
+      delayedCanonicalSession.presentation().ui.classProgression
+        .legacySkillSelection,
+    ).toBeUndefined();
+    const delayedCanonicalRequest =
+      delayedCanonicalSession.createValidCampfireSaveRequest(2);
+    expect(isSaveDocument(delayedCanonicalRequest?.document)).toBe(true);
+  });
+
+  it("leaves canonical frozen V2/V3 skill prefixes unmarked", () => {
+    const base = validSave();
+    const canonicalProgression = {
+      experience: 300,
+      level: 5 as const,
+      playerClass: "knight" as const,
+      skillIds: ["knight-iron-guard"] as const,
+      weaponRank: 0,
+    };
+    const canonicalV2 = {
+      ...toSaveV2Document(base),
+      classProgression: canonicalProgression,
+    };
+    const canonicalV3 = {
+      ...toSaveV2Document(base),
+      schemaVersion: 3 as const,
+      classProgression: {
+        ...canonicalProgression,
+        allocatedStats: emptyPlayerStatAllocations(),
+      },
+    };
+    for (const historical of [canonicalV2, canonicalV3]) {
+      const decoded = decodeSave(JSON.stringify(historical));
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) continue;
+      expect(
+        decoded.document.classProgression.legacySkillSelection,
+      ).toBeUndefined();
+    }
+  });
+
+  it("accepts only contiguous V4 class-route skill prefixes", () => {
+    const base = validSave();
+    const validBossRoute = {
+      ...base,
+      classProgression: {
+        experience: 6100,
+        level: 25 as const,
+        playerClass: "wizard" as const,
+        skillIds: [
+          "wizard-flame-orb",
+          "wizard-arcane-haste",
+          "wizard-nova",
+          "wizard-meteor",
+          "wizard-boss-5",
+          "wizard-boss-6",
+        ],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(validBossRoute)).toBe(true);
+    expect(decodeSave(JSON.stringify(validBossRoute))).toMatchObject({
+      ok: true,
+      document: { schemaVersion: 4 },
+    });
+
+    const invalidSkillSequences = [
+      [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+        "wizard-meteor",
+        "wizard-boss-5",
+        "wizard-aoe-6",
+      ],
+      ["wizard-flame-orb", "wizard-nova"],
+      ["knight-iron-guard"],
+      [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+        "wizard-meteor",
+        "wizard-boss-5",
+        "wizard-boss-5",
+      ],
+    ];
+    for (const skillIds of invalidSkillSequences) {
+      const candidate = {
+        ...validBossRoute,
+        classProgression: { ...validBossRoute.classProgression, skillIds },
+      };
+      expect(isSaveDocument(candidate)).toBe(false);
+      expect(decodeSave(JSON.stringify(candidate))).toMatchObject({
+        ok: false,
+        failure: "invalid-document",
+      });
+    }
+
+    const invalidLegacyMarker = {
+      ...validBossRoute,
+      classProgression: {
+        ...validBossRoute.classProgression,
+        legacySkillSelection: true,
+      },
+    };
+    expect(isSaveDocument(invalidLegacyMarker)).toBe(false);
+    expect(decodeSave(JSON.stringify(invalidLegacyMarker))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
+
+    const canonicalLegacyMarker = {
+      ...validBossRoute,
+      classProgression: {
+        experience: 300,
+        level: 5 as const,
+        playerClass: "wizard" as const,
+        skillIds: ["wizard-flame-orb"],
+        legacySkillSelection: true as const,
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(canonicalLegacyMarker)).toBe(false);
+    expect(decodeSave(JSON.stringify(canonicalLegacyMarker))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
+
+    const persistedRouteField = {
+      ...validBossRoute,
+      classProgression: {
+        ...validBossRoute.classProgression,
+        route: "boss",
+      },
+    };
+    expect(isSaveDocument(persistedRouteField)).toBe(false);
+    expect(decodeSave(JSON.stringify(persistedRouteField))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
+
+    const classlessMarkedAllocation = {
+      ...validBossRoute,
+      classProgression: {
+        experience: 300,
+        level: 5 as const,
+        playerClass: null,
+        skillIds: ["wizard-flame-orb"],
+        legacySkillSelection: true as const,
+        allocatedStats: {
+          ...emptyPlayerStatAllocations(),
+          strength: 1,
+        },
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(classlessMarkedAllocation)).toBe(false);
+    expect(decodeSave(JSON.stringify(classlessMarkedAllocation))).toMatchObject(
+      {
+        ok: false,
+        failure: "invalid-document",
+      },
+    );
   });
 
   it("rejects duplicate and unknown persisted content through the frozen V2 decoder", () => {
@@ -326,7 +732,7 @@ describe("browser save validation and recovery", () => {
     expect(store.getItem(SAVE_KEYS.backup)).toBe(beforeBackup);
   });
 
-  it("keeps frozen V2 projection exact while browser storage writes V3 progression", () => {
+  it("keeps frozen V2 projection exact while browser storage writes V4 progression", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
     const document = {
@@ -348,10 +754,10 @@ describe("browser save validation and recovery", () => {
       toCurrentSaveStorageDocument(document),
     );
     expect(toSaveV2Document(document)).not.toHaveProperty("classProgression");
-    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 3 });
+    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 4 });
   });
 
-  it("keeps a loaded V2 save byte-stable until an explicit V3 campfire commit persists an allocation", () => {
+  it("keeps a loaded V2 save byte-stable until an explicit V4 campfire commit persists an allocation", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
     const fresh = validSave();
@@ -376,7 +782,7 @@ describe("browser save validation and recovery", () => {
       ok: true,
       source: "primary",
       document: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         classProgression: { allocatedStats: emptyPlayerStatAllocations() },
       },
     });
@@ -393,7 +799,7 @@ describe("browser save validation and recovery", () => {
 
     const persisted = store.getItem(SAVE_KEYS.primary);
     expect(JSON.parse(persisted ?? "")).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       classProgression: {
         allocatedStats: { ...emptyPlayerStatAllocations(), strength: 1 },
       },

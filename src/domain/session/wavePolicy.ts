@@ -2,6 +2,12 @@ import { enemyDefinitions, gameplayTuning } from "../../data/definitions";
 import type { EnemyKind, Vector2 } from "../types";
 import type { RuntimeEnemy } from "./sessionState";
 import { copyVector } from "./sessionState";
+import { maxEnemyHpFor, type EnemyHealthContext } from "./enemyHealthScaling";
+
+const legacyEnemyHealthContext = Object.freeze({
+  level: 0,
+  normalPrimaryDamage: 0,
+} satisfies EnemyHealthContext);
 
 export const waveBossNames = Object.freeze([
   "Ember Wyrm",
@@ -101,6 +107,7 @@ const draftFor = ({
   waveExpiresAt,
   isWaveBoss = false,
   bossName,
+  enemyHealthContext,
 }: {
   readonly id: string;
   readonly kind: EnemyKind;
@@ -109,6 +116,7 @@ const draftFor = ({
   readonly waveExpiresAt?: number;
   readonly isWaveBoss?: boolean;
   readonly bossName?: WaveBossName;
+  readonly enemyHealthContext: EnemyHealthContext;
 }): RuntimeEnemy => {
   const definition = enemyDefinitions[kind];
   const healthMultiplier = isWaveBoss
@@ -117,15 +125,21 @@ const draftFor = ({
   const damageMultiplier = isWaveBoss
     ? gameplayTuning.waveBossDamageMultiplier
     : 1;
+  const maxHp = maxEnemyHpFor({
+    authoredMaxHp: definition.maxHp,
+    spawnHealthMultiplier: healthMultiplier,
+    context: enemyHealthContext,
+  });
   return {
     id,
     kind,
     position: copyVector(position),
     spawnPosition: copyVector(position),
-    hp: Math.ceil(definition.maxHp * healthMultiplier),
-    maxHp: Math.ceil(definition.maxHp * healthMultiplier),
+    hp: maxHp,
+    maxHp,
     damage: Math.max(1, Math.ceil(definition.damage * damageMultiplier)),
     dangerTier: isWaveBoss ? 5 : 1,
+    spawnHealthMultiplier: healthMultiplier,
     dropMultiplier: isWaveBoss ? gameplayTuning.waveBossDropMultiplier : 1,
     moveSpeed: definition.moveSpeed,
     attackEverySeconds: definition.attackEverySeconds,
@@ -144,10 +158,13 @@ export const waveEnemyDraftsFor = ({
   seed,
   waveIndex,
   center,
+  enemyHealthContext = legacyEnemyHealthContext,
 }: {
   readonly seed: string;
   readonly waveIndex: number;
   readonly center: Vector2;
+  /** Omitted only by legacy direct consumers that retain authored-only HP. */
+  readonly enemyHealthContext?: EnemyHealthContext;
 }): readonly RuntimeEnemy[] => {
   const phase = wavePhaseFor(waveIndex * gameplayTuning.waveIntervalSeconds);
   const normalEnemies = Array.from(
@@ -170,6 +187,7 @@ export const waveEnemyDraftsFor = ({
         position: spawnPositionFor(seed, waveIndex, slot, center),
         waveIndex,
         waveExpiresAt: phase.endsAt,
+        enemyHealthContext,
       });
     },
   );
@@ -183,6 +201,7 @@ export const waveEnemyDraftsFor = ({
       waveIndex,
       isWaveBoss: true,
       bossName,
+      enemyHealthContext,
     }),
   ];
 };

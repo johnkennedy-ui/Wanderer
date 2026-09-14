@@ -651,7 +651,7 @@ describe("current HUD placement port", () => {
       "Flame Orb: selected",
     );
     expect(get("skill-tree-summary").textContent).toContain(
-      "Wizard · level 2 · 1/4",
+      "Wizard · level 2 · 1/24",
     );
     boss.click();
     expect(intents.chooseUpgrade).toHaveBeenCalledExactlyOnceWith(

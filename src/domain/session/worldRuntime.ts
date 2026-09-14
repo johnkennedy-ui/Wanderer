@@ -4,6 +4,12 @@ import { generateChunk, visibleChunkCoordinates } from "../world";
 import { copyVector } from "./sessionState";
 import type { ChunkRecipeSource } from "./chunkRecipeCache";
 import type { RuntimeEnemy } from "./sessionState";
+import { maxEnemyHpFor, type EnemyHealthContext } from "./enemyHealthScaling";
+
+const legacyEnemyHealthContext = Object.freeze({
+  level: 0,
+  normalPrimaryDamage: 0,
+} satisfies EnemyHealthContext);
 
 /**
  * Internal, stateless visible-world coordination. These helpers are not part
@@ -22,6 +28,8 @@ export interface MissingVisibleRuntimeEnemyDraftsInput {
   readonly visibleChunks: readonly ChunkRecipe[];
   readonly existingEnemies: ReadonlyMap<string, RuntimeEnemy>;
   readonly defeatedBossIds: ReadonlySet<string>;
+  /** Omitted only by legacy direct consumers that retain authored-only HP. */
+  readonly enemyHealthContext?: EnemyHealthContext;
 }
 
 /**
@@ -32,6 +40,7 @@ export const missingVisibleRuntimeEnemyDraftsFor = ({
   visibleChunks,
   existingEnemies,
   defeatedBossIds,
+  enemyHealthContext = legacyEnemyHealthContext,
 }: MissingVisibleRuntimeEnemyDraftsInput): readonly RuntimeEnemy[] => {
   const materializedIds = new Set(existingEnemies.keys());
 
@@ -42,19 +51,26 @@ export const missingVisibleRuntimeEnemyDraftsFor = ({
 
       materializedIds.add(spawn.id);
       const definition = enemyDefinitions[spawn.kind];
+      const spawnHealthMultiplier = spawn.danger.healthMultiplier;
+      const maxHp = maxEnemyHpFor({
+        authoredMaxHp: definition.maxHp,
+        spawnHealthMultiplier,
+        context: enemyHealthContext,
+      });
       return [
         {
           id: spawn.id,
           kind: spawn.kind,
           position: copyVector(spawn.position),
           spawnPosition: copyVector(spawn.position),
-          hp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
-          maxHp: Math.ceil(definition.maxHp * spawn.danger.healthMultiplier),
+          hp: maxHp,
+          maxHp,
           damage: Math.max(
             1,
             Math.ceil(definition.damage * spawn.danger.damageMultiplier),
           ),
           dangerTier: spawn.danger.tier,
+          spawnHealthMultiplier,
           dropMultiplier: spawn.danger.dropMultiplier,
           moveSpeed: definition.moveSpeed,
           attackEverySeconds: definition.attackEverySeconds,

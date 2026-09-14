@@ -2,7 +2,7 @@
 
 `GameSession` creates a `ValidCampfireSaveRequest` only while the player is within 2m of a home, wild, or player-built campfire. The visible **Save at campfire** control is the only caller that asks the browser-storage adapter to commit such a request. Movement, combat, drops, buildings, upgrades, death, reload, visibility changes, and shutdown do not persist state.
 
-## Historical schema-2 and current schema-3 contracts
+## Historical schema-2/schema-3 and current schema-4 contracts
 
 Released documents remain schema version `2`:
 
@@ -30,13 +30,15 @@ JSON documents in `src/tests/fixtures/saves/v2/` are historical compatibility
 fixtures: do not regenerate or edit them just because a new implementation
 would otherwise fail.
 
-Schema version `3` is the active storage format. It retains every V2 field and
-adds a required normalized progression object:
+Schema version `3` is a frozen historical storage format. It retains every V2
+field and adds a normalized progression object capped at the released L5
+catalogue. Schema version `4` is the active storage format. It retains every
+V3 field and uses the level-25 progression catalogue:
 
 ```ts
 {
-  schemaVersion: 3,
-  // V2 fields above,
+  schemaVersion: 4,
+  // V2/V3 fields above,
   classProgression: {
     experience, level, playerClass, skillIds, weaponRank,
     allocatedStats: { strength, agility, vitality, magic, dexterity, luck }
@@ -50,24 +52,38 @@ Vitality and Magic and are never persisted as allocations.
 
 `src/domain/persistence/currentSave.ts` owns the separate current in-memory
 hydration representation and the explicit V2 serialization projection.
-`migrateSaveV2` converts a validated historical DTO to V3 in memory;
-`GameSession` then clones it with `hydrateSessionState`. Active copy-out is
-V3; `toSaveV2Document` remains an exact historical projection for fixtures and
-compatibility checks. Runtime types may evolve around this boundary without
-silently changing the released V2 wire validator or JSON field names.
+`migrateSaveV2` and `migrateSaveV3` convert validated historical DTOs to V4 in
+memory; `GameSession` then clones them with `hydrateSessionState`. Current V4
+documents are copied on load. Active copy-out is V4; `toSaveV2Document` remains
+an exact historical projection for fixtures and compatibility checks. Runtime
+types may evolve around this boundary without silently changing the released
+V2/V3 wire validators or JSON field names.
+
+V4 normally requires a contiguous class/tier skill prefix and derives the
+Boss/AoE route from the tier-5 skill rather than persisting a separate route
+field. If a frozen V2/V3 validator had accepted a non-canonical but known
+legacy skill selection, pure migration retains those exact IDs with the narrow
+`legacySkillSelection: true` V4 compatibility marker so a later explicit save
+does not discard them. New progression never creates that marker. A classless
+marked selection may still choose a class, and any marked selection sheds the
+marker when its retained IDs become a current class/tier prefix at class choice
+or an XP-level boundary; otherwise it receives no new route-continuation
+choices. V4 accepts only the listed progression fields; a persisted `route`
+field is rejected because the current route remains derived from the tier-5
+skill.
 
 The current in-memory hydration model is separate. Loading performs a pure sequence:
 
 ```text
-raw string → JSON parse → schema identification → frozen V2 decode or V3 decode
-→ pure V2 migration/normalisation or V3 copy → current-state validation
+raw string → JSON parse → schema identification → frozen V2/V3 decode or V4 decode
+→ pure V2→V4/V3→V4 migration or V4 copy → current-state validation
 → GameSession hydration
 ```
 
 No decode, migration, or hydration stage writes browser storage. A migrated
 state is stored only by a later, valid, explicit campfire save. Historical
-fixtures and existing V2 documents must remain loadable with schema version 2;
-loading must never rewrite them. A V2 Knight save already contains the
+fixtures and existing V2/V3 documents must remain loadable at their original
+schema version; loading must never rewrite them. A V2 Knight save already contains the
 level-one Vitality health grant, so migration adds only missing level-two and
 later base-Vitality growth while preserving upgrade and class-skill health.
 

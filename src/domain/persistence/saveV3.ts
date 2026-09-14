@@ -1,19 +1,46 @@
 import {
   allocatablePlayerStatKinds,
-  classSkillIds,
+  legacyClassSkillIds,
   playerClasses,
 } from "../types";
-import type { ClassProgression, PlayerStatAllocations } from "../types";
-import { playerLevelForExperience } from "../session/progressionRules";
+import type {
+  LegacyClassSkillId,
+  PlayerClass,
+  PlayerStatAllocations,
+} from "../types";
 import { isSaveV2Document } from "./saveV2";
 import type { SaveV2Document } from "./saveV2";
 
 /** The active explicit wire format for stat allocations and progression. */
 export const SAVE_V3_SCHEMA_VERSION = 3 as const;
 
+export type LegacyPlayerLevel = 0 | 1 | 2 | 3 | 4 | 5;
+export const legacyExperienceThresholds = Object.freeze([
+  6, 20, 50, 120, 300,
+] as const);
+
+export const legacyPlayerLevelForExperience = (
+  experience: number,
+): LegacyPlayerLevel =>
+  Math.min(
+    legacyExperienceThresholds.length,
+    legacyExperienceThresholds.filter((threshold) => experience >= threshold)
+      .length,
+  ) as LegacyPlayerLevel;
+
+/** Frozen V3 progression representation. It must not widen with current content. */
+export interface LegacyClassProgressionV3 {
+  readonly experience: number;
+  readonly level: LegacyPlayerLevel;
+  readonly playerClass: PlayerClass | null;
+  readonly skillIds: readonly LegacyClassSkillId[];
+  readonly allocatedStats: PlayerStatAllocations;
+  readonly weaponRank?: number;
+}
+
 export interface SaveV3Document extends Omit<SaveV2Document, "schemaVersion"> {
   readonly schemaVersion: typeof SAVE_V3_SCHEMA_VERSION;
-  readonly classProgression: ClassProgression;
+  readonly classProgression: LegacyClassProgressionV3;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -35,17 +62,18 @@ const isAllocationRecord = (value: unknown): value is PlayerStatAllocations => {
 /** Validates the normalized V3 progression rather than accepting legacy gaps. */
 export const isClassProgressionV3 = (
   value: unknown,
-): value is ClassProgression => {
+): value is LegacyClassProgressionV3 => {
   if (!isRecord(value)) return false;
   const allocatedStats = value.allocatedStats;
   if (!isAllocationRecord(allocatedStats)) return false;
   if (
     !Number.isInteger(value.experience) ||
     (value.experience as number) < 0 ||
-    value.level !== playerLevelForExperience(value.experience as number) ||
+    value.level !==
+      legacyPlayerLevelForExperience(value.experience as number) ||
     !Array.isArray(value.skillIds) ||
     !value.skillIds.every((id) =>
-      classSkillIds.includes(id as (typeof classSkillIds)[number]),
+      legacyClassSkillIds.includes(id as (typeof legacyClassSkillIds)[number]),
     ) ||
     new Set(value.skillIds).size !== value.skillIds.length ||
     (value.playerClass !== null &&

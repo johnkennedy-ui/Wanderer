@@ -1,9 +1,10 @@
 import { isSupportedWorldGeneratorVersion } from "../world";
 import { isCurrentSave, isLegacyClassProgression } from "./currentSave";
-import { migrateSaveV2 } from "./migrateSave";
+import { migrateSaveV2, migrateSaveV3 } from "./migrateSave";
 import { isSaveV2Document, SAVE_V2_SCHEMA_VERSION } from "./saveV2";
 import { isSaveV3Document, SAVE_V3_SCHEMA_VERSION } from "./saveV3";
-import type { SaveV3Document } from "./saveV3";
+import { isSaveV4Document, SAVE_V4_SCHEMA_VERSION } from "./saveV4";
+import type { SaveV4Document } from "./saveV4";
 import type { SaveDecodeResult } from "./saveErrors";
 import type { CurrentSave } from "../types";
 
@@ -17,9 +18,9 @@ const hasSchemaVersion = (
 ): value is { schemaVersion: unknown } =>
   typeof value === "object" && value !== null && "schemaVersion" in value;
 
-/** Copies a V3 document into an owned current runtime representation. */
-const cloneSaveV3 = (document: SaveV3Document): CurrentSave => ({
-  schemaVersion: 3,
+/** Copies a V4 document into an owned current runtime representation. */
+const cloneSaveV4 = (document: SaveV4Document): CurrentSave => ({
+  schemaVersion: 4,
   world: { ...document.world },
   player: {
     position: { ...document.player.position },
@@ -38,15 +39,20 @@ const cloneSaveV3 = (document: SaveV3Document): CurrentSave => ({
   savePointId: document.savePointId,
   savePointPosition: { ...document.savePointPosition },
   classProgression: {
-    ...document.classProgression,
+    experience: document.classProgression.experience,
+    level: document.classProgression.level,
+    playerClass: document.classProgression.playerClass,
     skillIds: [...document.classProgression.skillIds],
+    ...(document.classProgression.legacySkillSelection === true
+      ? { legacySkillSelection: true as const }
+      : {}),
     allocatedStats: { ...document.classProgression.allocatedStats },
     weaponRank: document.classProgression.weaponRank ?? 0,
   },
 });
 
 /**
- * Parse → identify schema → validate frozen V2 or explicit V3 → migrate/copy
+ * Parse → identify schema → validate frozen V2/V3 or current V4 → migrate/copy
  * in memory. No storage write occurs in this pipeline.
  */
 export const decodeSave = (serialized: string | null): SaveDecodeResult => {
@@ -82,7 +88,7 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
     if (!isCurrentSave(document))
       return failure(
         "invalid-document",
-        "Migrated save data does not match current schema version 3.",
+        "Migrated save data does not match current schema version 4.",
       );
     return { ok: true, document, wireDocument: raw };
   }
@@ -98,7 +104,27 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
         "unsupported-generator",
         `World generator ${raw.world.generatorVersion} is not supported.`,
       );
-    return { ok: true, document: cloneSaveV3(raw), wireDocument: raw };
+    const document = migrateSaveV3(raw);
+    if (!isCurrentSave(document))
+      return failure(
+        "invalid-document",
+        "Migrated save data does not match current schema version 4.",
+      );
+    return { ok: true, document, wireDocument: raw };
+  }
+
+  if (raw.schemaVersion === SAVE_V4_SCHEMA_VERSION) {
+    if (!isSaveV4Document(raw))
+      return failure(
+        "invalid-document",
+        "Save data does not match schema version 4.",
+      );
+    if (!isSupportedWorldGeneratorVersion(raw.world.generatorVersion))
+      return failure(
+        "unsupported-generator",
+        `World generator ${raw.world.generatorVersion} is not supported.`,
+      );
+    return { ok: true, document: cloneSaveV4(raw), wireDocument: raw };
   }
 
   return failure(

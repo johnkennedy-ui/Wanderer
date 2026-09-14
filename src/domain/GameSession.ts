@@ -1,4 +1,8 @@
-import { gameplayTuning, upgradeDefinitionFor } from "../data/definitions";
+import {
+  enemyDefinitions,
+  gameplayTuning,
+  upgradeDefinitionFor,
+} from "../data/definitions";
 import { add, magnitude, normalize, roundVector, scale } from "./math";
 import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
@@ -18,7 +22,10 @@ import type {
   WeaponRelicDropState,
   WorldIdentity,
 } from "./types";
-import { allocatablePlayerStatKinds } from "./types";
+import {
+  allocatablePlayerStatKinds,
+  emptyPlayerStatAllocations,
+} from "./types";
 import {
   copyVector,
   createFreshSessionState,
@@ -45,6 +52,11 @@ import {
   visibleChunksFor,
 } from "./session/worldRuntime";
 import { waveEnemyDraftsFor, wavePhaseFor } from "./session/wavePolicy";
+import {
+  hpWithPreservedFraction,
+  maxEnemyHpFor,
+  type EnemyHealthContext,
+} from "./session/enemyHealthScaling";
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
@@ -63,6 +75,7 @@ import {
   applyLevelGrowthToPlayer,
   isValidClassSkillChoice,
   movingAttackSpeedMultiplierFor,
+  normalizeLegacySkillSelectionForCurrentProgression,
   pendingClassSkillChoicesFor,
   playerLevelForExperience,
   playerStatsFor,
@@ -268,12 +281,16 @@ export class GameSession {
       this.notice = { kind: "class.rejected.invalid-choice" };
       return false;
     }
-    this.classProgression = { ...this.classProgression, playerClass };
+    this.classProgression = normalizeLegacySkillSelectionForCurrentProgression({
+      ...this.classProgression,
+      playerClass,
+    });
     this.player = applyClassPassiveToPlayer(
       this.player,
       playerClass,
       this.classProgression.level,
     );
+    this.refreshEnemyHealthForCurrentContext();
     this.notice = { kind: "class.selected", playerClass };
     return true;
   }
@@ -478,6 +495,7 @@ export class GameSession {
       visibleChunks,
       existingEnemies: this.enemies,
       defeatedBossIds: this.defeatedBossIds,
+      enemyHealthContext: this.enemyHealthContext(),
     });
     for (const draft of drafts) this.enemies.set(draft.id, draft);
   }
@@ -496,6 +514,7 @@ export class GameSession {
       seed: this.world.seed,
       waveIndex: phase.waveIndex,
       center: this.player.position,
+      enemyHealthContext: this.enemyHealthContext(),
     }))
       this.enemies.set(enemy.id, enemy);
     this.startedWaveIndices.add(phase.waveIndex);
@@ -735,13 +754,45 @@ export class GameSession {
   private grantExperience(amount: number): void {
     const previous = this.classProgression;
     const experience = previous.experience + amount;
-    const next = {
+    const next = normalizeLegacySkillSelectionForCurrentProgression({
       ...previous,
       experience,
       level: playerLevelForExperience(experience),
-    };
+    });
     this.classProgression = next;
     this.player = applyLevelGrowthToPlayer(this.player, previous, next);
+    if (next.level > previous.level) this.refreshEnemyHealthForCurrentContext();
+  }
+  /**
+   * Uses only the selected class and earned level. Optional player power is
+   * intentionally absent so skills, stats, upgrades, and relics retain payoff.
+   */
+  private enemyHealthContext(): EnemyHealthContext {
+    const baselineProgression = {
+      ...this.classProgression,
+      skillIds: [],
+      allocatedStats: emptyPlayerStatAllocations(),
+      weaponRank: 0,
+    };
+    return {
+      level: baselineProgression.level,
+      normalPrimaryDamage: combatStatsFor([], [], baselineProgression)
+        .attackDamage,
+    };
+  }
+  private refreshEnemyHealthForCurrentContext(): void {
+    const context = this.enemyHealthContext();
+    for (const enemy of this.enemies.values()) {
+      const spawnHealthMultiplier = enemy.spawnHealthMultiplier ?? 1;
+      const nextMaxHp = maxEnemyHpFor({
+        authoredMaxHp: enemyDefinitions[enemy.kind].maxHp,
+        spawnHealthMultiplier,
+        context,
+      });
+      enemy.hp = hpWithPreservedFraction(enemy, nextMaxHp);
+      enemy.maxHp = nextMaxHp;
+      enemy.spawnHealthMultiplier = spawnHealthMultiplier;
+    }
   }
   private clampPlayerState(): void {
     this.player.hp = Math.max(0, Math.min(this.player.hp, this.player.maxHp));

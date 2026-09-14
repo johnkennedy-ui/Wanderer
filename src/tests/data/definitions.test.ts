@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildingDefinitions,
+  classSkillDefinitions,
+  classSkillsById,
   enemyDefinitions,
   gameplayTuning,
   resourceDefinitions,
@@ -13,6 +15,8 @@ import { deepFreeze } from "../../data/deepFreeze";
 import { saveV2BuildingKinds } from "../../domain/persistence/saveV2";
 import {
   buildingKinds,
+  classSkillIds,
+  maximumClassSkillTier,
   enemyKinds,
   resourceKinds,
   upgradeIds,
@@ -54,6 +58,8 @@ describe("authored definitions", () => {
       buildingDefinitions,
       upgradeDefinitionsById,
       upgradeDefinitions,
+      classSkillsById,
+      classSkillDefinitions,
       resourceKinds,
       buildingKinds,
       enemyKinds,
@@ -96,11 +102,42 @@ describe("authored definitions", () => {
     );
 
     for (const id of upgradeIds) expect(upgradeDefinitionFor(id).id).toBe(id);
+    expect(classSkillDefinitions.map((skill) => skill.id)).toEqual(
+      classSkillIds,
+    );
+    expect(Object.keys(classSkillsById).sort()).toEqual(
+      [...classSkillIds].sort(),
+    );
   });
 
   it("keeps each canonical active identifier unique", () => {
-    for (const ids of [resourceKinds, buildingKinds, enemyKinds, upgradeIds])
+    for (const ids of [
+      resourceKinds,
+      buildingKinds,
+      enemyKinds,
+      upgradeIds,
+      classSkillIds,
+    ])
       expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("authors two route choices per current tier while retaining the historical opening tiers", () => {
+    expect(maximumClassSkillTier).toBe(24);
+    for (const playerClass of ["knight", "wizard", "archer"] as const) {
+      for (let tier = 1; tier <= maximumClassSkillTier; tier += 1) {
+        const skills = classSkillDefinitions.filter(
+          (skill) => skill.playerClass === playerClass && skill.tier === tier,
+        );
+        expect(skills).toHaveLength(2);
+        if (tier <= 4)
+          expect(skills.every((skill) => skill.route === undefined)).toBe(true);
+        else
+          expect(skills.map((skill) => skill.route).sort()).toEqual([
+            "aoe",
+            "boss",
+          ]);
+      }
+    }
   });
 
   it("covers every active building and enemy in renderer presentation records", () => {

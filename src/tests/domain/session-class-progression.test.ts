@@ -16,6 +16,7 @@ import {
 } from "../../domain/session/progressionRules";
 import {
   emptyPlayerStatAllocations,
+  maximumClassSkillTier,
   type ClassProgression,
 } from "../../domain/types";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
@@ -26,7 +27,7 @@ const progression = (
   level: ClassProgression["level"] = 5,
   skillIds: ClassProgression["skillIds"] = [],
 ): ClassProgression => ({
-  experience: [0, 6, 20, 50, 120, 300][level],
+  experience: [0, ...gameplayTuning.experienceThresholds][level],
   level,
   playerClass,
   skillIds,
@@ -54,13 +55,17 @@ const enemy = (
 });
 
 describe("class progression", () => {
-  it("uses cumulative deterministic experience thresholds for five levels", () => {
-    expect(gameplayTuning.experienceThresholds).toEqual([6, 20, 50, 120, 300]);
+  it("uses cumulative deterministic experience thresholds through level 25", () => {
+    expect(gameplayTuning.experienceThresholds).toEqual([
+      6, 20, 50, 120, 300, 400, 520, 660, 820, 1000, 1200, 1420, 1660, 1920,
+      2200, 2500, 2820, 3160, 3520, 3900, 4300, 4720, 5160, 5620, 6100,
+    ]);
     expect(
-      [0, 5, 6, 19, 20, 49, 50, 119, 120, 299, 300, 9999].map(
-        playerLevelForExperience,
-      ),
-    ).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+      [
+        0, 5, 6, 19, 20, 49, 50, 119, 120, 299, 300, 399, 400, 999, 1000, 6099,
+        6100, 9999,
+      ].map(playerLevelForExperience),
+    ).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 9, 10, 24, 25, 25]);
   });
 
   it("offers two class-local choices per earned skill tier", () => {
@@ -99,6 +104,76 @@ describe("class progression", () => {
       "wizard-meteor",
       "wizard-spellweave",
     ]);
+  });
+
+  it("branches each class into route-locked boss and AoE skills through tier 24", () => {
+    const legacySkillsByClass = {
+      knight: [
+        "knight-iron-guard",
+        "knight-heavy-blade",
+        "knight-execution-arc",
+        "knight-bulwark",
+      ],
+      wizard: [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+        "wizard-meteor",
+      ],
+      archer: [
+        "archer-longbow",
+        "archer-quickdraw",
+        "archer-piercing-arrow",
+        "archer-eagle-eye",
+      ],
+    } as const;
+
+    for (const playerClass of ["knight", "wizard", "archer"] as const) {
+      const atBranch = progression(
+        playerClass,
+        25,
+        legacySkillsByClass[playerClass],
+      );
+      expect(pendingClassSkillChoicesFor(atBranch)).toEqual([
+        `${playerClass}-boss-5`,
+        `${playerClass}-aoe-5`,
+      ]);
+      const bossProgression = {
+        ...atBranch,
+        skillIds: [...atBranch.skillIds, `${playerClass}-boss-5`],
+      } as ClassProgression;
+      expect(pendingClassSkillChoicesFor(bossProgression)).toEqual([
+        `${playerClass}-boss-6`,
+      ]);
+      const aoeProgression = {
+        ...atBranch,
+        skillIds: [...atBranch.skillIds, `${playerClass}-aoe-5`],
+      } as ClassProgression;
+      expect(pendingClassSkillChoicesFor(aoeProgression)).toEqual([
+        `${playerClass}-aoe-6`,
+      ]);
+      expect(
+        classSkillDefinitions.filter(
+          (skill) => skill.playerClass === playerClass && skill.tier === 24,
+        ),
+      ).toHaveLength(2);
+    }
+    expect(maximumClassSkillTier).toBe(24);
+    expect(classSkillDefinitionFor("knight-boss-24")).toMatchObject({
+      label: "Worldbreaker",
+      route: "boss",
+      effect: { kind: "attack-damage", amount: 20 },
+    });
+    expect(classSkillDefinitionFor("wizard-aoe-24")).toMatchObject({
+      label: "Apocalypse Nova",
+      route: "aoe",
+      effect: { kind: "secondary-targets", amount: 2 },
+    });
+    expect(classSkillDefinitionFor("archer-aoe-24")).toMatchObject({
+      label: "Skyfall Barrage",
+      route: "aoe",
+      effect: { kind: "secondary-targets", amount: 2 },
+    });
   });
 
   it("projects the authored class passives and applies their current combat roles", () => {
