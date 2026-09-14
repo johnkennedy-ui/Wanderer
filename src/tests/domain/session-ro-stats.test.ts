@@ -5,7 +5,10 @@ import {
   type ClassProgression,
   type PlayerClass,
 } from "../../domain/types";
-import { toCurrentSaveStorageDocument, toSaveV2Document } from "../../domain/persistence/currentSave";
+import {
+  toCurrentSaveStorageDocument,
+  toSaveV2Document,
+} from "../../domain/persistence/currentSave";
 import { decodeSave } from "../../domain/persistence/decodeSave";
 import {
   advanceAutoCombatPhase,
@@ -122,7 +125,10 @@ describe("RO-inspired stat core", () => {
     expect(session.chooseClass("knight")).toBe(true);
     expect(session.presentation().ui.statPointsAvailable).toBe(3);
     expect(session.allocateStat("vitality")).toBe(true);
-    expect(session.presentation().ui.player).toMatchObject({ hp: 135, maxHp: 135 });
+    expect(session.presentation().ui.player).toMatchObject({
+      hp: 135,
+      maxHp: 135,
+    });
     expect(session.presentation().ui.playerStats).toMatchObject({
       vitality: 7,
       defense: 3,
@@ -157,7 +163,10 @@ describe("RO-inspired stat core", () => {
       dodgeChance: 0.06,
     });
     expect(wizard.attackDamage).toBeCloseTo(19.8, 8);
-    expect(wizard).toMatchObject({ physicalCriticalChance: 0, magicDefense: 3 });
+    expect(wizard).toMatchObject({
+      physicalCriticalChance: 0,
+      magicDefense: 3,
+    });
   });
 
   it("resolves LUK physical crits and AGI dodge by deterministic event identities", () => {
@@ -189,7 +198,9 @@ describe("RO-inspired stat core", () => {
     const firstLaunch = launch();
     const secondLaunch = launch();
     expect(firstLaunch.projectiles).toEqual(secondLaunch.projectiles);
-    expect(firstLaunch.projectiles.map((projectile, index) => projectile.damage)).toEqual(
+    expect(
+      firstLaunch.projectiles.map((projectile, index) => projectile.damage),
+    ).toEqual(
       [0, 1].map((index) => {
         const critical = deterministicChanceSucceeds(
           archerStats.physicalCriticalChance,
@@ -206,11 +217,10 @@ describe("RO-inspired stat core", () => {
       }),
     );
 
-    const knightProgression = progression(
-      "knight",
-      5,
-      { ...emptyPlayerStatAllocations(), luck: 15 },
-    );
+    const knightProgression = progression("knight", 5, {
+      ...emptyPlayerStatAllocations(),
+      luck: 15,
+    });
     const knightStats = combatStatsFor([], [], knightProgression);
     const knightAttack = advanceAutoCombatPhase({
       delta: 1,

@@ -11,8 +11,7 @@ import type { SaveV2Document } from "./saveV2";
 /** The active explicit wire format for stat allocations and progression. */
 export const SAVE_V3_SCHEMA_VERSION = 3 as const;
 
-export interface SaveV3Document
-  extends Omit<SaveV2Document, "schemaVersion"> {
+export interface SaveV3Document extends Omit<SaveV2Document, "schemaVersion"> {
   readonly schemaVersion: typeof SAVE_V3_SCHEMA_VERSION;
   readonly classProgression: ClassProgression;
 }
@@ -28,8 +27,7 @@ const isAllocationRecord = (value: unknown): value is PlayerStatAllocations => {
     keys.length === expected.length &&
     keys.every((key, index) => key === expected[index]) &&
     allocatablePlayerStatKinds.every(
-      (stat) =>
-        Number.isInteger(value[stat]) && (value[stat] as number) >= 0,
+      (stat) => Number.isInteger(value[stat]) && (value[stat] as number) >= 0,
     )
   );
 };

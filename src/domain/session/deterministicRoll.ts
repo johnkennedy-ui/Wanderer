@@ -26,7 +26,8 @@ export const deterministicUnitRollFor = ({
   eventSerial,
   subjectId = "",
 }: DeterministicRollInput): number =>
-  hashText(`${worldSeed}|${domain}|${subjectId}|${eventSerial}`) / 4_294_967_296;
+  hashText(`${worldSeed}|${domain}|${subjectId}|${eventSerial}`) /
+  4_294_967_296;
 
 export const deterministicChanceSucceeds = (
   chance: number,
