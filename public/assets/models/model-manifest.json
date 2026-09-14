@@ -1,0 +1,33 @@
+{
+  "pack": "wanderer-low-poly-models",
+  "format": "glb",
+  "coordinateSystem": "Y-up",
+  "style": "stylized low-poly forest / ember / bronze",
+  "static": true,
+  "assets": {
+    "projectiles": {
+      "knight": "projectile_knight_blade_arc.glb",
+      "wizard": "projectile_wizard_flame_orb.glb",
+      "archer": "projectile_archer_arrow.glb"
+    },
+    "enemies": {
+      "scout": "enemy_scout.glb",
+      "brute": "enemy_brute.glb",
+      "spitter": "enemy_spitter.glb",
+      "elite": "enemy_elite.glb",
+      "boss": "enemy_ember_wyrm.glb"
+    },
+    "playerClasses": {
+      "knight": "player_knight.glb",
+      "wizard": "player_wizard.glb",
+      "archer": "player_archer.glb"
+    },
+    "buildings": {
+      "Campfire": "building_campfire.glb",
+      "Workshop": "building_workshop.glb",
+      "Farm": "building_farm.glb",
+      "Storage": "building_storage.glb",
+      "Healer": "building_healing_hut.glb"
+    }
+  }
+}

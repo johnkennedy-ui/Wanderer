@@ -3,6 +3,7 @@ import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { Vector2 } from "../../domain/types";
 import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
+import { ModelProjection } from "./modelPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
@@ -114,6 +115,17 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const setDataset = (key: string, value: string): void => {
     if (canvas.dataset[key] !== value) canvas.dataset[key] = value;
   };
+  let models: ModelProjection;
+  const writeModelDiagnostics = (): void => {
+    const modelDiagnostics = models.diagnostics();
+    setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
+    setDataset("modelPendingCount", String(modelDiagnostics.pendingInstances));
+    setDataset("modelActiveKeys", modelDiagnostics.activeKeys.join(","));
+    setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
+    setDataset("modelFailureCount", String(modelDiagnostics.failures));
+  };
+  models = new ModelProjection(undefined, writeModelDiagnostics);
+  scene.add(models.group);
 
   return {
     canvas,
@@ -122,6 +134,10 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     render(snapshot: GameRendererSnapshot): void {
       if (disposed) return;
       projection.render(snapshot);
+      models.render(snapshot, (id, visible) =>
+        projection.setModelVisible(id, visible),
+      );
+      writeModelDiagnostics();
       camera.position.set(
         snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
         defaultThreeCameraTuning.playerOffset.y,
@@ -177,6 +193,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       disposed = true;
       observer.disconnect();
       projection.dispose();
+      models.dispose();
       enemyHealthOverlay.dispose();
       floor.geometry.dispose();
       floor.material.dispose();
