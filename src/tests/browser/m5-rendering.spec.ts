@@ -158,10 +158,18 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
   await expect(boss).toHaveAttribute("aria-valuetext", "72 / 72 HP");
   const retainedBoss = await boss.elementHandle();
   if (retainedBoss === null) throw new Error("Missing retained boss bar");
-  await expect(boss).toHaveAttribute("aria-valuenow", "60", {
+  // Live combat can advance through more than one authored 12-damage event
+  // between DOM observations. Require a real, valid damage state rather than
+  // a single transient frame, then bind its accessible text to that same read.
+  await expect(boss).not.toHaveAttribute("aria-valuenow", "72", {
     timeout: 4_000,
   });
-  await expect(boss).toHaveAttribute("aria-valuetext", "60 / 72 HP");
+  const observedHealth = await boss.evaluate((node) => ({
+    value: node.getAttribute("aria-valuenow"),
+    text: node.getAttribute("aria-valuetext"),
+  }));
+  expect(["60", "48", "36", "24", "12"]).toContain(observedHealth.value);
+  expect(observedHealth.text).toBe(`${observedHealth.value} / 72 HP`);
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(true);
   await expect(boss).toHaveCount(0, { timeout: 4_000 });
   expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(false);

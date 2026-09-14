@@ -142,6 +142,87 @@ describe("schema-2 persistence boundary", () => {
     });
   });
 
+  it("rejects malformed, overspent, and classless V3 allocation records before hydration", () => {
+    const valid = {
+      ...validSave(),
+      classProgression: {
+        experience: 6,
+        level: 1 as const,
+        playerClass: "knight" as const,
+        skillIds: [],
+        allocatedStats: {
+          ...emptyPlayerStatAllocations(),
+          strength: 3,
+        },
+        weaponRank: 0,
+      },
+    };
+    const { luck: omittedLuck, ...missingLuck } =
+      valid.classProgression.allocatedStats;
+    void omittedLuck;
+    const invalidRecords = [
+      {
+        ...valid,
+        classProgression: {
+          ...valid.classProgression,
+          allocatedStats: missingLuck,
+        },
+      },
+      {
+        ...valid,
+        classProgression: {
+          ...valid.classProgression,
+          allocatedStats: {
+            ...valid.classProgression.allocatedStats,
+            strength: 1.5,
+          },
+        },
+      },
+      {
+        ...valid,
+        classProgression: {
+          ...valid.classProgression,
+          allocatedStats: {
+            ...valid.classProgression.allocatedStats,
+            luck: -1,
+          },
+        },
+      },
+      {
+        ...valid,
+        classProgression: {
+          ...valid.classProgression,
+          allocatedStats: {
+            ...valid.classProgression.allocatedStats,
+            strength: 4,
+          },
+        },
+      },
+      {
+        ...valid,
+        classProgression: {
+          experience: 0,
+          level: 0 as const,
+          playerClass: null,
+          skillIds: [],
+          allocatedStats: {
+            ...emptyPlayerStatAllocations(),
+            strength: 1,
+          },
+          weaponRank: 0,
+        },
+      },
+    ];
+
+    for (const document of invalidRecords) {
+      expect(isSaveDocument(document)).toBe(false);
+      expect(decodeSave(JSON.stringify(document))).toMatchObject({
+        ok: false,
+        failure: "invalid-document",
+      });
+    }
+  });
+
   it("rejects duplicate and unknown persisted content through the frozen V2 decoder", () => {
     const document = fixtureValue("buildings-and-upgrades") as SaveDocument;
     const duplicateBuilding = {
@@ -268,6 +349,65 @@ describe("browser save validation and recovery", () => {
     );
     expect(toSaveV2Document(document)).not.toHaveProperty("classProgression");
     expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 3 });
+  });
+
+  it("keeps a loaded V2 save byte-stable until an explicit V3 campfire commit persists an allocation", () => {
+    const store = new MemoryStore();
+    const storage = createBrowserSaveStorage(store);
+    const fresh = validSave();
+    const legacy = JSON.stringify({
+      ...toSaveV2Document({
+        ...fresh,
+        player: { ...fresh.player, hp: 130, maxHp: 130 },
+      }),
+      classProgression: {
+        experience: 6,
+        level: 1,
+        playerClass: "knight",
+        skillIds: [],
+        weaponRank: 0,
+      },
+    });
+    store.seed(SAVE_KEYS.primary, legacy);
+    const writesBeforeLoad = store.writes;
+
+    const loadedLegacy = storage.load();
+    expect(loadedLegacy).toMatchObject({
+      ok: true,
+      source: "primary",
+      document: {
+        schemaVersion: 3,
+        classProgression: { allocatedStats: emptyPlayerStatAllocations() },
+      },
+    });
+    if (!loadedLegacy.ok) throw new Error("Expected legacy V2 save to load");
+    expect(store.writes).toBe(writesBeforeLoad);
+    expect(store.getItem(SAVE_KEYS.primary)).toBe(legacy);
+
+    const session = new GameSession({ saved: loadedLegacy.document });
+    expect(session.allocateStat("strength")).toBe(true);
+    expect(store.getItem(SAVE_KEYS.primary)).toBe(legacy);
+    const request = session.createValidCampfireSaveRequest(77);
+    if (request === null) throw new Error("Home campfire should issue a save");
+    expect(storage.commit(request.document)).toMatchObject({ ok: true });
+
+    const persisted = store.getItem(SAVE_KEYS.primary);
+    expect(JSON.parse(persisted ?? "")).toMatchObject({
+      schemaVersion: 3,
+      classProgression: {
+        allocatedStats: { ...emptyPlayerStatAllocations(), strength: 1 },
+      },
+    });
+    const reloaded = storage.load();
+    expect(reloaded).toMatchObject({
+      ok: true,
+      source: "primary",
+      document: {
+        classProgression: {
+          allocatedStats: { ...emptyPlayerStatAllocations(), strength: 1 },
+        },
+      },
+    });
   });
 
   it("stages and validates temporary and backup data before an interrupted primary write", () => {

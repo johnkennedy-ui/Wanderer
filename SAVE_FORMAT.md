@@ -75,7 +75,7 @@ The decoder distinguishes `absent`, `invalid-json`, `invalid-document`, `unsuppo
 
 ## Generator and persistent-ID compatibility
 
-The current runtime accepts the released `wanderer-web-v1` generator. An unknown generator version is rejected before it hydrates a session; it is never passed to the newest algorithm. Released world-generator implementations and their procedural IDs are compatibility surfaces and are versioned separately in `WORLD_GENERATION.md`.
+The current runtime accepts the released `wanderer-web-v1` and `wanderer-web-v2` generators. An unknown generator version is rejected before it hydrates a session; it is never passed to the newest algorithm. Released world-generator implementations and their procedural IDs are compatibility surfaces and are versioned separately in `WORLD_GENERATION.md`.
 
 Persistent resource, building, enemy, boss, and upgrade IDs are opaque serialized values. They are append-only: display labels may change, but existing IDs must not be renamed or removed without an explicit compatibility definition, alias, or migration. Historical schema validators retain their own frozen values rather than importing an evolving active-ID list.
 
