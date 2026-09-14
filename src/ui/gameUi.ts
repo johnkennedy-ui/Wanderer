@@ -7,7 +7,7 @@ import {
   weaponRelicDefinitionFor,
 } from "../data/definitions";
 import type { GameUiSnapshot, PlacementResult } from "../domain/notices";
-import { buildingKinds } from "../domain/types";
+import { buildingKinds, maximumClassSkillTier } from "../domain/types";
 import type {
   AllocatablePlayerStatKind,
   BuildingKind,
@@ -602,16 +602,19 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       } else {
         const playerClass = snapshot.classProgression.playerClass;
         const selectedSkillIds = new Set(snapshot.classProgression.skillIds);
+        const selectedRoute = snapshot.classProgression.skillIds
+          .map(classSkillDefinitionFor)
+          .find((skill) => skill.tier === 5)?.route;
         text(
           skillTreeSummary,
-          `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/4 class skills selected · ${weaponRelicDefinitionFor(playerClass).label} rank ${weaponRank}.`,
+          `${classDefinitionFor(playerClass).label} · level ${snapshot.classProgression.level} · ${snapshot.classProgression.skillIds.length}/${maximumClassSkillTier} class skills selected${selectedRoute === undefined ? "" : ` · ${selectedRoute === "boss" ? "Boss" : "AoE"} route`} · ${weaponRelicDefinitionFor(playerClass).label} rank ${weaponRank}.`,
         );
         skillTree.render(
           classSkillDefinitions
             .filter((skill) => skill.playerClass === playerClass)
             .map((skill) => {
               const selected = selectedSkillIds.has(skill.id);
-              return `T${skill.tier} · ${skill.label}: ${selected ? "selected" : skill.description}`;
+              return `T${skill.tier}${skill.route === undefined ? "" : ` · ${skill.route === "boss" ? "Boss" : "AoE"}`} · ${skill.label}: ${selected ? "selected" : skill.description}`;
             }),
         );
       }
@@ -692,15 +695,26 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
           }
         } else {
           text(classModalTitle, "Choose a class skill");
+          const firstPendingSkillId = snapshot.pendingClassSkillChoices[0];
+          const firstPendingSkill =
+            firstPendingSkillId === undefined
+              ? undefined
+              : classSkillDefinitionFor(firstPendingSkillId);
           text(
             classModalDescription,
-            "Choose exactly one skill from your current class tier.",
+            firstPendingSkill === undefined
+              ? ""
+              : firstPendingSkill.tier === 5
+                ? "Choose a Boss or AoE route. Later class tiers continue the route you choose."
+                : firstPendingSkill.route === undefined
+                  ? "Choose exactly one skill from your current class tier."
+                  : `Continue your ${firstPendingSkill.route === "boss" ? "Boss" : "AoE"} route with this class tier.`,
           );
           for (const skillId of snapshot.pendingClassSkillChoices) {
             const definition = classSkillDefinitionFor(skillId);
             const button = document.createElement("button");
             button.dataset.testid = `class-skill-${skillId}`;
-            button.textContent = `${definition.label}: ${definition.description}`;
+            button.textContent = `${definition.route === undefined ? "" : `${definition.route === "boss" ? "Boss route" : "AoE route"} · `}${definition.label}: ${definition.description}`;
             button.addEventListener("click", () =>
               intents.chooseClassSkill(skillId),
             );

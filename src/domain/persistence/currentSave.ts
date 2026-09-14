@@ -1,12 +1,12 @@
-import { classSkillIds, playerClasses } from "../types";
+import { legacyClassSkillIds, playerClasses } from "../types";
 import type {
-  ClassProgression,
   CurrentSave,
+  LegacyClassSkillId,
   PlayerStatAllocations,
 } from "../types";
 import { isSupportedWorldGeneratorVersion } from "../world";
-import { isClassProgressionV3, isSaveV3Document } from "./saveV3";
-import type { SaveV3Document } from "./saveV3";
+import { isClassProgressionV4, isSaveV4Document } from "./saveV4";
+import type { SaveV4Document } from "./saveV4";
 import type { SaveV2Document } from "./saveV2";
 
 /**
@@ -15,20 +15,22 @@ import type { SaveV2Document } from "./saveV2";
  */
 export type { CurrentSave } from "../types";
 
-/** Strict V3 validation is also the current progression validator. */
-export const isClassProgression = isClassProgressionV3;
+/** Strict V4 validation is also the current progression validator. */
+export const isClassProgression = isClassProgressionV4;
 
 /**
  * Released schema-2 documents could carry a non-wire progression extension.
  * It predates allocations, so its level is intentionally normalized during
- * pure migration rather than trusted as a current V3 value.
+ * pure migration rather than trusted as a current V4 value.
  */
-export type LegacyClassProgression = Omit<
-  ClassProgression,
-  "allocatedStats"
-> & {
+export interface LegacyClassProgression {
+  readonly experience: number;
+  readonly level: 0 | 1 | 2 | 3 | 4 | 5;
+  readonly playerClass: (typeof playerClasses)[number] | null;
+  readonly skillIds: readonly LegacyClassSkillId[];
   readonly allocatedStats?: PlayerStatAllocations;
-};
+  readonly weaponRank?: number;
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -53,7 +55,7 @@ export const isLegacyClassProgression = (
       )) &&
     Array.isArray(value.skillIds) &&
     value.skillIds.every((id) =>
-      classSkillIds.includes(id as (typeof classSkillIds)[number]),
+      legacyClassSkillIds.includes(id as (typeof legacyClassSkillIds)[number]),
     ) &&
     new Set(value.skillIds).size === value.skillIds.length &&
     (value.weaponRank === undefined ||
@@ -99,12 +101,12 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
   },
 });
 
-/** Copies the active V3 wire document without retaining runtime aliases. */
+/** Copies the active V4 wire document without retaining runtime aliases. */
 export const toCurrentSaveStorageDocument = (
   save: CurrentSave,
-): SaveV3Document => ({
+): SaveV4Document => ({
   ...toSaveV2Document(save),
-  schemaVersion: 3,
+  schemaVersion: 4,
   classProgression: {
     ...save.classProgression,
     skillIds: [...save.classProgression.skillIds],
@@ -115,5 +117,5 @@ export const toCurrentSaveStorageDocument = (
 
 /** Current runtime validation is intentionally separate from historical V2 parsing. */
 export const isCurrentSave = (value: unknown): value is CurrentSave =>
-  isSaveV3Document(value) &&
+  isSaveV4Document(value) &&
   isSupportedWorldGeneratorVersion(value.world.generatorVersion);

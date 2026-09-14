@@ -41,7 +41,7 @@ export const projectCurrentSave = (
   committedAt: number,
   savePoint: SettlementCampfire,
 ): CurrentSave => ({
-  schemaVersion: 3,
+  schemaVersion: 4,
   world: copyWorldIdentity(state.world),
   player: {
     position: copyVector(state.player.position),

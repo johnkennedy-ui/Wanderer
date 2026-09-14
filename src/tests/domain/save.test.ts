@@ -142,7 +142,7 @@ describe("schema-2 persistence boundary", () => {
     });
   });
 
-  it("rejects malformed, overspent, and classless V3 allocation records before hydration", () => {
+  it("rejects malformed, overspent, and classless V4 allocation records before hydration", () => {
     const valid = {
       ...validSave(),
       classProgression: {
@@ -217,6 +217,122 @@ describe("schema-2 persistence boundary", () => {
     for (const document of invalidRecords) {
       expect(isSaveDocument(document)).toBe(false);
       expect(decodeSave(JSON.stringify(document))).toMatchObject({
+        ok: false,
+        failure: "invalid-document",
+      });
+    }
+  });
+
+  it("migrates a frozen V3 level-5 save into V4 without widening historical validation", () => {
+    const base = validSave();
+    const historicalV3 = {
+      ...toSaveV2Document({
+        ...base,
+        player: { ...base.player, hp: 850, maxHp: 850 },
+      }),
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 9999,
+        level: 5 as const,
+        playerClass: "knight" as const,
+        skillIds: [
+          "knight-iron-guard",
+          "knight-heavy-blade",
+          "knight-execution-arc",
+          "knight-bulwark",
+        ],
+        allocatedStats: {
+          ...emptyPlayerStatAllocations(),
+          strength: 4,
+        },
+        weaponRank: 2,
+      },
+    };
+    expect(isSaveDocument(historicalV3)).toBe(true);
+    const decoded = decodeSave(JSON.stringify(historicalV3));
+    expect(decoded).toMatchObject({
+      ok: true,
+      wireDocument: { schemaVersion: 3 },
+      document: {
+        schemaVersion: 4,
+        player: { hp: 1450, maxHp: 1450 },
+        classProgression: {
+          experience: 9999,
+          level: 25,
+          playerClass: "knight",
+          skillIds: historicalV3.classProgression.skillIds,
+          allocatedStats: historicalV3.classProgression.allocatedStats,
+          weaponRank: 2,
+        },
+      },
+    });
+    const widenedAsV3 = {
+      ...historicalV3,
+      classProgression: {
+        ...historicalV3.classProgression,
+        skillIds: ["knight-boss-5"],
+      },
+    };
+    expect(isSaveDocument(widenedAsV3)).toBe(false);
+    expect(decodeSave(JSON.stringify(widenedAsV3))).toMatchObject({
+      ok: false,
+      failure: "invalid-document",
+    });
+  });
+
+  it("accepts only contiguous V4 class-route skill prefixes", () => {
+    const base = validSave();
+    const validBossRoute = {
+      ...base,
+      classProgression: {
+        experience: 6100,
+        level: 25 as const,
+        playerClass: "wizard" as const,
+        skillIds: [
+          "wizard-flame-orb",
+          "wizard-arcane-haste",
+          "wizard-nova",
+          "wizard-meteor",
+          "wizard-boss-5",
+          "wizard-boss-6",
+        ],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 0,
+      },
+    };
+    expect(isSaveDocument(validBossRoute)).toBe(true);
+    expect(decodeSave(JSON.stringify(validBossRoute))).toMatchObject({
+      ok: true,
+      document: { schemaVersion: 4 },
+    });
+
+    const invalidSkillSequences = [
+      [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+        "wizard-meteor",
+        "wizard-boss-5",
+        "wizard-aoe-6",
+      ],
+      ["wizard-flame-orb", "wizard-nova"],
+      ["knight-iron-guard"],
+      [
+        "wizard-flame-orb",
+        "wizard-arcane-haste",
+        "wizard-nova",
+        "wizard-meteor",
+        "wizard-boss-5",
+        "wizard-boss-5",
+      ],
+    ];
+    for (const skillIds of invalidSkillSequences) {
+      const candidate = {
+        ...validBossRoute,
+        classProgression: { ...validBossRoute.classProgression, skillIds },
+      };
+      expect(isSaveDocument(candidate)).toBe(false);
+      expect(decodeSave(JSON.stringify(candidate))).toMatchObject({
         ok: false,
         failure: "invalid-document",
       });
@@ -326,7 +442,7 @@ describe("browser save validation and recovery", () => {
     expect(store.getItem(SAVE_KEYS.backup)).toBe(beforeBackup);
   });
 
-  it("keeps frozen V2 projection exact while browser storage writes V3 progression", () => {
+  it("keeps frozen V2 projection exact while browser storage writes V4 progression", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
     const document = {
@@ -348,10 +464,10 @@ describe("browser save validation and recovery", () => {
       toCurrentSaveStorageDocument(document),
     );
     expect(toSaveV2Document(document)).not.toHaveProperty("classProgression");
-    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 3 });
+    expect(JSON.parse(serialized ?? "")).toMatchObject({ schemaVersion: 4 });
   });
 
-  it("keeps a loaded V2 save byte-stable until an explicit V3 campfire commit persists an allocation", () => {
+  it("keeps a loaded V2 save byte-stable until an explicit V4 campfire commit persists an allocation", () => {
     const store = new MemoryStore();
     const storage = createBrowserSaveStorage(store);
     const fresh = validSave();
@@ -376,7 +492,7 @@ describe("browser save validation and recovery", () => {
       ok: true,
       source: "primary",
       document: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         classProgression: { allocatedStats: emptyPlayerStatAllocations() },
       },
     });
@@ -393,7 +509,7 @@ describe("browser save validation and recovery", () => {
 
     const persisted = store.getItem(SAVE_KEYS.primary);
     expect(JSON.parse(persisted ?? "")).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       classProgression: {
         allocatedStats: { ...emptyPlayerStatAllocations(), strength: 1 },
       },

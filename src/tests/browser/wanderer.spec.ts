@@ -853,6 +853,193 @@ test("visible campfire save commits and later unsaved movement rolls back on rel
 });
 
 test(
+  "a valid V4 level-25 save exposes its chosen class route",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    const level25BossRouteSave = {
+      schemaVersion: 4,
+      world: {
+        seed: "wanderer-known-seed",
+        generatorVersion: "wanderer-web-v2",
+      },
+      player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+      resources: {
+        wood: 120,
+        stone: 120,
+        scrap: 120,
+        essence: 20,
+        bossCore: 0,
+      },
+      buildings: [],
+      defeatedBossIds: [],
+      upgrades: [],
+      nextBuildingSerial: 1,
+      committedAt: 0,
+      savePointId: "campfire:home",
+      savePointPosition: { x: 0, y: 0 },
+      classProgression: {
+        experience: 6100,
+        level: 25,
+        playerClass: "wizard",
+        skillIds: [
+          "wizard-flame-orb",
+          "wizard-arcane-haste",
+          "wizard-nova",
+          "wizard-meteor",
+          "wizard-boss-5",
+        ],
+        allocatedStats: {
+          strength: 0,
+          dexterity: 0,
+          agility: 0,
+          luck: 0,
+          vitality: 0,
+          magic: 0,
+        },
+        weaponRank: 0,
+      },
+    };
+    expect(decodeSave(JSON.stringify(level25BossRouteSave)).ok).toBe(true);
+    await page.addInitScript(
+      ({ key, value }) => window.localStorage.setItem(key, value),
+      {
+        key: "wanderer.save.primary",
+        value: JSON.stringify(level25BossRouteSave),
+      },
+    );
+
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible();
+    await expect(page.getByTestId("class-modal-description")).toContainText(
+      "Continue your Boss route",
+    );
+    await expect(
+      classModal.getByTestId("class-skill-wizard-boss-6"),
+    ).toHaveCount(1);
+    await expect(
+      classModal.getByTestId("class-skill-wizard-aoe-6"),
+    ).toHaveCount(0);
+    await classModal.getByTestId("class-skill-wizard-boss-6").click();
+    await expect(
+      classModal.getByTestId("class-skill-wizard-boss-7"),
+    ).toHaveCount(1);
+    await expect(
+      classModal.getByTestId("class-skill-wizard-aoe-7"),
+    ).toHaveCount(0);
+  },
+);
+
+test(
+  "a complete V4 level-25 route saves and reloads without reopening a choice",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    const skillIds = [
+      "wizard-flame-orb",
+      "wizard-arcane-haste",
+      "wizard-nova",
+      "wizard-meteor",
+      ...Array.from({ length: 20 }, (_, index) => `wizard-boss-${index + 5}`),
+    ];
+    const completeLevel25BossRouteSave = {
+      schemaVersion: 4,
+      world: {
+        seed: "wanderer-known-seed",
+        generatorVersion: "wanderer-web-v2",
+      },
+      player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
+      resources: {
+        wood: 120,
+        stone: 120,
+        scrap: 120,
+        essence: 20,
+        bossCore: 0,
+      },
+      buildings: [],
+      defeatedBossIds: [],
+      upgrades: [],
+      nextBuildingSerial: 1,
+      committedAt: 0,
+      savePointId: "campfire:home",
+      savePointPosition: { x: 0, y: 0 },
+      classProgression: {
+        experience: 6100,
+        level: 25,
+        playerClass: "wizard",
+        skillIds,
+        allocatedStats: {
+          strength: 0,
+          dexterity: 0,
+          agility: 0,
+          luck: 0,
+          vitality: 0,
+          magic: 0,
+        },
+        weaponRank: 0,
+      },
+    };
+    expect(decodeSave(JSON.stringify(completeLevel25BossRouteSave)).ok).toBe(
+      true,
+    );
+    await page.addInitScript(
+      ({ key, value }) => window.localStorage.setItem(key, value),
+      {
+        key: "wanderer.save.primary",
+        value: JSON.stringify(completeLevel25BossRouteSave),
+      },
+    );
+
+    await page.goto(applicationPath);
+    await expect(page.getByTestId("class-modal")).toBeHidden();
+    const upgradeModal = page.getByTestId("upgrade-modal");
+    await page.addLocatorHandler(
+      upgradeModal,
+      async (modal) => {
+        const choices = modal.getByRole("button");
+        await expect(choices).toHaveCount(3);
+        const choice = choices.first();
+        await choice.click();
+      },
+      { noWaitAfter: true },
+    );
+    await openStatus(page);
+    await expect(page.getByTestId("class-progression")).toContainText(
+      "level 25 · Wizard",
+    );
+    await page.getByTestId("save-button").click();
+    await expect(upgradeModal).toBeHidden();
+    await expect(page.getByTestId("save-message")).toContainText(
+      "Saved explicitly",
+    );
+    const committed = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem("wanderer.save.primary") ?? "{}"),
+    );
+    expect(committed).toMatchObject({
+      schemaVersion: 4,
+      classProgression: {
+        level: 25,
+        playerClass: "wizard",
+        skillIds,
+      },
+    });
+    await page.getByTestId("skill-tree-toggle").click();
+    await expect(page.getByTestId("skill-tree-summary")).toContainText(
+      "24/24 class skills selected · Boss route",
+    );
+    await expect(page.getByTestId("skill-tree-skills")).toContainText(
+      "T24 · Boss · Worldfire Meteor: selected",
+    );
+    await page.reload();
+    await expect(page.getByTestId("class-modal")).toBeHidden();
+    await openStatus(page);
+    await page.getByTestId("skill-tree-toggle").click();
+    await expect(page.getByTestId("skill-tree-summary")).toContainText(
+      "24/24 class skills selected · Boss route",
+    );
+  },
+);
+
+test(
   "an explicit campfire save reloads the XP-derived level, chosen class, and exact skills",
   { tag: "@manual-choices" },
   async ({ page }) => {
@@ -947,7 +1134,7 @@ test(
       "level 3 · Wizard",
     );
     await page.getByTestId("skill-tree-toggle").click();
-    await expect(page.getByTestId("skill-tree-summary")).toContainText("2/4");
+    await expect(page.getByTestId("skill-tree-summary")).toContainText("2/24");
     await expect(page.getByTestId("skill-tree-skills")).toContainText(
       "Flame Orb: selected",
     );

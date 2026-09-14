@@ -14,6 +14,7 @@ import type {
   ClassProgression,
   ClassSkillId,
   CombatStats,
+  PlayerLevel,
   PlayerStatAllocations,
   PlayerState,
   PlayerClass,
@@ -24,6 +25,7 @@ import {
   allocatablePlayerStatKinds,
   emptyPlayerStatAllocations,
   emptyPlayerStats,
+  maximumClassSkillTier,
 } from "../types";
 
 export interface ProjectileUpgradeEffects {
@@ -42,7 +44,7 @@ export interface WeaponRelicEffects {
   readonly crescentDamageMultiplier: number;
 }
 
-/** A full V3 progression value for APIs that permit a no-class default. */
+/** A full V4 progression value for APIs that permit a no-class default. */
 export const defaultClassProgression = (): ClassProgression => ({
   experience: 0,
   level: 0,
@@ -121,13 +123,14 @@ export const weaponRelicEffectsFor = (
   }
 };
 
-export const playerLevelForExperience = (
-  experience: number,
-): 0 | 1 | 2 | 3 | 4 | 5 => {
+export const playerLevelForExperience = (experience: number): PlayerLevel => {
   const reached = gameplayTuning.experienceThresholds.filter(
     (threshold) => experience >= threshold,
   ).length;
-  return Math.min(5, reached) as 0 | 1 | 2 | 3 | 4 | 5;
+  return Math.min(
+    gameplayTuning.experienceThresholds.length,
+    reached,
+  ) as PlayerLevel;
 };
 
 /** Only the mobile martial classes retain auto-attacks while moving. */
@@ -211,11 +214,17 @@ export const pendingClassSkillChoicesFor = (
 ): readonly ClassSkillId[] => {
   if (progression.playerClass === null) return [];
   const tier = progression.skillIds.length + 1;
-  if (tier > 4 || progression.level < tier + 1) return [];
+  if (tier > maximumClassSkillTier || progression.level < tier + 1) return [];
+  const selectedRoute = progression.skillIds
+    .map(classSkillDefinitionFor)
+    .find((skill) => skill.tier === 5)?.route;
+  if (tier > 5 && selectedRoute === undefined) return [];
   return classSkillDefinitions
     .filter(
       (skill) =>
-        skill.playerClass === progression.playerClass && skill.tier === tier,
+        skill.playerClass === progression.playerClass &&
+        skill.tier === tier &&
+        (tier <= 5 || skill.route === selectedRoute),
     )
     .map((skill) => skill.id);
 };
