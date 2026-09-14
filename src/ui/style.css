@@ -95,6 +95,41 @@ input {
   background: rgb(19 54 63 / 94%);
   box-shadow: 0 4px 14px rgb(0 0 0 / 38%);
 }
+.hud-settings-stack {
+  position: absolute;
+  top: max(4.75rem, calc(env(safe-area-inset-top) + 4rem));
+  right: max(0.75rem, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  pointer-events: auto;
+}
+.hud-speed-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(44px, 1fr));
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border: 1px solid rgb(184 213 174 / 42%);
+  border-radius: 9px;
+  background: rgb(10 20 25 / 92%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+}
+.hud-speed-controls[hidden] {
+  display: none;
+}
+.hud-speed-button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0.25rem 0.45rem;
+  font-weight: 800;
+}
+.hud-speed-button[aria-pressed="true"] {
+  border-color: #fff0a8;
+  background: #3c725c;
+  box-shadow: 0 0 0 3px rgb(230 214 144 / 28%);
+}
 .hud-quick-stats {
   position: absolute;
   top: max(0.75rem, env(safe-area-inset-top));
@@ -310,6 +345,9 @@ h2 {
   margin: 0.45rem 0;
 }
 @media (max-width: 700px) {
+  .hud-settings-stack {
+    top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
+  }
   .top-panel {
     top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
     font-size: 0.75rem;

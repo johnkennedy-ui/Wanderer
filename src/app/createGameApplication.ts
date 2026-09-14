@@ -20,6 +20,10 @@ import {
   createApplicationLifecycle,
   createCampfireSaveIntent,
 } from "./applicationLifecycle";
+import {
+  advanceSimulationFrame,
+  type SimulationSpeedMultiplier,
+} from "./simulationSpeed";
 
 export interface GameApplication {
   dispose(): void;
@@ -36,6 +40,7 @@ export const createGameApplication = async (
   );
   const { session } = bootstrap;
   let platformMessage = bootstrap.platformMessage;
+  let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
   const scheduler = createBrowserFrameScheduler();
   let disposed = false;
 
@@ -81,6 +86,9 @@ export const createGameApplication = async (
     allocateStat(kind: AllocatablePlayerStatKind): void {
       session.allocateStat(kind);
     },
+    setSimulationSpeed(multiplier): void {
+      simulationSpeedMultiplier = multiplier;
+    },
   });
   const renderer = createThreeRenderer(ui.worldHost);
   const keyboard = createKeyboardInput((command) => session.move(command));
@@ -104,7 +112,11 @@ export const createGameApplication = async (
     lifecycle,
     scheduler,
     (deltaSeconds) => {
-      session.tick(deltaSeconds);
+      advanceSimulationFrame(
+        deltaSeconds,
+        simulationSpeedMultiplier,
+        (stepSeconds) => session.tick(stepSeconds),
+      );
       const presentation = session.presentation();
       renderer.render(presentation.renderer);
       ui.render(presentation.ui);

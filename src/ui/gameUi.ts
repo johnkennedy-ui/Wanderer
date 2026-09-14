@@ -39,7 +39,14 @@ export interface UiIntents {
   chooseClass(playerClass: PlayerClass): void;
   chooseClassSkill(skillId: ClassSkillId): void;
   allocateStat(kind: AllocatablePlayerStatKind): void;
+  setSimulationSpeed(multiplier: SimulationSpeedMultiplier): void;
 }
+
+type SimulationSpeedMultiplier = 1 | 2 | 5;
+
+const simulationSpeedMultipliers: readonly SimulationSpeedMultiplier[] = [
+  1, 2, 5,
+];
 
 type PlacementMode =
   | { readonly kind: "place"; readonly buildingKind: BuildingKind }
@@ -108,6 +115,16 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <span aria-hidden="true">◈</span>
       </button>
     </nav>
+    <div class="hud-settings-stack" data-testid="settings-stack">
+      <button type="button" class="hud-circle-button" data-testid="settings-toggle" aria-label="Settings" aria-controls="settings-speed-controls" aria-expanded="false" title="Settings">
+        <span aria-hidden="true">⚙</span>
+      </button>
+      <div id="settings-speed-controls" data-testid="settings-speed-controls" class="hud-speed-controls" role="group" aria-label="Game speed" hidden>
+        <button type="button" class="hud-speed-button" data-testid="speed-1x" aria-label="Set game speed to 1×" aria-pressed="true" title="1× game speed">1×</button>
+        <button type="button" class="hud-speed-button" data-testid="speed-2x" aria-label="Set game speed to 2×" aria-pressed="false" title="2× game speed">2×</button>
+        <button type="button" class="hud-speed-button" data-testid="speed-5x" aria-label="Set game speed to 5×" aria-pressed="false" title="5× game speed">5×</button>
+      </div>
+    </div>
     <div class="hud-quick-stats" data-testid="quick-stats" aria-label="Current health and level">
       <span data-testid="quick-health"></span>
       <span data-testid="quick-level"></span>
@@ -215,6 +232,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const resourcesToggle = byTestId<HTMLButtonElement>("resources-toggle");
   const skillTreeToggle = byTestId<HTMLButtonElement>("skill-tree-toggle");
   const statsToggle = byTestId<HTMLButtonElement>("stats-toggle");
+  const settingsToggle = byTestId<HTMLButtonElement>("settings-toggle");
+  const settingsSpeedControls = byTestId<HTMLElement>(
+    "settings-speed-controls",
+  );
   const closeStatusPanel = byTestId<HTMLButtonElement>(
     "close-character-status",
   );
@@ -222,6 +243,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const closeResources = byTestId<HTMLButtonElement>("close-resources");
   const closeSkillTree = byTestId<HTMLButtonElement>("close-skill-tree");
   const closeStats = byTestId<HTMLButtonElement>("close-stats");
+  const speedButtons = simulationSpeedMultipliers.map((multiplier) => ({
+    multiplier,
+    button: byTestId<HTMLButtonElement>(`speed-${multiplier}x`),
+  }));
 
   const setPanelVisibility = (
     panel: HTMLElement,
@@ -236,6 +261,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let resourcesPanelVisible = false;
   let skillTreePanelVisible = false;
   let statsPanelVisible = false;
+  let settingsVisible = false;
+  let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
   let placementMode: PlacementMode = null;
   let placementFeedback = "";
   let disposed = false;
@@ -265,6 +292,19 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     statsPanelVisible = visible;
     setPanelVisibility(statsPanel, statsToggle, visible);
   };
+  const setSettingsVisible = (visible: boolean): void => {
+    settingsVisible = visible;
+    setPanelVisibility(settingsSpeedControls, settingsToggle, visible);
+  };
+  const setSimulationSpeed = (multiplier: SimulationSpeedMultiplier): void => {
+    simulationSpeedMultiplier = multiplier;
+    for (const speedButton of speedButtons) {
+      const selected = speedButton.multiplier === simulationSpeedMultiplier;
+      if (speedButton.button.getAttribute("aria-pressed") !== String(selected))
+        setAttribute(speedButton.button, "aria-pressed", String(selected));
+    }
+    intents.setSimulationSpeed(multiplier);
+  };
   const setPlacementMode = (mode: PlacementMode): void => {
     placementMode = mode;
     worldHost.dataset.placementMode = mode === null ? "inactive" : "active";
@@ -283,12 +323,15 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       );
   };
   statusPanelToggle.addEventListener("click", () => {
+    setSettingsVisible(false);
     setStatusPanelVisible(!statusPanelVisible);
   });
   buildMenuToggle.addEventListener("click", () => {
+    setSettingsVisible(false);
     setBuildMenuVisible(!buildMenuVisible);
   });
   resourcesToggle.addEventListener("click", () => {
+    setSettingsVisible(false);
     const visible = !resourcesPanelVisible;
     setResourcesPanelVisible(visible);
     if (visible) {
@@ -297,6 +340,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     }
   });
   skillTreeToggle.addEventListener("click", () => {
+    setSettingsVisible(false);
     const visible = !skillTreePanelVisible;
     setSkillTreePanelVisible(visible);
     if (visible) {
@@ -305,6 +349,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     }
   });
   statsToggle.addEventListener("click", () => {
+    setSettingsVisible(false);
     const visible = !statsPanelVisible;
     setStatsPanelVisible(visible);
     if (visible) {
@@ -312,6 +357,19 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       setSkillTreePanelVisible(false);
     }
   });
+  settingsToggle.addEventListener("click", () => {
+    const visible = !settingsVisible;
+    setSettingsVisible(visible);
+    if (visible) {
+      setStatusPanelVisible(false);
+      setBuildMenuVisible(false);
+      setResourcesPanelVisible(false);
+      setSkillTreePanelVisible(false);
+      setStatsPanelVisible(false);
+    }
+  });
+  for (const { multiplier, button } of speedButtons)
+    button.addEventListener("click", () => setSimulationSpeed(multiplier));
   closeStats.addEventListener("click", () => setStatsPanelVisible(false));
   closeStatusPanel.addEventListener("click", () =>
     setStatusPanelVisible(false),
@@ -336,6 +394,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
     setStatsPanelVisible(false);
+    setSettingsVisible(false);
   };
   for (const kind of buildingKinds.filter((kind) => kind !== "Storage")) {
     const button = document.createElement("button");

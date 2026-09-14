@@ -439,6 +439,70 @@ test("initial browser load uses compact circular actions with accessible hidden 
   );
 });
 
+test("Settings exposes 1×, 2×, and 5× runtime speed controls beneath its tile", async ({
+  page,
+}) => {
+  await page.goto(applicationPath);
+  const settings = page.getByTestId("settings-toggle");
+  const controls = page.getByTestId("settings-speed-controls");
+  const atOne = page.getByTestId("speed-1x");
+  const atTwo = page.getByTestId("speed-2x");
+  const atFive = page.getByTestId("speed-5x");
+  const savedBefore = await page.evaluate(() =>
+    localStorage.getItem("wanderer.save.primary"),
+  );
+
+  await expect(settings).toHaveAccessibleName("Settings");
+  await expect(settings).toHaveAttribute(
+    "aria-controls",
+    "settings-speed-controls",
+  );
+  await expect(settings).toHaveAttribute("aria-expanded", "false");
+  await expect(controls).toBeHidden();
+  const settingsBox = await settings.boundingBox();
+  if (settingsBox === null) throw new Error("Settings tile was not laid out");
+  expect(settingsBox.width).toBeGreaterThanOrEqual(44);
+  expect(settingsBox.height).toBeGreaterThanOrEqual(44);
+  expect(Math.abs(settingsBox.width - settingsBox.height)).toBeLessThanOrEqual(
+    1,
+  );
+
+  await settings.click();
+  await expect(controls).toBeVisible();
+  await expect(settings).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAccessibleName("Game speed");
+  const controlsBox = await controls.boundingBox();
+  if (controlsBox === null)
+    throw new Error("Settings speed controls were not laid out");
+  expect(controlsBox.y).toBeGreaterThanOrEqual(
+    settingsBox.y + settingsBox.height,
+  );
+  await expect(atOne).toHaveAttribute("aria-pressed", "true");
+  await expect(atTwo).toHaveAttribute("aria-pressed", "false");
+  await expect(atFive).toHaveAttribute("aria-pressed", "false");
+
+  await atTwo.click();
+  await expect(atOne).toHaveAttribute("aria-pressed", "false");
+  await expect(atTwo).toHaveAttribute("aria-pressed", "true");
+  await atFive.click();
+  await expect(atTwo).toHaveAttribute("aria-pressed", "false");
+  await expect(atFive).toHaveAttribute("aria-pressed", "true");
+  await atOne.click();
+  await expect(atOne).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+  ).toBe(savedBefore);
+
+  await page.getByTestId("character-status-toggle").click();
+  await expect(page.getByTestId("character-status-panel")).toBeVisible();
+  await page.getByTestId("close-character-status").click();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await page.getByTestId("build-menu-toggle").click();
+  await expect(page.getByTestId("build-menu-panel")).toBeVisible();
+  await page.getByTestId("close-build-menu").click();
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+});
+
 test("a present corrupt save is surfaced and left untouched on built-output boot", async ({
   page,
 }) => {
