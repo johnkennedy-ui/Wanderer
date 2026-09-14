@@ -1,5 +1,6 @@
 import { GameSession } from "../domain/GameSession";
 import type {
+  AllocatablePlayerStatKind,
   BuildingKind,
   ClassSkillId,
   PlayerClass,
@@ -76,6 +77,9 @@ export const createGameApplication = async (
     },
     chooseClassSkill(skillId: ClassSkillId): void {
       session.chooseClassSkill(skillId);
+    },
+    allocateStat(kind: AllocatablePlayerStatKind): void {
+      session.allocateStat(kind);
     },
   });
   const renderer = createThreeRenderer(ui.worldHost);

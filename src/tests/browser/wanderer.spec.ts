@@ -295,6 +295,41 @@ test("the Stats button shows only the eight character stats", async ({
   );
 });
 
+test(
+  "stat points are allocated through six primary controls without an implicit save",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-knight").click();
+    await expect(classModal).toBeHidden();
+
+    const savedBeforeAllocation = await page.evaluate(() =>
+      localStorage.getItem("wanderer.save.primary"),
+    );
+    await page.getByTestId("stats-toggle").click();
+    const controls = page.getByTestId("stat-allocation-controls");
+    await expect(page.getByTestId("stat-points")).toHaveText(
+      "Stat points available: 3",
+    );
+    await expect(controls.getByRole("button")).toHaveCount(6);
+    await expect(page.getByTestId("allocate-stat-defense")).toHaveCount(0);
+    const strength = page.getByTestId("allocate-stat-strength");
+    await expect(strength).toBeEnabled();
+    await expect(strength).toHaveAttribute("data-allocation", "0");
+    await strength.click();
+    await expect(page.getByTestId("stat-points")).toHaveText(
+      "Stat points available: 2",
+    );
+    await expect(strength).toHaveAttribute("data-allocation", "1");
+    await expect(
+      page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+    ).resolves.toBe(savedBeforeAllocation);
+  },
+);
+
 const clickWithPendingUpgradeResolution = async (
   _page: Page,
   target: Locator,

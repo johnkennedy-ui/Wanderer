@@ -117,6 +117,35 @@ describe("notice presentation", () => {
     ).toContain("outside the 6m campfire settlement radius");
   });
 
+  it("presents typed stat-allocation outcomes without making them placement feedback", () => {
+    const notices = [
+      {
+        kind: "stat-allocation.applied",
+        stat: "luck",
+        allocated: 2,
+        statPointsAvailable: 1,
+      },
+      { kind: "stat-allocation.rejected.no-class" },
+      { kind: "stat-allocation.rejected.no-points" },
+      { kind: "stat-allocation.rejected.invalid-stat" },
+    ] as const satisfies readonly GameNotice[];
+
+    expect(presentGameNotice(notices[0])).toBe(
+      "Luck increased in runtime. 2 allocated; 1 stat point available. Campfire-save it to keep it.",
+    );
+    expect(presentGameNotice(notices[1])).toBe(
+      "Choose a class before allocating stat points.",
+    );
+    expect(presentGameNotice(notices[2])).toContain(
+      "No stat points are available",
+    );
+    expect(presentGameNotice(notices[3])).toContain(
+      "cannot receive allocation points",
+    );
+    for (const notice of notices)
+      expect(presentPlacementNotice(notice)).toBe("");
+  });
+
   it("keeps UI placement behaviour independent of English message fragments", () => {
     const uiSource = readFileSync(
       new URL("../../ui/gameUi.ts", import.meta.url),
