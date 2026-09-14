@@ -9,7 +9,7 @@ import {
 
 describe("terrain movement regressions", () => {
   it.each([WANDERER_WEB_V1, WANDERER_WEB_V2, WANDERER_WEB_V3])(
-    "keeps an unobstructed tap destination through a rounded tiny remainder (%s)",
+    "keeps an unobstructed tap destination through zero and rounded tiny remainders (%s)",
     (generatorVersion) => {
       const session = new GameSession({
         world: { seed: "wanderer-known-seed", generatorVersion },
@@ -18,6 +18,15 @@ describe("terrain movement regressions", () => {
         destination: { x: 5, y: 0 },
         source: "tap-to-move",
         at: 1,
+      });
+      session.tick(0);
+      expect(session.presentation().ui.player.position).toEqual({
+        x: 0,
+        y: 0,
+      });
+      expect(session.presentation().renderer.destination).toEqual({
+        x: 5,
+        y: 0,
       });
       const steps: number[] = [];
 

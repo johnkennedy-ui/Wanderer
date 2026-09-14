@@ -729,7 +729,15 @@ export class GameSession {
       next.x === this.player.position.x &&
       next.y === this.player.position.y
     ) {
-      if (swept.x === desired.x && swept.y === desired.y) return true;
+      // Keep a tap alive when its unconstrained two-decimal movement is too
+      // small to advance this frame. Terrain may adjust that sub-quantum
+      // sweep, so equality with `desired` is not the signal for cancellation.
+      const unconstrainedNext = roundVector(desired);
+      if (
+        unconstrainedNext.x === this.player.position.x &&
+        unconstrainedNext.y === this.player.position.y
+      )
+        return true;
       this.destination = null;
       this.input = {
         intent: { x: 0, y: 0 },
