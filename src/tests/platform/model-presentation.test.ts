@@ -9,7 +9,8 @@ import {
   modelFilenameFor,
   projectileModelFor,
 } from "../../platform/render/modelPresentationHelpers";
-import { rendererSnapshot } from "./renderer-test-helpers";
+import { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
+import { meshFor, rendererSnapshot } from "./renderer-test-helpers";
 
 interface LoadCall {
   readonly url: string;
@@ -41,6 +42,15 @@ const modelScene = (): THREE.Group => {
   );
   return scene;
 };
+
+const playerOnlySnapshot = () => ({
+  ...rendererSnapshot(),
+  visibleChunks: [],
+  visibleBuildings: [],
+  enemies: [],
+  projectiles: [],
+  crescentAttacks: [],
+});
 
 describe("model presentation assets", () => {
   it("maps every supplied GLB and respects the Vite base path", () => {
@@ -148,5 +158,89 @@ describe("model presentation assets", () => {
       "/Wanderer/assets/models/player_archer.glb",
     ]);
     projection.dispose();
+  });
+
+  it("orients attached-model roots from the existing world coordinates", () => {
+    const { loader } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    const snapshot = {
+      ...base,
+      player: { ...base.player, position: { x: 3, y: -4 } },
+      projectiles: [
+        {
+          ...rendererSnapshot().projectiles[0],
+          origin: { x: 2, y: 3 },
+          targetPosition: { x: 6, y: 1 },
+          progress: 0.5,
+          style: "arrow" as const,
+        },
+      ],
+    };
+    projection.render(snapshot, vi.fn());
+    const player = projection.group.getObjectByName("model:player");
+    const projectile = projection.group.getObjectByName("model:projectile:1");
+    expect(player?.position.toArray()).toEqual([3, 0, 4]);
+    expect(player?.rotation.y).toBe(Math.PI);
+    expect(projectile?.position.toArray()).toEqual([4, 0.72, -2]);
+    expect(projectile?.rotation.y).toBe(Math.atan2(4, 2));
+    projection.dispose();
+  });
+
+  it("reports only attached model instances and their live fallback state", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const fallback = vi.fn();
+    projection.render(playerOnlySnapshot(), fallback);
+    expect(projection.diagnostics()).toMatchObject({
+      loadedInstances: 0,
+      pendingInstances: 1,
+      activeKeys: [],
+      fallbackKeys: ["player-knight"],
+    });
+    calls[0].onLoad({ scene: modelScene() });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(projection.diagnostics()).toMatchObject({
+      loadedInstances: 1,
+      pendingInstances: 0,
+      activeKeys: ["player-knight"],
+      fallbackKeys: [],
+    });
+    expect(fallback).toHaveBeenLastCalledWith("player", true);
+    projection.dispose();
+  });
+
+  it("keeps the recovery blink fallback visible when a queued player model loads", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const retained = new RetainedProjection();
+    const render = (snapshot: ReturnType<typeof playerOnlySnapshot>) => {
+      retained.render(snapshot);
+      projection.render(snapshot, (id, visible) =>
+        retained.setModelVisible(id, visible),
+      );
+    };
+    render(playerOnlySnapshot());
+    const recovering = {
+      ...playerOnlySnapshot(),
+      playerHitRecovery: { active: true, flashOn: true },
+    };
+    render(recovering);
+    calls[0].onLoad({ scene: modelScene() });
+    await Promise.resolve();
+    await Promise.resolve();
+    const player = meshFor(retained, "player");
+    expect(player.visible).toBe(true);
+    expect((player.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      0xfff3b0,
+    );
+    expect(projection.diagnostics()).toMatchObject({
+      loadedInstances: 1,
+      activeKeys: [],
+      fallbackKeys: ["player-knight"],
+    });
+    projection.dispose();
+    retained.dispose();
   });
 });

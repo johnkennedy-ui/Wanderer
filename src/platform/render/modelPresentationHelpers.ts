@@ -201,6 +201,10 @@ export class ModelTemplateCache {
     });
   }
 
+  isPending(key: ModelAssetKey): boolean {
+    return this.pending.has(key);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -226,6 +230,8 @@ interface ModelInstance {
   readonly root: THREE.Group;
   asset: ModelAssetKey;
   model: THREE.Group | undefined;
+  playerHitRecovery: boolean;
+  fallbackVisible: boolean;
 }
 
 const playerModelFor = (
@@ -322,9 +328,25 @@ export class ModelProjection {
   }
 
   diagnostics() {
+    const attached = [...this.instances.values()].filter((instance) =>
+      this.hasAttachedMesh(instance),
+    );
+    const pending = [...this.instances.values()].filter(
+      (instance) =>
+        !this.hasAttachedMesh(instance) &&
+        this.templates.isPending(instance.asset),
+    );
+    const active = attached.filter((instance) => instance.root.visible);
+    const fallback = [...this.instances.values()].filter(
+      (instance) => instance.fallbackVisible,
+    );
     return Object.freeze({
       ...this.templates.diagnostics(),
       instances: this.instances.size,
+      loadedInstances: attached.length,
+      pendingInstances: pending.length,
+      activeKeys: this.assetKeys(active),
+      fallbackKeys: this.assetKeys(fallback),
     });
   }
 
@@ -354,6 +376,8 @@ export class ModelProjection {
         root,
         asset: descriptor.asset,
         model: undefined,
+        playerHitRecovery: descriptor.playerHitRecovery === true,
+        fallbackVisible: true,
       };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -369,12 +393,10 @@ export class ModelProjection {
         }
         expected.model = model;
         expected.root.add(model);
-        setFallbackModelVisible(
-          descriptor.id,
-          descriptor.playerHitRecovery !== true,
-        );
+        this.syncVisibility(descriptor.id, expected, setFallbackModelVisible);
       });
     }
+    instance.playerHitRecovery = descriptor.playerHitRecovery === true;
     instance.root.position.set(
       descriptor.position.x,
       descriptor.height,
@@ -382,12 +404,40 @@ export class ModelProjection {
     );
     instance.root.rotation.set(0, descriptor.rotation, 0);
     instance.root.scale.setScalar(descriptor.scale);
-    instance.root.visible = descriptor.playerHitRecovery !== true;
-    if (instance.model !== undefined)
-      setFallbackModelVisible(
-        descriptor.id,
-        descriptor.playerHitRecovery !== true,
-      );
+    this.syncVisibility(descriptor.id, instance, setFallbackModelVisible);
+  }
+
+  /** A template only counts once a mesh clone is attached to its live root. */
+  private hasAttachedMesh(instance: ModelInstance): boolean {
+    return (
+      instance.model !== undefined &&
+      instance.model.parent === instance.root &&
+      instance.root.parent === this.group &&
+      instance.model.getObjectByProperty("isMesh", true) !== undefined
+    );
+  }
+
+  private assetKeys(
+    instances: readonly ModelInstance[],
+  ): readonly ModelAssetKey[] {
+    return [...new Set(instances.map((instance) => instance.asset))].sort();
+  }
+
+  /**
+   * Keep the established geometry visible for a pending/failed asset and while
+   * the player recovery blink is active. This runs at completion time, so a
+   * late GLB never applies the recovery state that existed when it was queued.
+   */
+  private syncVisibility(
+    id: string,
+    instance: ModelInstance,
+    setFallbackModelVisible: (id: string, visible: boolean) => void,
+  ): void {
+    const modelVisible =
+      this.hasAttachedMesh(instance) && !instance.playerHitRecovery;
+    instance.root.visible = !instance.playerHitRecovery;
+    instance.fallbackVisible = !modelVisible;
+    setFallbackModelVisible(id, modelVisible);
   }
 
   private remove(

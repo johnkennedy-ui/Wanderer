@@ -128,6 +128,15 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       models.render(snapshot, (id, visible) =>
         projection.setModelVisible(id, visible),
       );
+      const modelDiagnostics = models.diagnostics();
+      setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
+      setDataset(
+        "modelPendingCount",
+        String(modelDiagnostics.pendingInstances),
+      );
+      setDataset("modelActiveKeys", modelDiagnostics.activeKeys.join(","));
+      setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
+      setDataset("modelFailureCount", String(modelDiagnostics.failures));
       camera.position.set(
         snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
         defaultThreeCameraTuning.playerOffset.y,
