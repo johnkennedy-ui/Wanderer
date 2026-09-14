@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { gameplayTuning, resourceDefinitions } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
-import type { Vector2 } from "../../domain/types";
+import type { ChunkObstacle, Vector2 } from "../../domain/types";
 import {
   buildingColors,
   enemyPresentation,
@@ -10,12 +10,13 @@ import {
 } from "./projectionResourceHelpers";
 
 type MarkerMap = Map<string, THREE.Mesh>;
+type ObstacleMap = Map<string, THREE.Object3D>;
 
 /** CPU-testable retained visual owner; never holds or commands gameplay state. */
 export class RetainedProjection {
   readonly group = new THREE.Group();
   private readonly resources = new ProjectionResources();
-  private readonly obstacles: MarkerMap = new Map();
+  private readonly obstacles: ObstacleMap = new Map();
   private readonly campfires: MarkerMap = new Map();
   private readonly buildings: MarkerMap = new Map();
   private readonly auras: MarkerMap = new Map();
@@ -45,13 +46,7 @@ export class RetainedProjection {
     for (const chunk of snapshot.visibleChunks) {
       for (const obstacle of chunk.obstacles) {
         obstacles.add(obstacle.id);
-        this.marker(
-          this.obstacles,
-          obstacle.id,
-          obstacle.position,
-          this.resources.cylinder(0.38, 0.9),
-          this.resources.material(0x596869),
-        );
+        this.obstacle(obstacle);
       }
       for (const campfire of chunk.campfires) {
         campfires.add(campfire.id);
@@ -229,7 +224,7 @@ export class RetainedProjection {
     return Object.freeze({
       ...this.resources.diagnostics(),
       meshesRemoved: this.meshesRemoved,
-      visibleMeshes: this.group.children.length,
+      visibleMeshes: this.meshCount(this.group),
       maps: Object.freeze({
         obstacles: this.obstacles.size,
         campfires: this.campfires.size,
@@ -250,7 +245,6 @@ export class RetainedProjection {
       id === "player"
         ? this.player
         : [
-            this.obstacles,
             this.campfires,
             this.buildings,
             this.enemies,
@@ -259,6 +253,8 @@ export class RetainedProjection {
           ]
             .map((map) => map.get(id))
             .find((candidate) => candidate !== undefined);
+    const obstacle = this.obstacles.get(id);
+    if (obstacle !== undefined) obstacle.visible = !visible;
     if (mesh !== undefined) mesh.visible = !visible;
   }
 
@@ -266,7 +262,6 @@ export class RetainedProjection {
     if (this.disposed) return;
     this.disposed = true;
     for (const map of [
-      this.obstacles,
       this.campfires,
       this.buildings,
       this.auras,
@@ -279,6 +274,9 @@ export class RetainedProjection {
       this.meshesRemoved += map.size;
       map.clear();
     }
+    for (const obstacle of this.obstacles.values())
+      this.meshesRemoved += this.meshCount(obstacle);
+    this.obstacles.clear();
     this.meshesRemoved += 1;
     if (this.destination !== undefined) {
       this.destination.removeFromParent();
@@ -311,7 +309,11 @@ export class RetainedProjection {
     this.position(mesh, position, height);
     return mesh;
   }
-  private position(mesh: THREE.Mesh, position: Vector2, height: number): void {
+  private position(
+    mesh: THREE.Object3D,
+    position: Vector2,
+    height: number,
+  ): void {
     if (
       mesh.position.x !== position.x ||
       mesh.position.y !== height ||
@@ -319,12 +321,106 @@ export class RetainedProjection {
     )
       mesh.position.set(position.x, height, -position.y);
   }
-  private removeMissing(map: MarkerMap, visible: ReadonlySet<string>): void {
+  private obstacle(obstacle: ChunkObstacle): void {
+    const existing = this.obstacles.get(obstacle.id);
+    if (existing !== undefined) {
+      this.position(existing, obstacle.position, 0);
+      return;
+    }
+    if (obstacle.kind === undefined) {
+      const legacy = this.resources.mesh(
+        this.resources.cylinder(0.38, 0.9),
+        this.resources.material(0x596869),
+      );
+      legacy.name = obstacle.id;
+      this.position(legacy, obstacle.position, 0);
+      this.obstacles.set(obstacle.id, legacy);
+      this.group.add(legacy);
+      return;
+    }
+    const radius = obstacle.radius ?? 0.38;
+    const root = new THREE.Group();
+    root.name = obstacle.id;
+    const add = (
+      geometry: THREE.BufferGeometry,
+      material: THREE.Material,
+      height: number,
+      rotation = 0,
+    ) => {
+      const mesh = this.resources.mesh(geometry, material);
+      mesh.position.y = height;
+      mesh.rotation.x = rotation;
+      root.add(mesh);
+    };
+    switch (obstacle.kind) {
+      case "tree":
+        add(
+          this.resources.cylinder(radius, radius * 3.2),
+          this.resources.material(0x6d4c41),
+          radius * 1.6,
+        );
+        add(
+          this.resources.cone(radius * 1.65, radius * 3.8),
+          this.resources.material(0x2e7d32),
+          radius * 4.1,
+        );
+        break;
+      case "mountain":
+        add(
+          this.resources.mountain(radius),
+          this.resources.material(0x6d7378),
+          radius * 0.825,
+        );
+        break;
+      case "water":
+        add(
+          this.resources.water(radius),
+          this.resources.material(
+            obstacle.waterKind === "river" ? 0x1976a8 : 0x2196c9,
+            0.35,
+            0x0d47a1,
+            0.12,
+          ),
+          0.012,
+          -Math.PI / 2,
+        );
+        add(
+          this.resources.waterBank(radius),
+          this.resources.material(0x8a7b58),
+          // Water from adjacent cells covers internal bank arcs, leaving a
+          // continuous shoreline instead of rings across the river surface.
+          0.008,
+          -Math.PI / 2,
+        );
+        break;
+      case "rock":
+        add(
+          this.resources.mountain(radius),
+          this.resources.material(0x596869),
+          radius * 0.825,
+        );
+        break;
+    }
+    this.position(root, obstacle.position, 0);
+    this.obstacles.set(obstacle.id, root);
+    this.group.add(root);
+  }
+  private meshCount(root: THREE.Object3D): number {
+    let count = 0;
+    root.traverse((object) => {
+      if (object instanceof THREE.Mesh) count += 1;
+    });
+    return count;
+  }
+  private removeMissing(
+    map: Map<string, THREE.Object3D>,
+    visible: ReadonlySet<string>,
+  ): void {
     for (const [id, mesh] of map) {
       if (visible.has(id)) continue;
       mesh.removeFromParent();
       map.delete(id);
-      this.meshesRemoved += 1;
+      this.meshesRemoved += this.meshCount(mesh);
     }
   }
 }

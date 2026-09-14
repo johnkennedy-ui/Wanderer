@@ -85,6 +85,11 @@ import {
   playerHitRecoveryPresentationFor,
   playerMoveDistanceWithHitRecoveryFor,
 } from "./session/hitRecoveryPolicy";
+import {
+  enemyTerrainClearanceFor,
+  nearestTerrainSafePosition,
+  sweepTerrainMovement,
+} from "./world/terrainCollision";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -198,7 +203,15 @@ export class GameSession {
     if (moving) {
       if (!destinationMoving)
         this.player.position = roundVector(
-          add(this.player.position, scale(this.input.intent, movementDistance)),
+          sweepTerrainMovement(
+            this.world,
+            this.player.position,
+            add(
+              this.player.position,
+              scale(this.input.intent, movementDistance),
+            ),
+            this.chunkRecipes.get,
+          ),
         );
       const attackSpeedMultiplier = movingAttackSpeedMultiplierFor(
         this.classProgression,
@@ -515,8 +528,24 @@ export class GameSession {
       waveIndex: phase.waveIndex,
       center: this.player.position,
       enemyHealthContext: this.enemyHealthContext(),
-    }))
-      this.enemies.set(enemy.id, enemy);
+    })) {
+      const safePosition = nearestTerrainSafePosition(
+        this.world,
+        enemy.position,
+        this.chunkRecipes.get,
+        enemyTerrainClearanceFor(enemy.kind),
+      );
+      this.enemies.set(
+        enemy.id,
+        safePosition === enemy.position
+          ? enemy
+          : {
+              ...enemy,
+              position: copyVector(safePosition),
+              spawnPosition: copyVector(safePosition),
+            },
+      );
+    }
     this.startedWaveIndices.add(phase.waveIndex);
     const boss = [...this.enemies.values()].find(
       (enemy) =>
@@ -652,7 +681,14 @@ export class GameSession {
       remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
       maximumTravel >= remainingDistance
     ) {
-      this.player.position = copyVector(this.destination);
+      this.player.position = roundVector(
+        sweepTerrainMovement(
+          this.world,
+          this.player.position,
+          this.destination,
+          this.chunkRecipes.get,
+        ),
+      );
       this.destination = null;
       this.input = {
         intent: { x: 0, y: 0 },
@@ -661,9 +697,27 @@ export class GameSession {
       };
       return false;
     }
-    this.player.position = roundVector(
-      add(this.player.position, scale(normalize(offset), maximumTravel)),
+    const next = roundVector(
+      sweepTerrainMovement(
+        this.world,
+        this.player.position,
+        add(this.player.position, scale(normalize(offset), maximumTravel)),
+        this.chunkRecipes.get,
+      ),
     );
+    if (
+      next.x === this.player.position.x &&
+      next.y === this.player.position.y
+    ) {
+      this.destination = null;
+      this.input = {
+        intent: { x: 0, y: 0 },
+        source: "system",
+        at: this.elapsed,
+      };
+      return false;
+    }
+    this.player.position = next;
     return true;
   }
   private updateEnemyCombat(delta: number): void {
@@ -689,6 +743,14 @@ export class GameSession {
       playerPhysicalDefense: combatStats.physicalDefense,
       playerDodgeChance: combatStats.dodgeChance,
       worldSeed: this.world.seed,
+      constrainEnemyPosition: (from, desired, enemy) =>
+        sweepTerrainMovement(
+          this.world,
+          from,
+          desired,
+          this.chunkRecipes.get,
+          enemyTerrainClearanceFor(enemy.kind),
+        ),
     });
     this.player = result.player;
     this.resources = result.resources;

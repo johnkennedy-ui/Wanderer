@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { ChunkObstacle } from "../../domain/types";
+import { generateWandererWebV2Chunk } from "../../domain/world/generators/wandererWebV2";
 import {
   dangerForChunkCoordinate,
   generateChunk,
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
+  WANDERER_WEB_V3,
 } from "../../domain/world";
 
 const world = { seed: "review-seed", generatorVersion: "wanderer-web-v1" };
@@ -167,7 +170,7 @@ describe("deterministic chunk generation", () => {
   });
 
   it("rejects unknown and prototype-named versions without falling back to v1", () => {
-    for (const generatorVersion of ["wanderer-web-v3", "toString"]) {
+    for (const generatorVersion of ["wanderer-web-v99", "toString"]) {
       try {
         generateChunk(
           { seed: "unsupported-generator", generatorVersion },
@@ -181,6 +184,146 @@ describe("deterministic chunk generation", () => {
           generatorVersion,
         });
       }
+    }
+  });
+
+  it("provides deterministic V3 terrain across negative chunks and traversal order", () => {
+    const v3 = { seed: "terrain-review", generatorVersion: WANDERER_WEB_V3 };
+    const coordinates = Array.from(
+      { length: 17 },
+      (_, index) => index - 8,
+    ).flatMap((x) =>
+      Array.from({ length: 17 }, (_, index) => index - 8).map((y) => ({
+        x,
+        y,
+      })),
+    );
+    const chunks = coordinates.map((coordinate) =>
+      generateChunk(v3, coordinate),
+    );
+    const obstacles = chunks.flatMap((chunk) => chunk.obstacles);
+    expect(obstacles.some((obstacle) => obstacle.kind === "tree")).toBe(true);
+    expect(obstacles.some((obstacle) => obstacle.kind === "mountain")).toBe(
+      true,
+    );
+    expect(obstacles.some((obstacle) => obstacle.waterKind === "lake")).toBe(
+      true,
+    );
+    expect(chunks).toEqual(
+      [...coordinates]
+        .reverse()
+        .map((coordinate) => generateChunk(v3, coordinate))
+        .reverse(),
+    );
+    expect(generateChunk(v3, { x: -7, y: -5 })).toEqual(
+      generateChunk(v3, { x: -7, y: -5 }),
+    );
+  });
+
+  it("creates one connected winding river with deterministic ford crossings", () => {
+    const v3 = { seed: "terrain-review", generatorVersion: WANDERER_WEB_V3 };
+    const coordinates = Array.from(
+      { length: 17 },
+      (_, index) => index - 8,
+    ).flatMap((x) =>
+      Array.from({ length: 17 }, (_, index) => index - 8).map((y) => ({
+        x,
+        y,
+      })),
+    );
+    const river = coordinates
+      .flatMap((coordinate) => generateChunk(v3, coordinate).obstacles)
+      .filter((obstacle) => obstacle.waterKind === "river")
+      .sort((left, right) => left.position.y - right.position.y);
+    expect(river.length).toBeGreaterThan(100);
+    const verticalGaps = river
+      .slice(1)
+      .map((obstacle, index) =>
+        Math.hypot(
+          obstacle.position.x - river[index].position.x,
+          obstacle.position.y - river[index].position.y,
+        ),
+      );
+    const connectedSegments = verticalGaps.filter((gap) => gap < 1.5);
+    const crossingGaps = verticalGaps.filter((gap) => gap > 4);
+    expect(connectedSegments.length).toBeGreaterThan(100);
+    expect(crossingGaps.length).toBeGreaterThan(0);
+    expect(verticalGaps.filter((gap) => gap >= 1.5 && gap <= 4)).toEqual([]);
+  });
+
+  it("keeps full lake lobes and all V3 terrain clear of nearby actors", () => {
+    const v3 = { seed: "terrain-review", generatorVersion: WANDERER_WEB_V3 };
+    const coordinates = Array.from(
+      { length: 9 },
+      (_, index) => index - 4,
+    ).flatMap((x) =>
+      Array.from({ length: 9 }, (_, index) => index - 4).map((y) => ({
+        x,
+        y,
+      })),
+    );
+    const lakes = new Map<string, ChunkObstacle[]>();
+    for (const coordinate of coordinates) {
+      const recipe = generateChunk(v3, coordinate);
+      const nearbyActors: { readonly position: { x: number; y: number } }[] =
+        [];
+      const nearbyWater: ChunkObstacle[] = [];
+      for (const offsetY of [-1, 0, 1])
+        for (const offsetX of [-1, 0, 1]) {
+          const nearby = {
+            x: coordinate.x + offsetX,
+            y: coordinate.y + offsetY,
+          };
+          const base = generateWandererWebV2Chunk(v3, nearby);
+          nearbyActors.push(...base.campfires, ...base.spawns);
+          nearbyWater.push(
+            ...generateChunk(v3, nearby).obstacles.filter(
+              (obstacle) => obstacle.kind === "water",
+            ),
+          );
+        }
+      for (const obstacle of recipe.obstacles) {
+        expect(
+          nearbyActors.every(
+            (actor) =>
+              Math.hypot(
+                actor.position.x - obstacle.position.x,
+                actor.position.y - obstacle.position.y,
+              ) >=
+              (obstacle.radius ?? 0) + 0.8,
+          ),
+        ).toBe(true);
+        if (obstacle.kind !== "water")
+          expect(
+            nearbyWater.every(
+              (water) =>
+                Math.hypot(
+                  water.position.x - obstacle.position.x,
+                  water.position.y - obstacle.position.y,
+                ) >=
+                (water.radius ?? 0) + (obstacle.radius ?? 0) + 0.16,
+            ),
+          ).toBe(true);
+        if (obstacle.waterKind === "lake") {
+          const key = obstacle.id.replace(/:\d+$/, "");
+          lakes.set(key, [...(lakes.get(key) ?? []), obstacle]);
+        }
+      }
+    }
+    expect(lakes.size).toBeGreaterThan(0);
+    for (const cells of lakes.values()) {
+      expect(cells).toHaveLength(3);
+      for (const cell of cells)
+        expect(
+          cells.some(
+            (other) =>
+              other !== cell &&
+              Math.hypot(
+                other.position.x - cell.position.x,
+                other.position.y - cell.position.y,
+              ) < 1.8,
+          ),
+        ).toBe(true);
     }
   });
 });

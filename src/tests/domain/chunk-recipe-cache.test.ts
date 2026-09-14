@@ -11,6 +11,7 @@ import {
   generateChunk,
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
+  WANDERER_WEB_V3,
   UnsupportedWorldGeneratorVersionError,
 } from "../../domain/world";
 import { SettlementRuntime } from "../../domain/session/settlementRuntime";
@@ -267,7 +268,11 @@ describe("bounded instance-owned chunk recipes", () => {
     ).toBe(100);
   });
 
-  for (const generatorVersion of [WANDERER_WEB_V1, WANDERER_WEB_V2]) {
+  for (const generatorVersion of [
+    WANDERER_WEB_V1,
+    WANDERER_WEB_V2,
+    WANDERER_WEB_V3,
+  ]) {
     it(`stationary ticks/presentations/save queries stop generation after warmup (${generatorVersion})`, () => {
       const session = new GameSession({
         world: { ...world, generatorVersion },
@@ -288,9 +293,9 @@ describe("bounded instance-owned chunk recipes", () => {
       expect(document).not.toHaveProperty("chunkCache");
       expect(document).not.toHaveProperty("chunkRecipes");
       session.resetWorld(world.seed);
-      // Released reset selects the current v2 default, even from a v1 session.
+      // Released reset selects the current default, even from an older session.
       expect(session.diagnostics().world.generatorVersion).toBe(
-        WANDERER_WEB_V2,
+        WANDERER_WEB_V3,
       );
       expect(session.diagnostics().chunkCache).toMatchObject({
         misses: 9,

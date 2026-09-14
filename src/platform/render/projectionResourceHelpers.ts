@@ -71,6 +71,30 @@ export class ProjectionResources {
       () => new THREE.CylinderGeometry(radius, radius, height, 10),
     );
   }
+  cone(radius: number, height: number): THREE.BufferGeometry {
+    return this.geometry(
+      `cone:${radius}:${height}`,
+      () => new THREE.ConeGeometry(radius, height, 7),
+    );
+  }
+  mountain(radius: number): THREE.BufferGeometry {
+    return this.geometry(
+      `mountain:${radius}`,
+      () => new THREE.ConeGeometry(radius, radius * 1.65, 6),
+    );
+  }
+  water(radius: number): THREE.BufferGeometry {
+    return this.geometry(
+      `water:${radius}`,
+      () => new THREE.CircleGeometry(Math.max(0, radius - 0.035), 20),
+    );
+  }
+  waterBank(radius: number): THREE.BufferGeometry {
+    return this.geometry(
+      `water-bank:${radius}`,
+      () => new THREE.RingGeometry(Math.max(0, radius - 0.07), radius, 20),
+    );
+  }
   sphere(radius: number): THREE.BufferGeometry {
     return this.geometry(
       `projectile:${radius}`,

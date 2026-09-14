@@ -5,7 +5,10 @@ import { GameSession } from "../../domain/GameSession";
 import type { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
 
 export const rendererSnapshot = (): GameRendererSnapshot => ({
-  ...new GameSession().presentation().renderer,
+  // Keep the released marker characterization fixture independent of new-world defaults.
+  ...new GameSession({
+    world: { seed: "wanderer-known-seed", generatorVersion: "wanderer-web-v2" },
+  }).presentation().renderer,
   playerClass: null,
   playerHitRecovery: { active: false, flashOn: false },
   visibleBuildings: [
