@@ -241,14 +241,17 @@ test(
   { tag: "@manual-choices" },
   async ({ page }) => {
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    // Freeze before boot so the level-five Archer cannot clear the nearby
+    // deterministic home encounter during a large virtual-time jump.
+    await page.clock.pauseAt(new Date("2026-01-01T00:00:00Z"));
     await primeRankedClass(page, "archer", 1);
     await page.goto(applicationPath);
+    await page.clock.runFor(16);
     await openStatus(page);
     await expect(page.getByTestId("weapon-relic-status")).toContainText(
       "Twinwind Relic rank 1",
     );
     // Observe actual rendered frames: both arrows may hit between wall-time polls.
-    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
     const canvas = page.getByTestId("world-canvas");
     let projectileCount = await canvas.getAttribute("data-projectile-count");
     for (
