@@ -331,6 +331,14 @@ describe("schema-2 persistence boundary", () => {
           },
         },
       });
+
+      const session = new GameSession({ saved: decoded.document });
+      const request = session.createValidCampfireSaveRequest(2);
+      expect(request?.document.classProgression).toMatchObject({
+        skillIds: ["wizard-flame-orb"],
+        legacySkillSelection: true,
+      });
+      expect(isSaveDocument(request?.document)).toBe(true);
     }
   });
 
