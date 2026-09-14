@@ -6,6 +6,7 @@ import { advanceEnemyCombatPhase } from "../../domain/session/combatTickRuntime"
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
 import {
   enemyTerrainClearanceFor,
+  nearestTerrainSafePosition,
   sweepTerrainMovement,
   terrainBlocksPosition,
 } from "../../domain/world/terrainCollision";
@@ -145,6 +146,87 @@ describe("terrain collision", () => {
         Math.hypot(rounded.x - center.x, rounded.y - center.y),
       ).toBeGreaterThanOrEqual(radius);
     }
+  });
+
+  it("keeps a short diagonal rounded endpoint outside a mountain footprint", () => {
+    const center = { x: 2.0011, y: 2.0011 };
+    const mountain = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => ({
+      coordinate,
+      key: `${coordinate.x},${coordinate.y}`,
+      domainSeeds: {},
+      obstacles: [
+        {
+          id: "mountain:short-diagonal",
+          kind: "mountain",
+          radius: 1,
+          position: center,
+        },
+      ],
+      campfires: [],
+      spawns: [],
+    });
+    const rounded = roundVector(
+      sweepTerrainMovement(
+        world,
+        { x: 1.09, y: 1.09 },
+        { x: 1.16, y: 1.16 },
+        mountain,
+      ),
+    );
+
+    expect(
+      Math.hypot(rounded.x - center.x, rounded.y - center.y),
+    ).toBeGreaterThanOrEqual(1.28);
+  });
+
+  it("reports fully blocked V3 safe-spawn exhaustion without returning the blocked origin", () => {
+    const blockedOrigin = { x: 0, y: 0 };
+    let calls = 0;
+    const fullyBlockedSource = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => {
+      calls += 1;
+      return {
+        coordinate,
+        key: `${coordinate.x},${coordinate.y}`,
+        domainSeeds: {},
+        obstacles: [
+          {
+            id: "water:fully-blocked",
+            kind: "water",
+            waterKind: "lake",
+            radius: 100,
+            position: blockedOrigin,
+          },
+        ],
+        campfires: [],
+        spawns: [],
+      };
+    };
+
+    expect(
+      nearestTerrainSafePosition(
+        world,
+        blockedOrigin,
+        fullyBlockedSource,
+        0.28,
+      ),
+    ).toBeNull();
+    const firstSearchCalls = calls;
+    expect(firstSearchCalls).toBeLessThanOrEqual(16);
+    expect(
+      nearestTerrainSafePosition(
+        world,
+        blockedOrigin,
+        fullyBlockedSource,
+        0.28,
+      ),
+    ).toBeNull();
+    expect(calls).toBe(firstSearchCalls * 2);
   });
 
   it("collects recipes once per covered chunk instead of probing every 8cm", () => {

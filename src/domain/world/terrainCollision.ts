@@ -121,7 +121,7 @@ export const nearestTerrainSafePosition = (
   position: Vector2,
   recipeSource: ChunkRecipeSource = generateChunk,
   clearance = 0,
-): Vector2 => {
+): Vector2 | null => {
   if (world.generatorVersion !== WANDERER_WEB_V3) return position;
 
   const recipes = new Map<string, ReturnType<ChunkRecipeSource>>();
@@ -145,7 +145,7 @@ export const nearestTerrainSafePosition = (
       if (!terrainBlocksPosition(world, candidate, memoizedSource, clearance))
         return candidate;
     }
-  return position;
+  return null;
 };
 
 const cappedDestinationFor = (start: Vector2, desired: Vector2): Vector2 => {

@@ -60,7 +60,10 @@ import {
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
-import { ChunkRecipeCache } from "./session/chunkRecipeCache";
+import {
+  ChunkRecipeCache,
+  type ChunkRecipeSource,
+} from "./session/chunkRecipeCache";
 import {
   SettlementRuntime,
   type SettlementCommandOutcome,
@@ -96,11 +99,13 @@ export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 interface SessionOptions {
   readonly world?: WorldIdentity;
   readonly saved?: CurrentSave;
+  /** Test-only recipe source; production sessions retain the released generator. */
+  readonly chunkRecipeSource?: ChunkRecipeSource;
 }
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
 export class GameSession {
-  private readonly chunkRecipes = new ChunkRecipeCache();
+  private readonly chunkRecipes: ChunkRecipeCache;
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
@@ -128,6 +133,10 @@ export class GameSession {
   private notice!: GameNotice;
   private combatStatus!: string;
   constructor(options: SessionOptions = {}) {
+    this.chunkRecipes = new ChunkRecipeCache(
+      undefined,
+      options.chunkRecipeSource,
+    );
     this.replaceState(
       options.saved === undefined
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
@@ -523,26 +532,34 @@ export class GameSession {
 
     const phase = wavePhaseFor(this.elapsed);
     if (!phase.active || this.startedWaveIndices.has(phase.waveIndex)) return;
-    for (const enemy of waveEnemyDraftsFor({
+    const drafts = waveEnemyDraftsFor({
       seed: this.world.seed,
       waveIndex: phase.waveIndex,
       center: this.player.position,
       enemyHealthContext: this.enemyHealthContext(),
-    })) {
-      const safePosition = nearestTerrainSafePosition(
+    });
+    const safeDrafts = drafts.map((enemy) => ({
+      enemy,
+      position: nearestTerrainSafePosition(
         this.world,
         enemy.position,
         this.chunkRecipes.get,
         enemyTerrainClearanceFor(enemy.kind),
-      );
+      ),
+    }));
+    // Do not partially materialize a required wave. Leaving its index unstarted
+    // makes the active lifecycle retry the complete deterministic draft set.
+    if (safeDrafts.some((draft) => draft.position === null)) return;
+    for (const { enemy, position } of safeDrafts) {
+      if (position === null) return;
       this.enemies.set(
         enemy.id,
-        safePosition === enemy.position
+        position === enemy.position
           ? enemy
           : {
               ...enemy,
-              position: copyVector(safePosition),
-              spawnPosition: copyVector(safePosition),
+              position: copyVector(position),
+              spawnPosition: copyVector(position),
             },
       );
     }
