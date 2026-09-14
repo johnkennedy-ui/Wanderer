@@ -90,7 +90,7 @@ test("a missing GLB falls back without preventing active gameplay", async ({
   page,
 }, testInfo) => {
   const faults = captureBrowserFaults(page);
-  await page.route("**/*.glb", async (route) =>
+  await page.route("**/assets/models/player_wizard.glb", async (route) =>
     route.fulfill({
       status: 404,
       contentType: "text/plain",
@@ -114,5 +114,8 @@ test("a missing GLB falls back without preventing active gameplay", async ({
   await expect(position).not.toContainText("Position: 0.0, 0.0");
   await page.keyboard.up("d");
   await attachStableModelScreenshot(page, testInfo, "missing-model-fallback");
-  expectOnlyMissingModelFaults(faults);
+  expectOnlyMissingModelFaults(
+    faults,
+    new URL("assets/models/player_wizard.glb", page.url()).href,
+  );
 });

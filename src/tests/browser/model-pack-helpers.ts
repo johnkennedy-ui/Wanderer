@@ -75,13 +75,15 @@ export const captureBrowserFaults = (page: Page): readonly string[] => {
   return faults;
 };
 
-/** The route deliberately returns 404 for GLBs. Browser engines may report
- * that expected response as a console error, but no unrelated fault is safe. */
+/** Only the exact deliberately missing URL may produce a console 404. */
 export const expectOnlyMissingModelFaults = (
   faults: readonly string[],
+  missingModelUrl: string,
 ): void => {
-  for (const fault of faults)
-    expect(fault).toMatch(/^console: .*\/player_knight\.glb\s+.*\b404\b/i);
+  for (const fault of faults) {
+    expect(fault.startsWith(`console: ${missingModelUrl} `)).toBe(true);
+    expect(fault).toMatch(/Failed to load resource:.*\b404\b/i);
+  }
 };
 
 export const activeModelKeys = async (
