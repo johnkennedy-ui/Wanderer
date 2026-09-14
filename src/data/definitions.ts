@@ -145,6 +145,18 @@ const authoredGameplayTuning = {
   floorDropCollectDistance: 0.8,
   baseAttackRange: 3.2,
   baseMoveSpeed: 3,
+  /**
+   * Game-adapted, RO-inspired stat tuning. These are deliberately not an
+   * assertion of exact parity with any historical Ragnarok Online version.
+   */
+  vitalityHealthPerPoint: 5,
+  agilityMoveSpeedPerPoint: 0.05,
+  agilityAttackIntervalReductionPerPoint: 0.01,
+  agilityDodgeChancePerPoint: 0.01,
+  maximumDodgeChance: 0.6,
+  luckPhysicalCriticalChancePerPoint: 0.01,
+  maximumPhysicalCriticalChance: 0.5,
+  physicalCriticalDamageMultiplier: 1.5,
   playerHitRecoverySeconds: 0.5,
   playerHitRecoverySpeedMultiplier: 2,
   playerHitRecoveryFlashIntervalSeconds: 0.1,

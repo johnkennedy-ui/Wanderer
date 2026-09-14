@@ -289,6 +289,7 @@ const snapshot = (
   },
   projectileCount: 0,
   weaponRelicDropCount: 0,
+  statPointsAvailable: 0,
   buildings,
   effects: ["same effect"],
   pendingUpgradeChoices: [],
@@ -297,6 +298,14 @@ const snapshot = (
     level: 0,
     playerClass: null,
     skillIds: [],
+    allocatedStats: {
+      strength: 0,
+      dexterity: 0,
+      agility: 0,
+      luck: 0,
+      vitality: 0,
+      magic: 0,
+    },
   },
   pendingClassChoices: [],
   pendingClassSkillChoices: [],
@@ -317,6 +326,7 @@ const setupUi = () => {
     chooseUpgrade: vi.fn(),
     chooseClass: vi.fn(),
     chooseClassSkill: vi.fn(),
+    allocateStat: vi.fn(),
   } satisfies UiIntents;
   const ui = createGameUi(asElement(root), intents);
   const shell = root.children[1];
@@ -329,6 +339,74 @@ const setupUi = () => {
 };
 
 describe("current HUD placement port", () => {
+  it("projects six primary stat controls through intents without changing the eight-stat list", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render({
+      ...snapshot(),
+      playerStats: {
+        ...snapshot().playerStats,
+        strength: 8,
+      },
+      statPointsAvailable: 3,
+      classProgression: {
+        experience: 6,
+        level: 1,
+        playerClass: "knight",
+        skillIds: [],
+        allocatedStats: {
+          strength: 2,
+          dexterity: 0,
+          agility: 0,
+          luck: 0,
+          vitality: 0,
+          magic: 0,
+        },
+      },
+    });
+    const stats = get("stats-list");
+    const controls = get("stat-allocation-controls");
+    expect(get("stat-points").textContent).toBe("Stat points available: 3");
+    expect(stats.children).toHaveLength(16);
+    expect(controls.children.map((button) => button.dataset.testid)).toEqual([
+      "allocate-stat-strength",
+      "allocate-stat-dexterity",
+      "allocate-stat-agility",
+      "allocate-stat-luck",
+      "allocate-stat-vitality",
+      "allocate-stat-magic",
+    ]);
+    expect(controls.children.every((button) => !button.disabled)).toBe(true);
+    expect(controls.children[0].textContent).toBe("+ Strength");
+    expect(controls.children[0].getAttribute("data-allocation")).toBe("2");
+    expect(controls.children[0].getAttribute("aria-label")).toBe(
+      "Add one Strength point (2 allocated)",
+    );
+    controls.children[0].click();
+    expect(intents.allocateStat).toHaveBeenCalledExactlyOnceWith("strength");
+
+    ui.render({
+      ...snapshot(),
+      statPointsAvailable: 0,
+      classProgression: {
+        experience: 6,
+        level: 1,
+        playerClass: "knight",
+        skillIds: [],
+        allocatedStats: {
+          strength: 3,
+          dexterity: 0,
+          agility: 0,
+          luck: 0,
+          vitality: 0,
+          magic: 0,
+        },
+      },
+    });
+    expect(get("stat-points").textContent).toBe("Stat points available: 0");
+    expect(controls.children.every((button) => button.disabled)).toBe(true);
+    ui.dispose();
+  });
+
   it("retained relocation waits for the latest next tap, retains rejection, and cancels on success/demolition/reset", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot([building("a"), building("b")]));
@@ -496,6 +574,14 @@ describe("current HUD placement port", () => {
         level: 2,
         playerClass: "wizard",
         skillIds: [],
+        allocatedStats: {
+          strength: 0,
+          dexterity: 0,
+          agility: 0,
+          luck: 0,
+          vitality: 0,
+          magic: 0,
+        },
       },
     };
     ui.render(skills);

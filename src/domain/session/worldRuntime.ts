@@ -61,6 +61,7 @@ export const missingVisibleRuntimeEnemyDraftsFor = ({
           respawnAt: null,
           defeated: false,
           attackElapsed: 0,
+          attackEventOrdinal: 0,
         },
       ];
     }),

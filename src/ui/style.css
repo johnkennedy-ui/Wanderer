@@ -129,6 +129,20 @@ input {
 .stats-list dd {
   font-weight: 800;
 }
+.stat-points {
+  margin: 0.55rem 0 0;
+  font-weight: 800;
+}
+.stat-allocation-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+.stat-allocation-button {
+  min-height: 44px;
+  font-weight: 800;
+}
 .top-panel {
   position: absolute;
   top: max(4.75rem, calc(env(safe-area-inset-top) + 4rem));

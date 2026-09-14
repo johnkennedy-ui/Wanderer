@@ -5,7 +5,10 @@ import type { GameRendererSnapshot } from "../../domain/notices";
 import { buildingKinds, enemyKinds, resourceKinds } from "../../domain/types";
 import type { AttackStyle } from "../../domain/types";
 import { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
-import { createThreeRenderer } from "../../platform/render/threeRenderer";
+import {
+  createThreeRenderer,
+  enemyPresentation,
+} from "../../platform/render/threeRenderer";
 import {
   meshFor,
   rendererDom,
@@ -722,6 +725,81 @@ describe("retained Three CPU projection", () => {
 });
 
 describe("Three browser adapter ownership", () => {
+  it("retains accessible enemy health bars from snapshots and prunes departed enemies", () => {
+    const dom = rendererDom();
+    const renderer = createThreeRenderer(dom.host);
+    const snapshot = rendererSnapshot();
+    const enemy = snapshot.enemies[0];
+    if (enemy === undefined) throw new Error("Missing fixture enemy");
+
+    renderer.render(snapshot);
+    const bar = dom.enemyHealthBars.find(
+      (candidate) => candidate.dataset.enemyId === enemy.id,
+    );
+    if (bar === undefined) throw new Error("Missing enemy health bar");
+    const fill = bar.children[0];
+    if (fill === undefined) throw new Error("Missing enemy health fill");
+    expect(bar.dataset.testid).toBe("world-enemy-hp");
+    expect(bar.attributes).toMatchObject({
+      role: "meter",
+      "aria-label": `${enemy.kind} health`,
+      "aria-valuemin": "0",
+      "aria-valuemax": String(enemy.maxHp),
+      "aria-valuenow": String(enemy.hp),
+      "aria-valuetext": `${Math.ceil(enemy.hp)} / ${Math.ceil(enemy.maxHp)} HP`,
+    });
+    expect(fill.attributes["aria-hidden"]).toBe("true");
+    expect(fill.style.width).toBe("100%");
+    const [, camera] = gpu.render.mock.calls.at(-1) as [
+      THREE.Scene,
+      THREE.PerspectiveCamera,
+    ];
+    const scale = enemy.isWaveBoss ? gameplayTuning.waveBossVisualScale : 1;
+    const projected = new THREE.Vector3(
+      enemy.position.x,
+      enemyPresentation[enemy.kind].height * scale + 0.35,
+      -enemy.position.y,
+    ).project(camera);
+    expect(bar.style.left).toBe(`${((projected.x + 1) / 2) * 100}%`);
+    expect(bar.style.top).toBe(`${((1 - projected.y) / 2) * 100}%`);
+
+    const barCount = dom.enemyHealthBars.length;
+    renderer.render(structuredClone(snapshot));
+    expect(dom.enemyHealthBars).toHaveLength(barCount);
+    expect(
+      dom.enemyHealthBars.find(
+        (candidate) => candidate.dataset.enemyId === enemy.id,
+      ),
+    ).toBe(bar);
+
+    renderer.render({
+      ...snapshot,
+      enemies: snapshot.enemies.map((current) =>
+        current.id === enemy.id
+          ? { ...current, hp: current.maxHp / 2 }
+          : current,
+      ),
+    });
+    expect(bar.attributes["aria-valuenow"]).toBe(String(enemy.maxHp / 2));
+    expect(bar.attributes["aria-valuetext"]).toBe(
+      `${Math.ceil(enemy.maxHp / 2)} / ${Math.ceil(enemy.maxHp)} HP`,
+    );
+    expect(fill.style.width).toBe("50%");
+
+    renderer.render({
+      ...snapshot,
+      enemies: snapshot.enemies.map((current) =>
+        current.id === enemy.id ? { ...current, defeated: true } : current,
+      ),
+    });
+    expect(bar.remove).toHaveBeenCalledTimes(1);
+    renderer.render({ ...snapshot, enemies: [] });
+    renderer.dispose();
+    expect(bar.remove).toHaveBeenCalledTimes(1);
+    for (const other of dom.enemyHealthBars)
+      if (other !== bar) expect(other.remove).toHaveBeenCalledTimes(1);
+  });
+
   it("updates health/camera/raycast and releases observer, label, canvas, floor and WebGL exactly once", () => {
     const dom = rendererDom();
     const renderer = createThreeRenderer(dom.host);

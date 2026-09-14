@@ -84,6 +84,38 @@ export const meshFor = (
 
 /** Only adapter-owned DOM operations; actual DOM behavior is covered in Playwright. */
 export const rendererDom = () => {
+  interface ElementDouble {
+    readonly attributes: Record<string, string>;
+    readonly children: ElementDouble[];
+    readonly dataset: Record<string, string>;
+    className: string;
+    textContent: string;
+    style: Record<string, string>;
+    readonly append: ReturnType<typeof vi.fn>;
+    readonly getAttribute: (name: string) => string | null;
+    readonly remove: ReturnType<typeof vi.fn>;
+    readonly setAttribute: ReturnType<typeof vi.fn>;
+  }
+  const element = (): ElementDouble => {
+    const attributes: Record<string, string> = {};
+    const children: ElementDouble[] = [];
+    return {
+      attributes,
+      children,
+      dataset: {},
+      className: "",
+      textContent: "",
+      style: { left: "", top: "", width: "" },
+      append: vi.fn((...nextChildren: ElementDouble[]) =>
+        children.push(...nextChildren),
+      ),
+      getAttribute: (name: string) => attributes[name] ?? null,
+      remove: vi.fn(),
+      setAttribute: vi.fn((name: string, value: string) => {
+        attributes[name] = value;
+      }),
+    };
+  };
   const bounds = { left: 0, top: 0, width: 800, height: 600 };
   const canvas = {
     dataset: {} as Record<string, string>,
@@ -91,23 +123,29 @@ export const rendererDom = () => {
     remove: vi.fn(),
     getBoundingClientRect: () => bounds,
   };
-  const label = {
-    dataset: {} as Record<string, string>,
-    className: "",
-    remove: vi.fn(),
-    setAttribute: vi.fn(),
-    style: { left: "", top: "" },
-    textContent: "",
+  const label = element();
+  const enemyHealthBars: ElementDouble[] = [];
+  const appended: ElementDouble[] = [];
+  const host = {
+    append: vi.fn((...elements: ElementDouble[]) => appended.push(...elements)),
+    clientWidth: 800,
+    clientHeight: 600,
   };
-  const host = { append: vi.fn(), clientWidth: 800, clientHeight: 600 };
   let resize = (): void => {};
   const observer = {
     observe: vi.fn(),
     disconnect: vi.fn(),
     resize: () => resize(),
   };
+  let divCount = 0;
   vi.stubGlobal("document", {
-    createElement: (tag: string) => (tag === "canvas" ? canvas : label),
+    createElement: (tag: string) => {
+      if (tag === "canvas") return canvas;
+      if (tag === "div" && divCount++ === 0) return label;
+      const next = element();
+      if (tag === "div") enemyHealthBars.push(next);
+      return next;
+    },
   });
   vi.stubGlobal("window", { devicePixelRatio: 1 });
   vi.stubGlobal(
@@ -123,6 +161,8 @@ export const rendererDom = () => {
   return {
     canvas,
     label,
+    enemyHealthBars,
+    appended,
     host: host as unknown as HTMLElement,
     observer,
     bounds,

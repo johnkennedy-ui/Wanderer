@@ -155,6 +155,36 @@ export const playerStatKinds = Object.freeze([
 export type PlayerStatKind = (typeof playerStatKinds)[number];
 export type PlayerStats = Readonly<Record<PlayerStatKind, number>>;
 
+/**
+ * The six player-controlled RO-inspired attributes. Defense values are
+ * derived from Vitality and Magic and consequently are not allocatable.
+ */
+export const allocatablePlayerStatKinds = Object.freeze([
+  "strength",
+  "agility",
+  "vitality",
+  "magic",
+  "dexterity",
+  "luck",
+] as const);
+
+export type AllocatablePlayerStatKind =
+  (typeof allocatablePlayerStatKinds)[number];
+
+/** Persistent player choices, separate from class bases and derived stats. */
+export type PlayerStatAllocations = Readonly<
+  Record<AllocatablePlayerStatKind, number>
+>;
+
+export const emptyPlayerStatAllocations = (): PlayerStatAllocations => ({
+  strength: 0,
+  agility: 0,
+  vitality: 0,
+  magic: 0,
+  dexterity: 0,
+  luck: 0,
+});
+
 export const emptyPlayerStats = (): PlayerStats => ({
   strength: 0,
   dexterity: 0,
@@ -201,6 +231,8 @@ export interface ClassProgression {
   readonly level: 0 | 1 | 2 | 3 | 4 | 5;
   readonly playerClass: PlayerClass | null;
   readonly skillIds: readonly ClassSkillId[];
+  /** Normalized persistent player allocations; class bases never enter here. */
+  readonly allocatedStats: PlayerStatAllocations;
   /**
    * Current class weapon rank. Released progression extensions may omit this
    * field; hydration normalizes missing historical values to zero.
@@ -268,6 +300,12 @@ export interface CombatStats {
   readonly weaponProjectileCount: number;
   readonly weaponProjectileDamageMultiplier: number;
   readonly weaponProjectileHoming: boolean;
+  /** RO-inspired derived mitigation and deterministic chance values. */
+  readonly physicalDefense: number;
+  readonly magicDefense: number;
+  readonly dodgeChance: number;
+  readonly physicalCriticalChance: number;
+  readonly physicalCriticalDamageMultiplier: number;
 }
 
 /**
@@ -275,7 +313,7 @@ export interface CombatStats {
  * schema-2 wire DTO lives independently in persistence/saveV2.ts.
  */
 export interface CurrentSave {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
@@ -286,8 +324,8 @@ export interface CurrentSave {
   readonly committedAt: number;
   readonly savePointId: string;
   readonly savePointPosition: Vector2;
-  /** Optional extension: historical schema-2 documents omit this safely. */
-  readonly classProgression?: ClassProgression;
+  /** V3 explicitly persists normalized progression and player allocations. */
+  readonly classProgression: ClassProgression;
 }
 
 /** Compatibility alias for callers that still use the historical name. */

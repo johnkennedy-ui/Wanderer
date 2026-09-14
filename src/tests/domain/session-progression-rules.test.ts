@@ -39,6 +39,11 @@ describe("session progression rules", () => {
       weaponProjectileCount: 1,
       weaponProjectileDamageMultiplier: 1,
       weaponProjectileHoming: false,
+      physicalDefense: 0,
+      magicDefense: 0,
+      dodgeChance: 0,
+      physicalCriticalChance: 0,
+      physicalCriticalDamageMultiplier: 1.5,
     });
 
     for (const [level, attackDamage] of [
@@ -59,6 +64,11 @@ describe("session progression rules", () => {
         weaponProjectileCount: 1,
         weaponProjectileDamageMultiplier: 1,
         weaponProjectileHoming: false,
+        physicalDefense: 0,
+        magicDefense: 0,
+        dodgeChance: 0,
+        physicalCriticalChance: 0,
+        physicalCriticalDamageMultiplier: 1.5,
       });
     }
   });
@@ -92,6 +102,11 @@ describe("session progression rules", () => {
       weaponProjectileCount: 1,
       weaponProjectileDamageMultiplier: 1,
       weaponProjectileHoming: false,
+      physicalDefense: 0,
+      magicDefense: 0,
+      dodgeChance: 0,
+      physicalCriticalChance: 0,
+      physicalCriticalDamageMultiplier: 1.5,
     });
   });
 

@@ -142,6 +142,48 @@ test("M5 retains visible canvas/health label through movement and reset without 
   await label.dispose();
 });
 
+test("M5 projects retained accessible enemy HP bars from live renderer snapshots", async ({
+  page,
+}) => {
+  await openM5World(page);
+  // Boss defeat itself is the lifecycle boundary under test. Do not let the
+  // shared incidental handler consume that public modal while this assertion
+  // is polling; the terminal state must remain observable here.
+  await page.removeLocatorHandler(page.getByTestId("upgrade-modal"));
+  const boss = page.locator(
+    '[data-testid="world-enemy-hp"][data-enemy-id="boss:ember-wyrm"]',
+  );
+  await expect(boss).toBeVisible();
+  await expect(boss).toHaveAttribute("role", "meter");
+  await expect(boss).toHaveAttribute("aria-label", "boss health");
+  await expect(boss).toHaveAttribute("aria-valuemin", "0");
+  await expect(boss).toHaveAttribute("aria-valuemax", "72");
+  await expect(boss).toHaveAttribute("aria-valuenow", "72");
+  await expect(boss).toHaveAttribute("aria-valuetext", "72 / 72 HP");
+  const retainedBoss = await boss.elementHandle();
+  if (retainedBoss === null) throw new Error("Missing retained boss bar");
+  // Live combat can advance through more than one authored 12-damage event
+  // between DOM observations. Require a real, valid damage state rather than
+  // a single transient frame, then bind its accessible text to that same read.
+  await expect(boss).not.toHaveAttribute("aria-valuenow", "72", {
+    timeout: 4_000,
+  });
+  const observedHealth = await boss.evaluate((node) => ({
+    value: node.getAttribute("aria-valuenow"),
+    text: node.getAttribute("aria-valuetext"),
+  }));
+  expect(["60", "48", "36", "24", "12"]).toContain(observedHealth.value);
+  expect(observedHealth.text).toBe(`${observedHealth.value} / 72 HP`);
+  expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(page.getByTestId("upgrade-modal")).toBeVisible();
+  await expect(boss).toHaveCount(0, { timeout: 4_000 });
+  expect(await retainedBoss.evaluate((node) => node.isConnected)).toBe(false);
+  expect(
+    await page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+  ).toBeNull();
+  await retainedBoss.dispose();
+});
+
 test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancellation and selected demolition", async ({
   page,
 }) => {

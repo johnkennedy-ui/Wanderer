@@ -2,7 +2,7 @@
 
 `GameSession` creates a `ValidCampfireSaveRequest` only while the player is within 2m of a home, wild, or player-built campfire. The visible **Save at campfire** control is the only caller that asks the browser-storage adapter to commit such a request. Movement, combat, drops, buildings, upgrades, death, reload, visibility changes, and shutdown do not persist state.
 
-## Schema-2 wire contract
+## Historical schema-2 and current schema-3 contracts
 
 Released documents remain schema version `2`:
 
@@ -30,30 +30,52 @@ JSON documents in `src/tests/fixtures/saves/v2/` are historical compatibility
 fixtures: do not regenerate or edit them just because a new implementation
 would otherwise fail.
 
+Schema version `3` is the active storage format. It retains every V2 field and
+adds a required normalized progression object:
+
+```ts
+{
+  schemaVersion: 3,
+  // V2 fields above,
+  classProgression: {
+    experience, level, playerClass, skillIds, weaponRank,
+    allocatedStats: { strength, agility, vitality, magic, dexterity, luck }
+  }
+}
+```
+
+Each allocation is a non-negative integer, all six keys are required, and the
+total cannot exceed `level * 3`. Defense and magic defense are derived from
+Vitality and Magic and are never persisted as allocations.
+
 `src/domain/persistence/currentSave.ts` owns the separate current in-memory
 hydration representation and the explicit V2 serialization projection.
-`migrateSaveV2` converts a validated historical DTO to that current shape in
-memory; `GameSession` then clones it with `hydrateSessionState`. The reverse
-copy-out is `projectCurrentSave`. Runtime types may evolve around this boundary
-without silently changing the released V2 wire validator or JSON field names.
+`migrateSaveV2` converts a validated historical DTO to V3 in memory;
+`GameSession` then clones it with `hydrateSessionState`. Active copy-out is
+V3; `toSaveV2Document` remains an exact historical projection for fixtures and
+compatibility checks. Runtime types may evolve around this boundary without
+silently changing the released V2 wire validator or JSON field names.
 
 The current in-memory hydration model is separate. Loading performs a pure sequence:
 
 ```text
-raw string → JSON parse → schema identification → frozen V2 decode
-→ in-memory migration/normalisation → current-state validation → GameSession hydration
+raw string → JSON parse → schema identification → frozen V2 decode or V3 decode
+→ pure V2 migration/normalisation or V3 copy → current-state validation
+→ GameSession hydration
 ```
 
 No decode, migration, or hydration stage writes browser storage. A migrated
 state is stored only by a later, valid, explicit campfire save. Historical
 fixtures and existing V2 documents must remain loadable with schema version 2;
-loading must never rewrite them.
+loading must never rewrite them. A V2 Knight save already contains the
+level-one Vitality health grant, so migration adds only missing level-two and
+later base-Vitality growth while preserving upgrade and class-skill health.
 
 The decoder distinguishes `absent`, `invalid-json`, `invalid-document`, `unsupported-schema`, and `unsupported-generator`. A present corrupt or unsupported save is not silently treated as a first launch. A valid backup may still recover it, with a recovery warning.
 
 ## Generator and persistent-ID compatibility
 
-The current runtime accepts the released `wanderer-web-v1` generator. An unknown generator version is rejected before it hydrates a session; it is never passed to the newest algorithm. Released world-generator implementations and their procedural IDs are compatibility surfaces and are versioned separately in `WORLD_GENERATION.md`.
+The current runtime accepts the released `wanderer-web-v1` and `wanderer-web-v2` generators. An unknown generator version is rejected before it hydrates a session; it is never passed to the newest algorithm. Released world-generator implementations and their procedural IDs are compatibility surfaces and are versioned separately in `WORLD_GENERATION.md`.
 
 Persistent resource, building, enemy, boss, and upgrade IDs are opaque serialized values. They are append-only: display labels may change, but existing IDs must not be renamed or removed without an explicit compatibility definition, alias, or migration. Historical schema validators retain their own frozen values rather than importing an evolving active-ID list.
 
@@ -65,6 +87,22 @@ GUIDs. A new building kind may be appended to the active catalogue only with
 the same explicit compatibility discipline.
 
 Runtime-only enemy cooldowns, projectiles, floor drops, Three.js meshes, DOM identity, keyboard/touch state, and framework identifiers are never persisted.
+
+## RO-inspired stat rules
+
+The stat model is **game-adapted and Ragnarok Online-inspired**, not exact
+parity with a particular RO release. Each earned level repeats its class's
+level-one base stats and grants three persistent allocation points. Knight
+damage uses Strength, Archer damage uses Dexterity, Wizard damage uses Magic,
+and Vitality gives health plus `floor(Vitality / 2)` physical defense. Magic
+defense is `floor(Magic / 2)`.
+
+Agility increases movement speed, attack speed, and a bounded deterministic
+dodge chance. Luck gives bounded deterministic physical critical chance;
+Wizard magic does not critically strike. Rolls are hashes of the world seed
+and stable event identities, never `Math.random`: a Knight swing shares one
+critical outcome across its arc, Archer shots roll separately, and each enemy
+has a runtime-only per-enemy attack-attempt ordinal.
 
 ## Browser keys and recovery
 

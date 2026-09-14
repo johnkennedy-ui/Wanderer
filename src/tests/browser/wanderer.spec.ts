@@ -145,6 +145,14 @@ test(
       level: 0,
       playerClass: null,
       skillIds: [],
+      allocatedStats: {
+        strength: 0,
+        agility: 0,
+        vitality: 0,
+        magic: 0,
+        dexterity: 0,
+        luck: 0,
+      },
       weaponRank: 0,
     });
     await page.addInitScript(
@@ -233,14 +241,17 @@ test(
   { tag: "@manual-choices" },
   async ({ page }) => {
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    // Freeze before boot so the level-five Archer cannot clear the nearby
+    // deterministic home encounter during a large virtual-time jump.
+    await page.clock.pauseAt(new Date("2026-01-01T00:00:00Z"));
     await primeRankedClass(page, "archer", 1);
     await page.goto(applicationPath);
+    await page.clock.runFor(16);
     await openStatus(page);
     await expect(page.getByTestId("weapon-relic-status")).toContainText(
       "Twinwind Relic rank 1",
     );
     // Observe actual rendered frames: both arrows may hit between wall-time polls.
-    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
     const canvas = page.getByTestId("world-canvas");
     let projectileCount = await canvas.getAttribute("data-projectile-count");
     for (
@@ -294,6 +305,41 @@ test("the Stats button shows only the eight character stats", async ({
     /Strength.*Dexterity.*Agility.*Luck.*Vitality.*Magic.*Defense.*Magic Defense/s,
   );
 });
+
+test(
+  "stat points are allocated through six primary controls without an implicit save",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-knight").click();
+    await expect(classModal).toBeHidden();
+
+    const savedBeforeAllocation = await page.evaluate(() =>
+      localStorage.getItem("wanderer.save.primary"),
+    );
+    await page.getByTestId("stats-toggle").click();
+    const controls = page.getByTestId("stat-allocation-controls");
+    await expect(page.getByTestId("stat-points")).toHaveText(
+      "Stat points available: 3",
+    );
+    await expect(controls.getByRole("button")).toHaveCount(6);
+    await expect(page.getByTestId("allocate-stat-defense")).toHaveCount(0);
+    const strength = page.getByTestId("allocate-stat-strength");
+    await expect(strength).toBeEnabled();
+    await expect(strength).toHaveAttribute("data-allocation", "0");
+    await strength.click();
+    await expect(page.getByTestId("stat-points")).toHaveText(
+      "Stat points available: 2",
+    );
+    await expect(strength).toHaveAttribute("data-allocation", "1");
+    await expect(
+      page.evaluate(() => localStorage.getItem("wanderer.save.primary")),
+    ).resolves.toBe(savedBeforeAllocation);
+  },
+);
 
 const clickWithPendingUpgradeResolution = async (
   _page: Page,
@@ -789,22 +835,34 @@ test(
     await classModal.getByTestId("class-skill-wizard-arcane-haste").click();
     await expect(classModal).toBeHidden();
 
+    // Class and skill selections above are the manual choices under test. A
+    // live boss reward can surface immediately afterwards, so resolve only
+    // that incidental public choice before it can block the explicit save.
+    const upgradeModal = page.getByTestId("upgrade-modal");
+    await page.addLocatorHandler(
+      upgradeModal,
+      async (modal) => {
+        const choices = page.getByTestId("upgrade-choices");
+        const key = await choices.getAttribute("data-choice-key");
+        if (!key) throw new Error("Boss choice lacks public key");
+        await expect(modal.getByRole("button")).toHaveCount(3);
+        const choice = modal.getByRole("button").first();
+        const id = await choice.getAttribute("data-testid");
+        if (!id) throw new Error("Boss choice lacks public identity");
+        await choice.click();
+      },
+      { noWaitAfter: true },
+    );
+
     await openStatus(page);
     await expect(page.getByTestId("class-progression")).toContainText(
       "level 3 · Wizard",
     );
-    const upgradeModal = page.getByTestId("upgrade-modal");
-    if (await upgradeModal.isVisible()) {
-      const upgradeChoice = upgradeModal.getByRole("button").first();
-      const upgradeId = await upgradeChoice.getAttribute("data-testid");
-      if (!upgradeId) throw new Error("Boss choice lacks public identity");
-      await upgradeChoice.click();
-      await expect(upgradeModal).toBeHidden();
-    }
     await clickWithPendingUpgradeResolution(
       page,
       page.getByTestId("save-button"),
     );
+    await expect(upgradeModal).toBeHidden();
     await expect(page.getByTestId("save-message")).toContainText(
       "Saved explicitly",
     );

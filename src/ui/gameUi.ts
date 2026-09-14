@@ -9,6 +9,7 @@ import {
 import type { GameUiSnapshot, PlacementResult } from "../domain/notices";
 import { buildingKinds } from "../domain/types";
 import type {
+  AllocatablePlayerStatKind,
   BuildingKind,
   ClassSkillId,
   PlayerClass,
@@ -37,6 +38,7 @@ export interface UiIntents {
   chooseUpgrade(id: UpgradeId): void;
   chooseClass(playerClass: PlayerClass): void;
   chooseClassSkill(skillId: ClassSkillId): void;
+  allocateStat(kind: AllocatablePlayerStatKind): void;
 }
 
 type PlacementMode =
@@ -148,7 +150,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     </section>
     <section id="stats-panel" data-testid="stats-panel" class="side-panel panel stats-panel" aria-label="Stats" hidden>
       <header class="panel-heading"><h2>Stats</h2><button type="button" class="panel-close" data-testid="close-stats" aria-label="Close Stats">×</button></header>
+      <p class="stat-points" data-testid="stat-points" aria-live="polite"></p>
       <dl data-testid="stats-list" class="stats-list"></dl>
+      <div class="stat-allocation-controls" data-testid="stat-allocation-controls" role="group" aria-label="Allocate stat points"></div>
     </section>
     <section id="build-menu-panel" data-testid="build-menu-panel" class="side-panel panel" aria-label="Build" hidden>
       <header class="panel-heading"><h2>Build</h2><button type="button" class="panel-close" data-testid="close-build-menu" aria-label="Close Build">×</button></header>
@@ -404,6 +408,27 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     byTestId("stats-list").append(term, value);
     return { kind, value };
   });
+  const statAllocationButtons = (
+    [
+      ["strength", "Strength"],
+      ["dexterity", "Dexterity"],
+      ["agility", "Agility"],
+      ["luck", "Luck"],
+      ["vitality", "Vitality"],
+      ["magic", "Magic"],
+    ] as const satisfies readonly (readonly [
+      AllocatablePlayerStatKind,
+      string,
+    ])[]
+  ).map(([kind, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "stat-allocation-button";
+    button.dataset.testid = `allocate-stat-${kind}`;
+    button.addEventListener("click", () => intents.allocateStat(kind));
+    byTestId("stat-allocation-controls").append(button);
+    return { kind, label, button };
+  });
 
   return {
     worldHost,
@@ -533,6 +558,35 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       }
       for (const { kind, value } of statRows)
         text(value, String(snapshot.playerStats[kind]));
+      const statPointsAvailable = snapshot.statPointsAvailable ?? 0;
+      text(
+        byTestId("stat-points"),
+        `Stat points available: ${statPointsAvailable}`,
+      );
+      const canAllocateStats =
+        snapshot.classProgression.playerClass !== null &&
+        statPointsAvailable > 0;
+      for (const { kind, label, button } of statAllocationButtons) {
+        const allocated = snapshot.classProgression.allocatedStats?.[kind] ?? 0;
+        const disabled = !canAllocateStats;
+        if (button.disabled !== disabled) button.disabled = disabled;
+        text(button, `+ ${label}`);
+        setAttribute(button, "data-allocation", String(allocated));
+        setAttribute(
+          button,
+          "aria-label",
+          `Add one ${label} point (${allocated} allocated)`,
+        );
+        setAttribute(
+          button,
+          "title",
+          canAllocateStats
+            ? `${allocated} ${label} point${allocated === 1 ? "" : "s"} allocated.`
+            : snapshot.classProgression.playerClass === null
+              ? "Choose a class before allocating stat points."
+              : "No stat points are available.",
+        );
+      }
       const hasClassChoice =
         snapshot.pendingClassChoices.length > 0 ||
         snapshot.pendingClassSkillChoices.length > 0;

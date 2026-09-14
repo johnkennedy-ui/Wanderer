@@ -242,9 +242,11 @@ describe("session world runtime coordination", () => {
       respawnAt: null,
       defeated: false,
       attackElapsed: 0,
+      attackEventOrdinal: 0,
     });
     expect(Object.keys(scoutDraft ?? {}).sort()).toEqual([
       "attackElapsed",
+      "attackEventOrdinal",
       "attackEverySeconds",
       "damage",
       "dangerTier",

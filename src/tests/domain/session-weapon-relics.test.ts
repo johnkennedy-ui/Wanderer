@@ -19,6 +19,7 @@ import type {
   PlayerClass,
   UpgradeId,
 } from "../../domain/types";
+import { emptyPlayerStatAllocations } from "../../domain/types";
 import { createBrowserSaveStorage } from "../../platform/storage/browserSaveStorage";
 import { MemoryStore, savedAtHome } from "./session-test-helpers";
 import type {
@@ -34,6 +35,7 @@ const progression = (
   level: 5,
   playerClass,
   skillIds: [],
+  allocatedStats: emptyPlayerStatAllocations(),
   weaponRank,
 });
 
@@ -314,8 +316,8 @@ describe("weapon relic progression", () => {
       archerRankOne.projectiles.map(({ damage }) => damage * 1.1),
     );
     for (const [projectiles, expectedHp] of [
-      [archerRankOne.projectiles, 73],
-      [archerRankTwo.projectiles, 70.3],
+      [archerRankOne.projectiles, 37],
+      [archerRankTwo.projectiles, 30.7],
     ] as const) {
       const impact = advanceProjectileCombatPhase({
         delta: 1,
@@ -349,8 +351,8 @@ describe("weapon relic progression", () => {
       8,
     );
     for (const [projectile, expectedHp] of [
-      [wizardRankOne.projectiles[0], 80.2],
-      [wizardRankTwo.projectiles[0], 77.23],
+      [wizardRankOne.projectiles[0], 56.2],
+      [wizardRankTwo.projectiles[0], 49.63],
     ] as const) {
       const impact = advanceProjectileCombatPhase({
         delta: 1,
@@ -380,8 +382,8 @@ describe("weapon relic progression", () => {
     });
     expect(knight.projectiles).toEqual([]);
     expect(knight.meleeImpacts).toEqual([
-      { targetId: "first", damage: 24.72 },
-      { targetId: "second", damage: 12.36 },
+      { targetId: "first", damage: 48.72 },
+      { targetId: "second", damage: 24.36 },
     ]);
   });
 

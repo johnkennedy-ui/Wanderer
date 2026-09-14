@@ -57,7 +57,11 @@ export const collectNearbyWeaponRelics = ({
   if (progression.playerClass === null)
     return {
       drops: drops.map(copyDrop),
-      progression: { ...progression, skillIds: [...progression.skillIds] },
+      progression: {
+        ...progression,
+        skillIds: [...progression.skillIds],
+        allocatedStats: { ...progression.allocatedStats },
+      },
       collectedRank: null,
       playerClass: null,
     };
@@ -68,7 +72,11 @@ export const collectNearbyWeaponRelics = ({
   if (nearby.length === 0)
     return {
       drops: drops.map(copyDrop),
-      progression: { ...progression, skillIds: [...progression.skillIds] },
+      progression: {
+        ...progression,
+        skillIds: [...progression.skillIds],
+        allocatedStats: { ...progression.allocatedStats },
+      },
       collectedRank: null,
       playerClass: progression.playerClass,
     };
@@ -80,6 +88,7 @@ export const collectNearbyWeaponRelics = ({
     progression: {
       ...progression,
       skillIds: [...progression.skillIds],
+      allocatedStats: { ...progression.allocatedStats },
       weaponRank,
     },
     collectedRank: weaponRank,

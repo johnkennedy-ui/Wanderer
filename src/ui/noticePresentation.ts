@@ -10,6 +10,16 @@ import type {
   PlacementRejection,
   PlacementResult,
 } from "../domain/notices";
+import type { AllocatablePlayerStatKind } from "../domain/types";
+
+const primaryStatLabels: Record<AllocatablePlayerStatKind, string> = {
+  strength: "Strength",
+  dexterity: "Dexterity",
+  agility: "Agility",
+  luck: "Luck",
+  vitality: "Vitality",
+  magic: "Magic",
+};
 
 const exhaustNotice = (notice: never): never => {
   throw new Error(`Unhandled game notice: ${JSON.stringify(notice)}`);
@@ -69,6 +79,14 @@ export const presentGameNotice = (notice: GameNotice): string => {
       return "Choose exactly one available skill from your current class tier.";
     case "class-skill.selected":
       return `${classSkillDefinitionFor(notice.skillId).label} applied in runtime. Campfire-save it to keep it.`;
+    case "stat-allocation.applied":
+      return `${primaryStatLabels[notice.stat]} increased in runtime. ${notice.allocated} allocated; ${notice.statPointsAvailable} stat point${notice.statPointsAvailable === 1 ? "" : "s"} available. Campfire-save it to keep it.`;
+    case "stat-allocation.rejected.no-class":
+      return "Choose a class before allocating stat points.";
+    case "stat-allocation.rejected.no-points":
+      return "No stat points are available. Earn another level to receive more.";
+    case "stat-allocation.rejected.invalid-stat":
+      return "That stat cannot receive allocation points.";
     case "save.rejected.not-near-campfire":
       return "Save rejected: stand within 2m of a home, wild, or player Campfire.";
     case "save.committed":
@@ -118,6 +136,10 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     case "class.selected":
     case "class-skill.rejected.invalid-choice":
     case "class-skill.selected":
+    case "stat-allocation.applied":
+    case "stat-allocation.rejected.no-class":
+    case "stat-allocation.rejected.no-points":
+    case "stat-allocation.rejected.invalid-stat":
     case "save.rejected.not-near-campfire":
     case "save.committed":
     case "player.died":

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { Vector2 } from "../../domain/types";
+import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
@@ -59,6 +60,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   playerHealthLabel.className = "world-player-hp";
   playerHealthLabel.setAttribute("aria-label", "Player health");
   host.append(playerHealthLabel);
+  const enemyHealthOverlay = new EnemyHealthOverlay(host);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -128,6 +130,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       camera.lookAt(snapshot.player.position.x, 0, -snapshot.player.position.y);
       camera.updateMatrixWorld();
       positionPlayerHealthLabel(snapshot);
+      enemyHealthOverlay.render(snapshot.enemies, camera);
       setDataset("floorDropCount", String(snapshot.floorDrops.length));
       setDataset(
         "weaponRelicDropCount",
@@ -174,6 +177,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       disposed = true;
       observer.disconnect();
       projection.dispose();
+      enemyHealthOverlay.dispose();
       floor.geometry.dispose();
       floor.material.dispose();
       scene.clear();

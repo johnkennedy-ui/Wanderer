@@ -26,6 +26,7 @@ import {
   combatStatsFor,
   projectileUpgradeEffectsFor,
 } from "./progressionRules";
+import { deterministicChanceSucceeds } from "./deterministicRoll";
 import type {
   RuntimeCrescentAttack,
   RuntimeEnemy,
@@ -85,6 +86,9 @@ export interface AutoCombatPhaseInput {
   readonly attackElapsed: number;
   readonly nextProjectileSerial: number;
   readonly nextCrescentSerial?: number;
+  /** Runtime-only serial: one value per authored player attack event. */
+  readonly nextAttackEventSerial?: number;
+  readonly worldSeed?: string;
 }
 
 export interface AutoCombatPhaseResult {
@@ -94,6 +98,7 @@ export interface AutoCombatPhaseResult {
   readonly attackElapsed: number;
   readonly nextProjectileSerial: number;
   readonly nextCrescentSerial: number;
+  readonly nextAttackEventSerial: number;
   readonly combatStatus: string;
 }
 
@@ -111,6 +116,8 @@ export const advanceAutoCombatPhase = ({
   attackElapsed,
   nextProjectileSerial,
   nextCrescentSerial = 1,
+  nextAttackEventSerial = 1,
+  worldSeed = "combat-default-seed",
 }: AutoCombatPhaseInput): AutoCombatPhaseResult => {
   const projectiles = currentProjectiles.map(copyProjectile);
   const crescentAttacks = currentCrescentAttacks
@@ -139,6 +146,7 @@ export const advanceAutoCombatPhase = ({
       attackElapsed: decision.attackElapsed,
       nextProjectileSerial,
       nextCrescentSerial,
+      nextAttackEventSerial,
       combatStatus: "Stationary: seeking a target",
     };
 
@@ -153,10 +161,19 @@ export const advanceAutoCombatPhase = ({
       attackElapsed: decision.attackElapsed,
       nextProjectileSerial,
       nextCrescentSerial,
+      nextAttackEventSerial,
       combatStatus,
     };
 
   if (stats.attackStyle === "slash") {
+    const critical = deterministicChanceSucceeds(stats.physicalCriticalChance, {
+      worldSeed,
+      domain: "physical-crit",
+      eventSerial: nextAttackEventSerial,
+    });
+    const damage =
+      stats.attackDamage *
+      (critical ? stats.physicalCriticalDamageMultiplier : 1);
     const secondaryTargetIds = classSecondaryTargetIdsFor({
       style: stats.attackStyle,
       playerPosition,
@@ -184,15 +201,16 @@ export const advanceAutoCombatPhase = ({
         },
       ],
       meleeImpacts: [
-        { targetId: decision.target.id, damage: stats.attackDamage },
+        { targetId: decision.target.id, damage },
         ...secondaryTargetIds.map((targetId) => ({
           targetId,
-          damage: stats.attackDamage * stats.classSecondaryDamageMultiplier,
+          damage: damage * stats.classSecondaryDamageMultiplier,
         })),
       ],
       attackElapsed: decision.attackElapsed,
       nextProjectileSerial,
       nextCrescentSerial: nextCrescentSerial + 1,
+      nextAttackEventSerial: nextAttackEventSerial + 1,
       combatStatus,
     };
   }
@@ -215,8 +233,18 @@ export const advanceAutoCombatPhase = ({
       areaRadius: stats.classAreaRadius,
       arcCosine: stats.classArcCosine,
     });
+    const critical =
+      stats.attackStyle !== "magic" &&
+      deterministicChanceSucceeds(stats.physicalCriticalChance, {
+        worldSeed,
+        domain: "physical-crit",
+        /* Archer relic shots must each have an independent authored roll. */
+        eventSerial: nextAttackEventSerial * 1_024 + index,
+      });
     const shotDamage =
-      stats.attackDamage * stats.weaponProjectileDamageMultiplier;
+      stats.attackDamage *
+      stats.weaponProjectileDamageMultiplier *
+      (critical ? stats.physicalCriticalDamageMultiplier : 1);
     const draft = projectileDraftFor({
       playerPosition,
       target,
@@ -248,6 +276,7 @@ export const advanceAutoCombatPhase = ({
     attackElapsed: decision.attackElapsed,
     nextProjectileSerial: nextProjectileSerial + shotTargets.length,
     nextCrescentSerial,
+    nextAttackEventSerial: nextAttackEventSerial + 1,
     combatStatus,
   };
 };
@@ -267,6 +296,10 @@ export interface EnemyCombatPhaseInput {
   /** End time for the player's transient post-hit protection window. */
   readonly playerHitRecoveryEndsAt?: number;
   readonly playerHitRecoverySeconds?: number;
+  /** Current player-derived physical mitigation; omitted preserves legacy calls. */
+  readonly playerPhysicalDefense?: number;
+  readonly playerDodgeChance?: number;
+  readonly worldSeed?: string;
 }
 
 export interface EnemyCombatPhaseResult {
@@ -296,6 +329,9 @@ export const advanceEnemyCombatPhase = ({
   deathResourceLossRate,
   playerHitRecoveryEndsAt: currentPlayerHitRecoveryEndsAt = 0,
   playerHitRecoverySeconds = 0,
+  playerPhysicalDefense = 0,
+  playerDodgeChance = 0,
+  worldSeed = "combat-default-seed",
 }: EnemyCombatPhaseInput): EnemyCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const player = {
@@ -341,14 +377,26 @@ export const advanceEnemyCombatPhase = ({
         distance(player.position, enemy.position) <= enemyAttackStandoff,
       attackElapsed: enemy.attackElapsed,
       attackEverySeconds: enemy.attackEverySeconds,
-      damage: enemy.damage,
+      damage: Math.max(1, enemy.damage - Math.max(0, playerPhysicalDefense)),
       playerHp: player.hp,
       delta,
     });
     if (resolution.kind === "inactive") continue;
     enemy.attackElapsed = resolution.attackElapsed;
     if (resolution.kind === "waiting") continue;
+    const attackEventOrdinal = enemy.attackEventOrdinal ?? 0;
+    enemy.attackEventOrdinal = attackEventOrdinal + 1;
+    /* A recovery-protected attempt is still consumed before dodge/damage. */
     if (elapsed < playerHitRecoveryEndsAt) continue;
+    if (
+      deterministicChanceSucceeds(playerDodgeChance, {
+        worldSeed,
+        domain: "enemy-dodge",
+        eventSerial: attackEventOrdinal,
+        subjectId: enemy.id,
+      })
+    )
+      continue;
     player.hp = resolution.nextPlayerHp;
     if (!resolution.playerDefeated) {
       playerHitRecoveryEndsAt = playerHitRecoveryEndsAtFor({
