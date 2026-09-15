@@ -53,8 +53,11 @@ const actorParts = (file: string): Record<string, Part> => {
       return [
         mesh.name,
         {
-        positions: values(primitive.attributes.POSITION, 3) as unknown as Vec3[],
-        normals: values(primitive.attributes.NORMAL, 3) as unknown as Vec3[],
+          positions: values(
+            primitive.attributes.POSITION,
+            3,
+          ) as unknown as Vec3[],
+          normals: values(primitive.attributes.NORMAL, 3) as unknown as Vec3[],
           indices: values(primitive.indices, 1).flat() as number[],
         },
       ];
