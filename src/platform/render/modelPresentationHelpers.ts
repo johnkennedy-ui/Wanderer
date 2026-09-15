@@ -258,6 +258,7 @@ interface ModelInstance {
   hasMeshes: boolean;
   locomotionDistance: number;
   moving: boolean;
+  suppressedCueSequence: number | undefined;
 }
 
 const playerModelFor = (
@@ -410,7 +411,9 @@ export class ModelProjection {
     setFallbackModelVisible: (id: string, visible: boolean) => void,
   ): void {
     let instance = this.instances.get(descriptor.id);
-    if (instance !== undefined && instance.asset !== descriptor.asset) {
+    const replacedAsset =
+      instance !== undefined && instance.asset !== descriptor.asset;
+    if (replacedAsset && instance !== undefined) {
       this.remove(descriptor.id, instance, setFallbackModelVisible);
       instance = undefined;
     }
@@ -436,6 +439,9 @@ export class ModelProjection {
         hasMeshes: false,
         locomotionDistance: 0,
         moving: false,
+        suppressedCueSequence: replacedAsset
+          ? descriptor.attackCue?.sequence
+          : undefined,
       };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -460,6 +466,10 @@ export class ModelProjection {
       });
     }
     instance.playerHitRecovery = descriptor.playerHitRecovery === true;
+    let poseCue =
+      descriptor.attackCue?.sequence === instance.suppressedCueSequence
+        ? undefined
+        : descriptor.attackCue;
     instance.root.position.set(
       descriptor.position.x,
       descriptor.height,
@@ -484,18 +494,20 @@ export class ModelProjection {
       const teleport = distance > 4;
       const reset =
         instance.resetId !== snapshot.presentationResetId || teleport;
-      instance.moving =
-        !reset &&
-        distance > 0.0001 &&
-        snapshot.presentationElapsed > instance.lastElapsed;
       if (reset) {
         instance.targetYaw = descriptor.rotation;
         instance.locomotionDistance = 0;
-      } else if (instance.moving) instance.locomotionDistance += distance;
+        instance.moving = false;
+        instance.suppressedCueSequence = descriptor.attackCue?.sequence;
+        poseCue = undefined;
+      } else if (snapshot.presentationElapsed > instance.lastElapsed) {
+        instance.moving = distance > 0.0001;
+        if (instance.moving) instance.locomotionDistance += distance;
+      }
       if (!reset && Math.hypot(movement.x, movement.y) > 0.0001)
         instance.targetYaw = calibratedYawFor(movement);
-      if (descriptor.attackCue !== undefined)
-        instance.targetYaw = calibratedYawFor(descriptor.attackCue.direction);
+      if (poseCue !== undefined)
+        instance.targetYaw = calibratedYawFor(poseCue.direction);
       const delta = reset
         ? 0
         : snapshot.presentationElapsed - instance.lastElapsed;
@@ -510,9 +522,10 @@ export class ModelProjection {
     instance.root.scale.setScalar(descriptor.scale);
     applyModelPose(
       instance.pose,
-      descriptor.attackCue,
+      poseCue,
       instance.yaw,
       snapshot.presentationElapsed,
+      { distance: instance.locomotionDistance, moving: instance.moving },
     );
     this.syncVisibility(descriptor.id, instance, setFallbackModelVisible);
   }

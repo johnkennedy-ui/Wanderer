@@ -25,11 +25,13 @@ export interface ModelLocomotion {
   readonly moving: boolean;
 }
 
-const authoredGripByAsset: Readonly<Record<string, THREE.Vector3>> = {
-  "player-archer": new THREE.Vector3(0.55, 0.6, 0),
-  "enemy-scout": new THREE.Vector3(0.34, 0.55, 0),
-  "enemy-brute": new THREE.Vector3(0.78, 0.58, 0.05),
-};
+const authoredGripByAsset: Readonly<
+  Record<string, readonly [number, number, number]>
+> = Object.freeze({
+  "player-archer": Object.freeze([0.55, 0.6, 0] as const),
+  "enemy-scout": Object.freeze([0.34, 0.55, 0] as const),
+  "enemy-brute": Object.freeze([0.78, 0.58, 0.05] as const),
+});
 
 const partNamesFor = (asset: string): readonly string[] =>
   asset === "player-knight"
@@ -86,7 +88,7 @@ const gripWorldPositionFor = (
 ): THREE.Vector3 | undefined => {
   const authoredGrip = authoredGripByAsset[asset];
   if (authoredGrip !== undefined)
-    return model.localToWorld(authoredGrip.clone());
+    return model.localToWorld(new THREE.Vector3(...authoredGrip));
   const primaryPart = primaryRigidPartFor(asset, parts);
   const measuredPart = primaryPart ?? parts[0];
   if (measuredPart === undefined) return undefined;

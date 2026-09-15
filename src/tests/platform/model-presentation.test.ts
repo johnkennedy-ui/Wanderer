@@ -311,6 +311,62 @@ describe("model presentation assets", () => {
     projection.dispose();
   });
 
+  it("wires distance-based motion, freezes paused poses, and suppresses stale teleport cues until the next attack", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    projection.render(base, vi.fn());
+    const template = modelScene();
+    template.children[0].name = "sword";
+    calls[0].onLoad({ scene: template });
+    await Promise.resolve();
+    await Promise.resolve();
+    const moved = {
+      ...base,
+      presentationElapsed: 0.1,
+      player: { ...base.player, position: { x: 0.2, y: 0 } },
+    };
+    projection.render(moved, vi.fn());
+    const pose = projection.group.getObjectByName("pose:player")!;
+    const bob = pose.position.y;
+    expect(bob).not.toBe(0);
+    projection.render(moved, vi.fn());
+    expect(pose.position.y).toBe(bob);
+    projection.render({ ...moved, presentationElapsed: 0.2 }, vi.fn());
+    expect(pose.position.y).toBe(0);
+    const teleported = {
+      ...moved,
+      presentationElapsed: 0.3,
+      player: { ...base.player, position: { x: 30, y: 30 } },
+      attackCues: [
+        {
+          actorId: "player",
+          sequence: 10,
+          direction: { x: 1, y: 0 },
+          style: "slash" as const,
+          age: 0.1,
+        },
+      ],
+    };
+    projection.render(teleported, vi.fn());
+    projection.render({ ...teleported, presentationElapsed: 0.4 }, vi.fn());
+    expect(pose.position.y).toBe(0);
+    expect(projection.group.getObjectByName("model:player")?.rotation.y).toBe(
+      0,
+    );
+    expect(pose.getObjectByName("weaponPivot")?.rotation.x).toBe(0);
+    projection.render(
+      {
+        ...teleported,
+        presentationElapsed: 0.5,
+        attackCues: [{ ...teleported.attackCues[0], sequence: 11 }],
+      },
+      vi.fn(),
+    );
+    expect(pose.getObjectByName("weaponPivot")?.rotation.x).not.toBe(0);
+    projection.dispose();
+  });
+
   it("reports only attached model instances and their live fallback state", async () => {
     const { loader, calls } = loaderDouble();
     const onStateChange = vi.fn();
