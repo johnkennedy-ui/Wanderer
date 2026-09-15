@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyPlayerStatAllocations } from "../../domain/types";
 import {
   advanceAutoCombatPhase,
   advanceEnemyCombatPhase,
@@ -47,6 +48,64 @@ describe("combat presentation commitments", () => {
       style: "basic",
       committedAt: 0,
     });
+  });
+
+  it("copies one cue for the authored two-arrow relic volley without changing either projectile", () => {
+    const first = enemy({ id: "enemy:first", position: { x: 2, y: 0 } });
+    const second = enemy({ id: "enemy:second", position: { x: 3, y: 0 } });
+    const result = advanceAutoCombatPhase({
+      delta: 0.1,
+      playerPosition: { x: 0, y: 0 },
+      enemies: new Map([
+        [first.id, first],
+        [second.id, second],
+      ]),
+      buildings: [],
+      upgrades: new Set(),
+      classProgression: {
+        experience: 100,
+        level: 1,
+        playerClass: "archer",
+        skillIds: [],
+        allocatedStats: emptyPlayerStatAllocations(),
+        weaponRank: 1,
+      },
+      projectiles: [],
+      attackElapsed: 1,
+      nextProjectileSerial: 9,
+      nextAttackEventSerial: 12,
+    });
+    expect(result.projectiles).toMatchObject([
+      { id: "projectile:0009", targetId: first.id },
+      { id: "projectile:0010", targetId: second.id },
+    ]);
+    expect(result.presentationAttack).toEqual({
+      actorId: "player",
+      sequence: 12,
+      direction: { x: 1, y: 0 },
+      style: "arrow",
+      committedAt: 0,
+    });
+    expect(result.nextAttackEventSerial).toBe(13);
+  });
+
+  it("preserves the authored movement suppression gate without creating a cue", () => {
+    const target = enemy();
+    const result = advanceAutoCombatPhase({
+      delta: 0.1,
+      attackSpeedMultiplier: 0,
+      playerPosition: { x: 0, y: 0 },
+      enemies: new Map([[target.id, target]]),
+      buildings: [],
+      upgrades: new Set(),
+      projectiles: [],
+      attackElapsed: 0.4,
+      nextProjectileSerial: 9,
+      nextAttackEventSerial: 12,
+    });
+    expect(result.projectiles).toEqual([]);
+    expect(result.presentationAttack).toBeNull();
+    expect(result.nextAttackEventSerial).toBe(12);
   });
 
   it("copies only an existing enemy attack resolution and leaves save-shaped inputs untouched", () => {

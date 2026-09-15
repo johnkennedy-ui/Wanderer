@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { AttackPresentationCue } from "../../domain/notices";
-import { wrapYaw } from "./modelFacingHelpers";
+import { calibratedYawFor, wrapYaw } from "./modelFacingHelpers";
 
 interface NeutralPartTransform {
   readonly part: THREE.Object3D;
@@ -14,7 +14,22 @@ export interface BoundModelPose {
   readonly weaponPivot: THREE.Group;
   readonly aimPivot: THREE.Group;
   readonly neutralParts: readonly NeutralPartTransform[];
+  /** Some existing enemy meshes have no detachable rigid weapon parts. */
+  readonly bodyOnly: boolean;
 }
+
+export interface ModelLocomotion {
+  /** Renderer-retained world travel, reset with the presentation epoch. */
+  readonly distance: number;
+  /** False for idle and paused frames; elapsed time alone never drives a bob. */
+  readonly moving: boolean;
+}
+
+const authoredGripByAsset: Readonly<Record<string, THREE.Vector3>> = {
+  "player-archer": new THREE.Vector3(0.55, 0.6, 0),
+  "enemy-scout": new THREE.Vector3(0.34, 0.55, 0),
+  "enemy-brute": new THREE.Vector3(0.78, 0.58, 0.05),
+};
 
 const partNamesFor = (asset: string): readonly string[] =>
   asset === "player-knight"
@@ -34,10 +49,49 @@ const partNamesFor = (asset: string): readonly string[] =>
 const namedParts = (model: THREE.Group, names: readonly string[]) => {
   const parts: THREE.Object3D[] = [];
   model.traverse((node) => {
-    if (names.some((name) => node.name === name || node.name.startsWith(`${name}_`)))
+    if (
+      names.some(
+        (name) => node.name === name || node.name.startsWith(`${name}_`),
+      )
+    )
       parts.push(node);
   });
-  return parts;
+  return parts.filter(
+    (part) =>
+      !parts.some(
+        (ancestor) => ancestor !== part && ancestor.children.includes(part),
+      ),
+  );
+};
+
+const primaryRigidPartFor = (
+  asset: string,
+  parts: readonly THREE.Object3D[],
+): THREE.Object3D | undefined => {
+  const name =
+    asset === "player-knight"
+      ? "sword"
+      : asset === "player-wizard"
+        ? "staff"
+        : undefined;
+  return name === undefined
+    ? undefined
+    : parts.find((part) => part.name === name);
+};
+
+const gripWorldPositionFor = (
+  model: THREE.Group,
+  asset: string,
+  parts: readonly THREE.Object3D[],
+): THREE.Vector3 | undefined => {
+  const authoredGrip = authoredGripByAsset[asset];
+  if (authoredGrip !== undefined)
+    return model.localToWorld(authoredGrip.clone());
+  const primaryPart = primaryRigidPartFor(asset, parts);
+  const measuredPart = primaryPart ?? parts[0];
+  if (measuredPart === undefined) return undefined;
+  const bounds = new THREE.Box3().setFromObject(measuredPart);
+  return bounds.isEmpty() ? undefined : bounds.getCenter(new THREE.Vector3());
 };
 
 /**
@@ -50,16 +104,14 @@ export const bindModelPose = (
   asset: string,
 ): BoundModelPose | undefined => {
   const parts = namedParts(model, partNamesFor(asset));
-  if (parts.length === 0) return undefined;
+  const bodyOnly = asset === "enemy-spitter" || asset === "enemy-elite";
+  if (parts.length === 0 && !bodyOnly) return undefined;
   model.updateWorldMatrix(true, true);
-  const bounds = new THREE.Box3();
-  for (const part of parts) bounds.expandByObject(part);
-  if (bounds.isEmpty()) return undefined;
-  const grip = bounds.getCenter(new THREE.Vector3());
-  poseRoot.worldToLocal(grip);
   const weaponPivot = new THREE.Group();
   weaponPivot.name = "weaponPivot";
-  weaponPivot.position.copy(grip);
+  const grip = gripWorldPositionFor(model, asset, parts);
+  if (grip !== undefined)
+    weaponPivot.position.copy(poseRoot.worldToLocal(grip));
   const aimPivot = new THREE.Group();
   aimPivot.name = "aimPivot";
   weaponPivot.add(aimPivot);
@@ -72,7 +124,7 @@ export const bindModelPose = (
     quaternion: part.quaternion.clone(),
     scale: part.scale.clone(),
   }));
-  return { poseRoot, weaponPivot, aimPivot, neutralParts };
+  return { poseRoot, weaponPivot, aimPivot, neutralParts, bodyOnly };
 };
 
 const restoreNeutral = (binding: BoundModelPose): void => {
@@ -93,17 +145,27 @@ export const applyModelPose = (
   cue: AttackPresentationCue | undefined,
   bodyYaw: number,
   presentationElapsed: number,
+  locomotion?: ModelLocomotion,
 ): void => {
   if (binding === undefined) return;
   restoreNeutral(binding);
-  binding.poseRoot.position.y = Math.sin(presentationElapsed * 7) * 0.025;
+  if (locomotion?.moving === true)
+    binding.poseRoot.position.y = Math.sin(locomotion.distance * 14) * 0.025;
   if (cue === undefined || cue.age < 0 || cue.age > 0.45) return;
   const release = Math.min(1, cue.age / 0.45);
   const recoil = Math.sin(release * Math.PI);
-  const aimYaw = Math.atan2(cue.direction.x, -cue.direction.y);
+  const aimYaw = calibratedYawFor(cue.direction);
   binding.aimPivot.rotation.y = wrapYaw(aimYaw - bodyYaw);
+  if (binding.bodyOnly) {
+    binding.poseRoot.rotation.x = -recoil * 0.08;
+    return;
+  }
   binding.weaponPivot.rotation.x =
     cue.style === "slash" ? -recoil * 1.1 : recoil * 0.28;
   binding.weaponPivot.rotation.z =
-    cue.style === "arrow" ? recoil * 0.18 : cue.style === "magic" ? -recoil * 0.12 : 0;
+    cue.style === "arrow"
+      ? recoil * 0.18
+      : cue.style === "magic"
+        ? -recoil * 0.12
+        : 0;
 };
