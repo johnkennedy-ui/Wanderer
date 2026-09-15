@@ -65,30 +65,30 @@ type Descriptor = Readonly<{
 
 interface Instance {
   readonly root: THREE.Group;
-  readonly descriptor: Descriptor;
+  descriptor: Descriptor;
   model: THREE.Group | undefined;
+  state: "pending" | "attached" | "failed";
 }
 
-const rocks = [
+const rocks = Object.freeze([
   "environment-rock-granite-a",
   "environment-rock-granite-b",
   "environment-rock-granite-c",
   "environment-rock-moss-a",
   "environment-rock-ore-bronze",
-] as const satisfies readonly EnvironmentAssetKey[];
-const trees = [
+] as const satisfies readonly EnvironmentAssetKey[]);
+const trees = Object.freeze([
   "environment-tree-pine-a",
   "environment-tree-pine-b",
   "environment-tree-broadleaf-a",
   "environment-tree-broadleaf-b",
   "environment-tree-dead-a",
-] as const satisfies readonly EnvironmentAssetKey[];
-const props = [
-  "environment-water-pond-small",
+] as const satisfies readonly EnvironmentAssetKey[]);
+const foliage = Object.freeze([
   "environment-bush-a",
   "environment-reeds-a",
   "environment-fallen-log-a",
-] as const satisfies readonly EnvironmentAssetKey[];
+] as const satisfies readonly EnvironmentAssetKey[]);
 
 const hash = (text: string): number => {
   let value = 2166136261;
@@ -114,6 +114,28 @@ const disposeClone = (root: THREE.Object3D): void => {
   });
 };
 
+const hasMesh = (root: THREE.Object3D): boolean =>
+  root.getObjectByProperty("isMesh", true) !== undefined;
+
+/** Measures actual acquired vertex data once; lower-third vertices are base/trunk, not canopy. */
+export const environmentBaseRadiusFor = (model: THREE.Group): number => {
+  model.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(model);
+  const limit = bounds.min.y + (bounds.max.y - bounds.min.y) / 3;
+  let radius = 0;
+  model.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const attribute = object.geometry.getAttribute("position");
+    if (attribute === undefined) return;
+    const point = new THREE.Vector3();
+    for (let index = 0; index < attribute.count; index += 1) {
+      point.fromBufferAttribute(attribute, index).applyMatrix4(object.matrixWorld);
+      if (point.y <= limit) radius = Math.max(radius, Math.hypot(point.x, point.z));
+    }
+  });
+  return radius;
+};
+
 const obstacleDescriptor = (chunk: ChunkRecipe, obstacle: ChunkObstacle): Descriptor | undefined => {
   // Only the existing markers are replaced. Water and mountains keep their V3 primitives.
   if (obstacle.kind === "water" || obstacle.kind === "mountain") return undefined;
@@ -126,22 +148,21 @@ const obstacleDescriptor = (chunk: ChunkRecipe, obstacle: ChunkObstacle): Descri
     position: obstacle.position,
     footprint,
     yaw: unit(`${seed}|yaw`) * Math.PI * 2,
-    // Calibration uses manifest base/trunk bounds (not canopy bounds); cap scale for readability.
-    scale: Math.min(1.35, Math.max(0.55, footprint / (kind === "tree" ? 0.42 : 0.45))),
+    scale: 1,
     fallback: true,
   };
 };
 
-const clearForDecoration = (position: Vector2, chunk: ChunkRecipe, snapshot: GameRendererSnapshot): boolean => {
-  const clearance = 2.1;
-  if (distanceSquared(position, snapshot.player.position) < clearance ** 2) return false;
+const clearForDecoration = (position: Vector2, snapshot: GameRendererSnapshot): boolean => {
+  const clearance = 1.1;
   const blocked = [
-    ...chunk.obstacles,
-    ...chunk.campfires,
+    ...snapshot.visibleChunks.flatMap((chunk) => [...chunk.obstacles, ...chunk.campfires, ...chunk.spawns]),
     ...snapshot.visibleBuildings,
-    ...chunk.spawns,
   ];
-  return blocked.every((item) => distanceSquared(position, item.position) >= clearance ** 2);
+  return blocked.every((item) => {
+    const radius = "radius" in item && item.radius !== undefined ? item.radius : 0.9;
+    return distanceSquared(position, item.position) >= (radius + clearance) ** 2;
+  });
 };
 
 /** Pure, bounded descriptors make visitation order irrelevant and keep decoration non-authoritative. */
@@ -154,18 +175,20 @@ export const environmentDescriptorsFor = (
       const descriptor = obstacleDescriptor(chunk, obstacle);
       if (descriptor !== undefined) descriptors.push(descriptor);
     }
-    // At most one opaque puddle and one foliage/log item per visible chunk.
+    if (chunk.coordinate.x === 0 && chunk.coordinate.y === 0) continue;
+    // At most one sparse opaque puddle and one sparse foliage/log item per visible chunk.
     const cosmetic = chunk.domainSeeds.cosmetic ?? 0;
     for (const slot of [0, 1] as const) {
       const seed = `visual-v1|${cosmetic}|${chunk.key}|decoration|${slot}`;
+      if ((slot === 0 && hash(`${seed}|eligible`) % 5 !== 0) || (slot === 1 && hash(`${seed}|eligible`) % 3 !== 0)) continue;
       const position = {
         x: chunk.coordinate.x * 16 + 3 + unit(`${seed}|x`) * 10,
         y: chunk.coordinate.y * 16 + 3 + unit(`${seed}|y`) * 10,
       };
-      if (!clearForDecoration(position, chunk, snapshot)) continue;
-      const asset = slot === 0 ? "environment-water-pond-small" : variant(`${seed}|variant`, props.slice(1));
+      if (!clearForDecoration(position, snapshot)) continue;
+      const asset = slot === 0 ? "environment-water-pond-small" : variant(`${seed}|variant`, foliage);
       descriptors.push({
-        id: `environment:${chunk.key}:${slot}`,
+        id: `environment:${chunk.key}:${cosmetic}:${slot}`,
         asset,
         position,
         footprint: 0,
@@ -202,9 +225,9 @@ export class EnvironmentProjection {
     const values = [...this.instances.values()];
     return Object.freeze({
       instances: values.length,
-      loadedInstances: values.filter((instance) => instance.model !== undefined).length,
-      pendingInstances: values.filter((instance) => instance.model === undefined).length,
-      fallbackInstances: values.filter((instance) => instance.descriptor.fallback && instance.model === undefined).length,
+      loadedInstances: values.filter((instance) => instance.state === "attached").length,
+      pendingInstances: values.filter((instance) => instance.state === "pending").length,
+      fallbackInstances: values.filter((instance) => instance.descriptor.fallback && instance.state !== "attached").length,
       assetKeys: [...new Set(values.map((instance) => instance.descriptor.asset))].sort(),
       disposed: this.disposed,
     });
@@ -220,28 +243,49 @@ export class EnvironmentProjection {
 
   private present(descriptor: Descriptor, setFallbackModelVisible: (id: string, visible: boolean) => void): void {
     let instance = this.instances.get(descriptor.id);
+    if (instance !== undefined && instance.descriptor.asset !== descriptor.asset) {
+      this.remove(descriptor.id, instance, setFallbackModelVisible);
+      instance = undefined;
+    }
     if (instance === undefined) {
       const root = new THREE.Group();
       root.name = `environment:${descriptor.id}`;
-      instance = { root, descriptor, model: undefined };
+      instance = { root, descriptor, model: undefined, state: "pending" };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
       const expected = instance;
       void this.cache.acquire(descriptor.asset).then((model) => {
-        if (model === undefined) return;
+        if (model === undefined) {
+          if (!this.disposed && this.instances.get(descriptor.id) === expected) {
+            expected.state = "failed";
+            this.onStateChange();
+          }
+          return;
+        }
         if (this.disposed || this.instances.get(descriptor.id) !== expected) {
           disposeClone(model);
           return;
         }
+        if (!hasMesh(model)) {
+          disposeClone(model);
+          expected.state = "failed";
+          this.onStateChange();
+          return;
+        }
         expected.model = model;
         expected.root.add(model);
+        const baseRadius = environmentBaseRadiusFor(model);
+        if (baseRadius > 0 && expected.descriptor.footprint > 0)
+          expected.root.scale.setScalar(expected.descriptor.footprint / baseRadius);
+        expected.state = "attached";
         if (expected.descriptor.fallback) setFallbackModelVisible(descriptor.id, true);
         this.onStateChange();
       });
     }
+    instance.descriptor = descriptor;
     instance.root.position.set(descriptor.position.x, 0.014, -descriptor.position.y);
     instance.root.rotation.set(0, descriptor.yaw, 0);
-    instance.root.scale.setScalar(descriptor.scale);
+    if (instance.state !== "attached") instance.root.scale.setScalar(descriptor.scale);
   }
 
   private remove(id: string, instance: Instance, setFallbackModelVisible: (id: string, visible: boolean) => void): void {
