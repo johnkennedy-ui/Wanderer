@@ -25,7 +25,8 @@ interface SearchNode {
   readonly waypoints: readonly Vector2[];
 }
 
-const ROUTE_EPSILON_SQUARED = 0.000001;
+const ROUTE_EPSILON = 0.001;
+const ROUTE_EPSILON_SQUARED = ROUTE_EPSILON * ROUTE_EPSILON;
 const WAYPOINT_EPSILON = 0.02;
 const MAX_CACHED_ROUTES = 128;
 const MAX_SEARCH_DEPTH = 8;
@@ -109,7 +110,8 @@ export class EnemyNavigationCache {
             return this.route(input);
           }
           const step = Math.min(
-            Math.max(0, attemptedDistance - ROUNDED_STEP_MARGIN),
+            attemptedDistance -
+              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
             length,
           );
           const next = input.constrain(input.from, {
@@ -124,11 +126,7 @@ export class EnemyNavigationCache {
     }
 
     const direct = input.constrain(input.from, input.desired);
-    if (
-      magnitude({ x: direct.x - input.from.x, y: direct.y - input.from.y }) >=
-      attemptedDistance - WAYPOINT_EPSILON
-    )
-      return direct;
+    if (closeEnough(direct, input.desired, ROUTE_EPSILON)) return direct;
 
     const route = this.plan(input, attemptedDistance);
     if (route === null) {
@@ -156,14 +154,16 @@ export class EnemyNavigationCache {
         input.from.x +
         (delta.x / length) *
           Math.min(
-            Math.max(0, attemptedDistance - ROUNDED_STEP_MARGIN),
+            attemptedDistance -
+              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
             length,
           ),
       y:
         input.from.y +
         (delta.y / length) *
           Math.min(
-            Math.max(0, attemptedDistance - ROUNDED_STEP_MARGIN),
+            attemptedDistance -
+              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
             length,
           ),
     });

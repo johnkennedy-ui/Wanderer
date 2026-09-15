@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { enemyDefinitions } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
 import {
   enemyTerrainClearanceFor,
@@ -95,6 +96,7 @@ const enemyPositionsAfterTicks = (
   delta: number,
   obstacles: readonly ChunkObstacle[],
   kind: EnemyKind,
+  maxSeconds = 18,
 ) => {
   const saved = savedAtHome();
   const session = new GameSession({
@@ -111,7 +113,7 @@ const enemyPositionsAfterTicks = (
     chunkRecipeSource: fixtureSource(obstacles, kind, { x: -3, y: 0 }),
   });
   const positions = [enemyPosition(session)];
-  for (let tick = 0; tick < 180; tick += 1) {
+  for (let tick = 0; tick < Math.ceil(maxSeconds / delta); tick += 1) {
     session.tick(delta);
     const position = enemyPosition(session);
     positions.push(position);
@@ -124,6 +126,34 @@ const enemyPosition = (session: GameSession) =>
   session
     .diagnostics()
     .enemies.find((entry) => entry.id === "enemy:session-route")!.position;
+
+const expectSafePursuit = (
+  positions: readonly { x: number; y: number }[],
+  delta: number,
+  obstacles: readonly ChunkObstacle[],
+  kind: EnemyKind,
+) => {
+  const clearance = enemyTerrainClearanceFor(kind);
+  for (let index = 0; index < positions.length; index += 1) {
+    if (index > 0)
+      expect(
+        Math.hypot(
+          positions[index].x - positions[index - 1].x,
+          positions[index].y - positions[index - 1].y,
+        ),
+      ).toBeLessThanOrEqual(
+        enemyDefinitions[kind].moveSpeed * delta + 0.000001,
+      );
+    expect(
+      terrainBlocksPosition(
+        world,
+        positions[index],
+        fixtureSource(obstacles, kind),
+        clearance,
+      ),
+    ).toBe(false);
+  }
+};
 
 const tickPositions = (session: GameSession, delta: number, ticks: number) => {
   const positions = [enemyPosition(session)];
@@ -160,6 +190,26 @@ describe("GameSession enemy navigation consumer", () => {
       ),
     ).toBe(false);
   });
+
+  it.each([0.004, 0.008, 1 / 120, 0.016, 1 / 60, 0.05, 0.1])(
+    "reaches attack range around a true-chunk tree at %s seconds for every clearance",
+    (delta) => {
+      const obstacles: readonly ChunkObstacle[] = [
+        {
+          id: "tree:small-frame",
+          kind: "tree",
+          radius: 1,
+          position: { x: 0, y: 0 },
+        },
+      ];
+      for (const kind of ["scout", "brute", "boss"] as const) {
+        const positions = enemyPositionsAfterTicks(delta, obstacles, kind);
+        const final = positions.at(-1)!;
+        expect(Math.hypot(final.x - 4, final.y)).toBeLessThanOrEqual(1.81);
+        expectSafePursuit(positions, delta, obstacles, kind);
+      }
+    },
+  );
 
   it.each([0.016, 0.05, 0.1])(
     "reaches attack range around a true-chunk tree/rock pair at %s seconds",
