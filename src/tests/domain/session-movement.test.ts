@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { enemyDefinitions, gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
+import { WANDERER_WEB_V3, generateChunk } from "../../domain/world";
+import type { ChunkRecipe, WorldIdentity } from "../../domain/types";
 import { advance, savedAtHome } from "./session-test-helpers";
 
 describe("GameSession movement", () => {
@@ -198,5 +200,108 @@ describe("GameSession movement", () => {
     expect(session.presentation().renderer.playerHitRecovery.active).toBe(
       false,
     );
+  });
+
+  it("stops at a V3 terrain footprint, then lets keyboard movement retreat", () => {
+    const world = {
+      seed: "session-terrain-collision",
+      generatorVersion: WANDERER_WEB_V3,
+    };
+    const obstacle = generateChunk(world, { x: 5, y: 5 }).obstacles.find(
+      (candidate) => candidate.kind === "tree",
+    );
+    if (obstacle === undefined)
+      throw new Error("V3 chunk should contain a tree");
+    const saved = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...saved,
+        world,
+        player: {
+          ...saved.player,
+          position: { x: obstacle.position.x - 2, y: obstacle.position.y },
+        },
+      },
+    });
+    session.setDestination({
+      destination: { x: obstacle.position.x + 2, y: obstacle.position.y },
+      source: "tap-to-move",
+      at: 1,
+    });
+    advance(session, 5);
+    const position = session.presentation().ui.player.position;
+    expect(position.x).toBeLessThan(obstacle.position.x);
+    expect(
+      Math.hypot(
+        position.x - obstacle.position.x,
+        position.y - obstacle.position.y,
+      ),
+    ).toBeGreaterThanOrEqual((obstacle.radius ?? 0) + 0.27);
+    expect(session.presentation().renderer.destination).toBeNull();
+
+    session.move({ intent: { x: -1, y: 0 }, source: "keyboard", at: 2 });
+    advance(session, 0.5);
+    expect(session.presentation().ui.player.position.x).toBeLessThan(
+      position.x - 0.2,
+    );
+  });
+
+  it("keeps session keyboard and tap endpoints outside rounded V3 terrain", () => {
+    const world = {
+      seed: "session-rounded-terrain",
+      generatorVersion: WANDERER_WEB_V3,
+    };
+    const center = { x: 2.0011, y: 2.0011 };
+    const source = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => ({
+      coordinate,
+      key: `${coordinate.x},${coordinate.y}`,
+      domainSeeds: {},
+      obstacles: [
+        {
+          id: "mountain:session-rounded-endpoint",
+          kind: "mountain",
+          radius: 1,
+          position: center,
+        },
+      ],
+      campfires: [],
+      spawns: [],
+    });
+    const saved = savedAtHome();
+    const sessionAt = (position: { x: number; y: number }) =>
+      new GameSession({
+        saved: {
+          ...saved,
+          world,
+          player: { ...saved.player, position },
+        },
+        chunkRecipeSource: source,
+      });
+    const clearance = 1.28;
+    const distanceFromMountain = (position: { x: number; y: number }) =>
+      Math.hypot(position.x - center.x, position.y - center.y);
+
+    const keyboard = sessionAt({ x: 1.09, y: 1.09 });
+    keyboard.move({ intent: { x: 1, y: 1 }, source: "keyboard", at: 1 });
+    keyboard.tick(0.1);
+    const keyboardPosition = keyboard.presentation().ui.player.position;
+    expect(distanceFromMountain(keyboardPosition)).toBeGreaterThanOrEqual(
+      clearance,
+    );
+
+    const tap = sessionAt({ x: 1.09, y: 1.09 });
+    tap.setDestination({
+      destination: { x: 1.16, y: 1.16 },
+      source: "tap-to-move",
+      at: 2,
+    });
+    tap.tick(0.1);
+    expect(
+      distanceFromMountain(tap.presentation().ui.player.position),
+    ).toBeGreaterThanOrEqual(clearance);
+    expect(tap.presentation().renderer.destination).toBeNull();
   });
 });

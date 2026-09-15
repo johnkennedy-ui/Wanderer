@@ -134,6 +134,11 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     render(snapshot: GameRendererSnapshot): void {
       if (disposed) return;
       projection.render(snapshot);
+      floor.position.set(
+        snapshot.player.position.x,
+        0,
+        -snapshot.player.position.y,
+      );
       models.render(snapshot, (id, visible) =>
         projection.setModelVisible(id, visible),
       );

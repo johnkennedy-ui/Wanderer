@@ -305,6 +305,12 @@ export interface WorldIdentity {
 export interface ChunkObstacle {
   readonly id: string;
   readonly position: Vector2;
+  /** V3 terrain identity; V1/V2 recipes intentionally omit it. */
+  readonly kind?: "rock" | "tree" | "mountain" | "water";
+  /** V3 water classification for renderer diagnostics; omitted otherwise. */
+  readonly waterKind?: "river" | "lake";
+  /** Collision footprint radius, in world units; legacy obstacles use 0.9. */
+  readonly radius?: number;
 }
 
 export interface ChunkCampfire {

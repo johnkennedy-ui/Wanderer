@@ -41,6 +41,146 @@ afterEach(() => {
 });
 
 describe("retained Three CPU projection", () => {
+  it("projects typed terrain with visual bases aligned to supplied footprints", () => {
+    const projection = new RetainedProjection();
+    const snapshot = rendererSnapshot();
+    projection.render({
+      ...snapshot,
+      visibleChunks: [
+        {
+          ...snapshot.visibleChunks[0],
+          obstacles: [
+            {
+              id: "tree",
+              position: { x: 2, y: 3 },
+              kind: "tree",
+              radius: 0.4,
+            },
+            {
+              id: "mountain",
+              position: { x: 4, y: 5 },
+              kind: "mountain",
+              radius: 1.2,
+            },
+            {
+              id: "river",
+              position: { x: 6, y: 7 },
+              kind: "water",
+              waterKind: "river",
+              radius: 0.8,
+            },
+            {
+              id: "lake",
+              position: { x: 8, y: 9 },
+              kind: "water",
+              waterKind: "lake",
+              radius: 1.6,
+            },
+          ],
+        },
+      ],
+    });
+    const rootFor = (id: string) => projection.group.getObjectByName(id);
+    const tree = rootFor("tree");
+    const mountain = rootFor("mountain");
+    const river = rootFor("river");
+    const lake = rootFor("lake");
+    expect(tree).toMatchObject({ position: { x: 2, z: -3 } });
+    expect(tree?.children).toHaveLength(2);
+    expect((tree?.children[0] as THREE.Mesh).geometry).toMatchObject({
+      parameters: { radiusTop: 0.4 },
+    });
+    expect((mountain?.children[0] as THREE.Mesh).geometry).toMatchObject({
+      parameters: { radius: 1.2, radialSegments: 6 },
+    });
+    for (const water of [river, lake]) {
+      expect(water?.children).toHaveLength(2);
+      expect((water?.children[0] as THREE.Mesh).rotation.x).toBe(-Math.PI / 2);
+      expect(water?.children[1].position.y).toBeLessThan(
+        water?.children[0].position.y ?? 0,
+      );
+      const bank = (water?.children[1] as THREE.Mesh)
+        .geometry as THREE.RingGeometry;
+      const surface = (water?.children[0] as THREE.Mesh)
+        .geometry as THREE.CircleGeometry;
+      expect(
+        bank.parameters.outerRadius - surface.parameters.radius,
+      ).toBeCloseTo(0.035);
+    }
+    expect(
+      (
+        (river?.children[0] as THREE.Mesh)
+          .material as THREE.MeshStandardMaterial
+      ).color.getHex(),
+    ).not.toBe(
+      (
+        (lake?.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial
+      ).color.getHex(),
+    );
+    projection.dispose();
+  });
+
+  it("retains and disposes grouped terrain meshes without leaking variants", () => {
+    const projection = new RetainedProjection();
+    const base = rendererSnapshot();
+    const terrain: GameRendererSnapshot = {
+      ...base,
+      visibleChunks: [
+        {
+          ...base.visibleChunks[0],
+          obstacles: [
+            {
+              id: "terrain-tree",
+              kind: "tree",
+              radius: 0.65,
+              position: { x: 2, y: 3 },
+            },
+            {
+              id: "terrain-water",
+              kind: "water",
+              waterKind: "river",
+              radius: 1.1,
+              position: { x: 6, y: 7 },
+            },
+            {
+              id: "terrain-mountain",
+              kind: "mountain",
+              radius: 1.35,
+              position: { x: 8, y: 9 },
+            },
+          ],
+        },
+      ],
+    };
+    projection.render(terrain);
+    const first = projection.diagnostics();
+    for (let frame = 0; frame < 20; frame += 1)
+      projection.render(structuredClone(terrain));
+    expect(projection.diagnostics()).toEqual(first);
+    expect(first.meshesCreated - first.meshesRemoved).toBe(first.visibleMeshes);
+    const roots = terrain.visibleChunks[0].obstacles.map(({ id }) =>
+      projection.group.getObjectByName(id),
+    );
+    projection.render({ ...terrain, visibleChunks: [] });
+    expect(projection.diagnostics().maps.obstacles).toBe(0);
+    for (const root of roots) expect(root?.parent).toBeNull();
+    projection.render(terrain);
+    expect(projection.diagnostics().geometriesCreated).toBe(
+      first.geometriesCreated,
+    );
+    expect(projection.diagnostics().materialsCreated).toBe(
+      first.materialsCreated,
+    );
+    projection.dispose();
+    const disposed = projection.diagnostics();
+    expect(disposed.meshesRemoved).toBe(disposed.meshesCreated);
+    expect(disposed.geometriesDisposed).toBe(disposed.geometriesCreated);
+    expect(disposed.materialsDisposed).toBe(disposed.materialsCreated);
+    expect(disposed.visibleMeshes).toBe(0);
+    projection.dispose();
+    expect(projection.diagnostics()).toEqual(disposed);
+  });
+
   it("characterizes actual legacy marker heights and equivalent shapes/materials", () => {
     const snapshot = rendererSnapshot();
     const projection = new RetainedProjection();
@@ -838,6 +978,7 @@ describe("Three browser adapter ownership", () => {
     const floor = scene.children.find(
       (object) => object instanceof THREE.Mesh,
     ) as THREE.Mesh;
+    expect(floor.position.toArray()).toEqual([3, 0, -4]);
     const disposeGeometry = vi.spyOn(floor.geometry, "dispose");
     const disposeMaterial = vi.spyOn(
       floor.material as THREE.Material,

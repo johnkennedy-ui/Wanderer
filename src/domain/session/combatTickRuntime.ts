@@ -300,6 +300,12 @@ export interface EnemyCombatPhaseInput {
   readonly playerPhysicalDefense?: number;
   readonly playerDodgeChance?: number;
   readonly worldSeed?: string;
+  /** Domain-owned collision constraint; omitted for historical runtime behaviour. */
+  readonly constrainEnemyPosition?: (
+    from: Vector2,
+    desired: Vector2,
+    enemy: Readonly<RuntimeEnemy>,
+  ) => Vector2;
 }
 
 export interface EnemyCombatPhaseResult {
@@ -332,6 +338,7 @@ export const advanceEnemyCombatPhase = ({
   playerPhysicalDefense = 0,
   playerDodgeChance = 0,
   worldSeed = "combat-default-seed",
+  constrainEnemyPosition,
 }: EnemyCombatPhaseInput): EnemyCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const player = {
@@ -347,13 +354,17 @@ export const advanceEnemyCombatPhase = ({
 
   for (const enemy of enemies.values()) {
     if (enemy.defeated) continue;
-    enemy.position = enemyPursuitPosition({
+    const desired = enemyPursuitPosition({
       enemyPosition: enemy.position,
       playerPosition: player.position,
       moveSpeed: enemy.moveSpeed,
       delta,
       attackStandoff: enemyAttackStandoff,
     });
+    enemy.position =
+      constrainEnemyPosition === undefined
+        ? desired
+        : constrainEnemyPosition(enemy.position, desired, enemy);
   }
   for (const enemy of enemies.values()) {
     const resolution = enemyRespawnResolutionFor({

@@ -13,11 +13,8 @@ import type {
   PlacementRejection,
   PlacementResult,
 } from "../notices";
-import {
-  chunkCoordinateFor,
-  generateChunk,
-  visibleChunkCoordinates,
-} from "../world";
+import { generateChunk, visibleChunkCoordinates } from "../world";
+import { terrainBlocksPosition } from "../world/terrainCollision";
 import { emptyResources } from "../types";
 import type { SettlementCampfire } from "./sessionState";
 import type { ChunkRecipeSource } from "./chunkRecipeCache";
@@ -312,10 +309,7 @@ export class SettlementRuntime {
     return [...generated, ...playerBuilt];
   }
   private isTerrainBlocked(world: WorldIdentity, position: Vector2): boolean {
-    const coordinate = chunkCoordinateFor(position);
-    return this.recipeSource(world, coordinate).obstacles.some(
-      (obstacle) => distance(obstacle.position, position) < 0.9,
-    );
+    return terrainBlocksPosition(world, position, this.recipeSource, 0.62);
   }
   private validate(
     kind: BuildingKind,

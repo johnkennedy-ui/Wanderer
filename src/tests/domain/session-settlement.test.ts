@@ -3,6 +3,7 @@ import { gameplayTuning } from "../../data/definitions";
 import { GameSession } from "../../domain/GameSession";
 import { combatStatsFor } from "../../domain/session/progressionRules";
 import { SettlementRuntime } from "../../domain/session/settlementRuntime";
+import { WANDERER_WEB_V3, generateChunk } from "../../domain/world";
 import type { BuildingState, ResourceBag, Vector2 } from "../../domain/types";
 import {
   advance,
@@ -36,6 +37,40 @@ const passiveHp = (
   }).passive(1, 50, 100, emptyResources(), position, nearCampfire).hp;
 
 describe("GameSession settlement", () => {
+  it("rejects terrain footprint placement in a new V3 world", () => {
+    const world = {
+      seed: "settlement-terrain-collision",
+      generatorVersion: WANDERER_WEB_V3,
+    };
+    const water = Array.from({ length: 17 }, (_, index) => index - 8)
+      .flatMap((x) =>
+        Array.from({ length: 17 }, (_, index) => index - 8).flatMap(
+          (y) => generateChunk(world, { x, y }).obstacles,
+        ),
+      )
+      .find((obstacle) => obstacle.kind === "water");
+    if (water === undefined) throw new Error("V3 terrain should contain water");
+    const session = new GameSession({ world });
+    expect(session.placeBuilding("Campfire", water.position)).toMatchObject({
+      ok: false,
+      rejection: { kind: "blocked-terrain" },
+    });
+  });
+
+  it("preserves legacy V2 rock placement rejection", () => {
+    const world = {
+      seed: "legacy-settlement-terrain",
+      generatorVersion: "wanderer-web-v2",
+    };
+    const rock = generateChunk(world, { x: 0, y: 0 }).obstacles[0];
+    if (rock === undefined) throw new Error("V2 chunk should contain a rock");
+    const session = new GameSession({ world });
+    expect(session.placeBuilding("Campfire", rock.position)).toMatchObject({
+      ok: false,
+      rejection: { kind: "blocked-terrain" },
+    });
+  });
+
   it("applies all three Campfire radii in actual placement validation", () => {
     const session = new GameSession();
     const campfire = session.placeBuilding("Campfire", { x: 8, y: 2 });

@@ -60,7 +60,10 @@ import {
 import { projectGamePresentation } from "./session/readModels";
 import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
-import { ChunkRecipeCache } from "./session/chunkRecipeCache";
+import {
+  ChunkRecipeCache,
+  type ChunkRecipeSource,
+} from "./session/chunkRecipeCache";
 import {
   SettlementRuntime,
   type SettlementCommandOutcome,
@@ -85,17 +88,24 @@ import {
   playerHitRecoveryPresentationFor,
   playerMoveDistanceWithHitRecoveryFor,
 } from "./session/hitRecoveryPolicy";
+import {
+  enemyTerrainClearanceFor,
+  nearestTerrainSafePosition,
+  sweepTerrainMovement,
+} from "./world/terrainCollision";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
 interface SessionOptions {
   readonly world?: WorldIdentity;
   readonly saved?: CurrentSave;
+  /** Test-only recipe source; production sessions retain the released generator. */
+  readonly chunkRecipeSource?: ChunkRecipeSource;
 }
 const isFinitePosition = (position: Vector2): boolean =>
   Number.isFinite(position.x) && Number.isFinite(position.y);
 export class GameSession {
-  private readonly chunkRecipes = new ChunkRecipeCache();
+  private readonly chunkRecipes: ChunkRecipeCache;
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
@@ -120,9 +130,14 @@ export class GameSession {
   private attackElapsed!: number;
   private playerHitRecoveryEndsAt = 0;
   private startedWaveIndices = new Set<number>();
+  private pendingWaveIndices = new Set<number>();
   private notice!: GameNotice;
   private combatStatus!: string;
   constructor(options: SessionOptions = {}) {
+    this.chunkRecipes = new ChunkRecipeCache(
+      undefined,
+      options.chunkRecipeSource,
+    );
     this.replaceState(
       options.saved === undefined
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
@@ -163,6 +178,7 @@ export class GameSession {
     this.attackElapsed = state.attackElapsed;
     this.playerHitRecoveryEndsAt = 0;
     this.startedWaveIndices = new Set();
+    this.pendingWaveIndices = new Set();
     this.notice = state.notice;
     this.combatStatus = state.combatStatus;
   }
@@ -198,7 +214,15 @@ export class GameSession {
     if (moving) {
       if (!destinationMoving)
         this.player.position = roundVector(
-          add(this.player.position, scale(this.input.intent, movementDistance)),
+          sweepTerrainMovement(
+            this.world,
+            this.player.position,
+            add(
+              this.player.position,
+              scale(this.input.intent, movementDistance),
+            ),
+            this.chunkRecipes.get,
+          ),
         );
       const attackSpeedMultiplier = movingAttackSpeedMultiplierFor(
         this.classProgression,
@@ -509,25 +533,64 @@ export class GameSession {
         this.enemies.delete(id);
 
     const phase = wavePhaseFor(this.elapsed);
-    if (!phase.active || this.startedWaveIndices.has(phase.waveIndex)) return;
-    for (const enemy of waveEnemyDraftsFor({
-      seed: this.world.seed,
-      waveIndex: phase.waveIndex,
-      center: this.player.position,
-      enemyHealthContext: this.enemyHealthContext(),
-    }))
-      this.enemies.set(enemy.id, enemy);
-    this.startedWaveIndices.add(phase.waveIndex);
-    const boss = [...this.enemies.values()].find(
-      (enemy) =>
-        enemy.waveIndex === phase.waveIndex && enemy.isWaveBoss === true,
-    );
-    if (boss?.bossName !== undefined)
-      this.notice = {
-        kind: "wave.started",
-        waveIndex: phase.waveIndex,
-        bossName: boss.bossName,
-      };
+    if (
+      phase.active &&
+      !this.startedWaveIndices.has(phase.waveIndex) &&
+      !this.pendingWaveIndices.has(phase.waveIndex)
+    )
+      this.pendingWaveIndices.add(phase.waveIndex);
+
+    for (const waveIndex of this.pendingWaveIndices) {
+      const drafts = waveEnemyDraftsFor({
+        seed: this.world.seed,
+        waveIndex,
+        center: this.player.position,
+        enemyHealthContext: this.enemyHealthContext(),
+      });
+      const safeDrafts = drafts.map((enemy) => ({
+        enemy,
+        position: nearestTerrainSafePosition(
+          this.world,
+          enemy.position,
+          this.chunkRecipes.get,
+          enemyTerrainClearanceFor(enemy.kind),
+        ),
+      }));
+      // Do not partially materialize a required wave. A bounded V3 search can
+      // exhaust while terrain blocks every draft, so retain the complete wave
+      // for a later retry rather than treating that failure as progression.
+      if (safeDrafts.some((draft) => draft.position === null)) return;
+      for (const { enemy, position } of safeDrafts) {
+        if (position === null) return;
+        const waveExpiresAt =
+          enemy.waveExpiresAt !== undefined &&
+          this.elapsed + 0.000_001 >= enemy.waveExpiresAt
+            ? this.elapsed + gameplayTuning.waveDurationSeconds
+            : enemy.waveExpiresAt;
+        this.enemies.set(enemy.id, {
+          ...enemy,
+          ...(waveExpiresAt === undefined ? {} : { waveExpiresAt }),
+          ...(position === enemy.position
+            ? {}
+            : {
+                position: copyVector(position),
+                spawnPosition: copyVector(position),
+              }),
+        });
+      }
+      this.pendingWaveIndices.delete(waveIndex);
+      this.startedWaveIndices.add(waveIndex);
+      const boss = [...this.enemies.values()].find(
+        (enemy) => enemy.waveIndex === waveIndex && enemy.isWaveBoss === true,
+      );
+      if (boss?.bossName !== undefined)
+        this.notice = {
+          kind: "wave.started",
+          waveIndex,
+          bossName: boss.bossName,
+        };
+      return;
+    }
   }
   private waveStatus() {
     const phase = wavePhaseFor(this.elapsed);
@@ -652,7 +715,14 @@ export class GameSession {
       remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
       maximumTravel >= remainingDistance
     ) {
-      this.player.position = copyVector(this.destination);
+      this.player.position = roundVector(
+        sweepTerrainMovement(
+          this.world,
+          this.player.position,
+          this.destination,
+          this.chunkRecipes.get,
+        ),
+      );
       this.destination = null;
       this.input = {
         intent: { x: 0, y: 0 },
@@ -661,9 +731,39 @@ export class GameSession {
       };
       return false;
     }
-    this.player.position = roundVector(
-      add(this.player.position, scale(normalize(offset), maximumTravel)),
+    const desired = add(
+      this.player.position,
+      scale(normalize(offset), maximumTravel),
     );
+    const swept = sweepTerrainMovement(
+      this.world,
+      this.player.position,
+      desired,
+      this.chunkRecipes.get,
+    );
+    const next = roundVector(swept);
+    if (
+      next.x === this.player.position.x &&
+      next.y === this.player.position.y
+    ) {
+      // Keep a tap alive when its unconstrained two-decimal movement is too
+      // small to advance this frame. Terrain may adjust that sub-quantum
+      // sweep, so equality with `desired` is not the signal for cancellation.
+      const unconstrainedNext = roundVector(desired);
+      if (
+        unconstrainedNext.x === this.player.position.x &&
+        unconstrainedNext.y === this.player.position.y
+      )
+        return true;
+      this.destination = null;
+      this.input = {
+        intent: { x: 0, y: 0 },
+        source: "system",
+        at: this.elapsed,
+      };
+      return false;
+    }
+    this.player.position = next;
     return true;
   }
   private updateEnemyCombat(delta: number): void {
@@ -689,6 +789,14 @@ export class GameSession {
       playerPhysicalDefense: combatStats.physicalDefense,
       playerDodgeChance: combatStats.dodgeChance,
       worldSeed: this.world.seed,
+      constrainEnemyPosition: (from, desired, enemy) =>
+        sweepTerrainMovement(
+          this.world,
+          from,
+          desired,
+          this.chunkRecipes.get,
+          enemyTerrainClearanceFor(enemy.kind),
+        ),
     });
     this.player = result.player;
     this.resources = result.resources;
