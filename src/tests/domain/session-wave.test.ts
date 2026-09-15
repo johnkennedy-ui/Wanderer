@@ -63,6 +63,7 @@ const blockedWaveFixture = () => {
     session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
   ).toEqual([]);
   advance(session, 29.9);
+  session.tick(0.05);
   sourceObstacles.splice(0);
   return session;
 };
@@ -256,11 +257,13 @@ describe("GameSession timed waves", () => {
   });
 
   it("extends a pending wave that becomes placeable within, at, or after the expiry tolerance", () => {
-    for (const retryOffset of [0, 0.000_000_2, 0.000_000_4]) {
+    for (const retryAt of [149.999_999_8, 150, 150.000_000_2]) {
       const session = blockedWaveFixture();
-      // The first retry is 149.9999998; the latter two are at and just after
-      // 150. All normalize outside the original wave window.
-      session.tick(0.099_999_8 + retryOffset);
+      const delta = retryAt - session.diagnostics().elapsed;
+      expect(delta).toBeGreaterThan(0);
+      expect(delta).toBeLessThanOrEqual(0.1);
+      session.tick(delta);
+      expect(session.diagnostics().elapsed).toBe(retryAt);
 
       const materialized = waveOneEnemies(session);
       const normalEnemies = materialized.filter((enemy) => !enemy.isWaveBoss);
@@ -279,7 +282,12 @@ describe("GameSession timed waves", () => {
   it("keeps the original expiry for a wave retried before the cleanup tolerance", () => {
     const session = blockedWaveFixture();
     // This retry remains more than one microsecond before the original end.
-    session.tick(0.099_998);
+    const retryAt = 149.999_998;
+    const delta = retryAt - session.diagnostics().elapsed;
+    expect(delta).toBeGreaterThan(0);
+    expect(delta).toBeLessThanOrEqual(0.1);
+    session.tick(delta);
+    expect(session.diagnostics().elapsed).toBe(retryAt);
 
     const normalEnemies = waveOneEnemies(session).filter(
       (enemy) => !enemy.isWaveBoss,
