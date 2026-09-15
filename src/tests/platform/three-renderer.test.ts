@@ -940,6 +940,33 @@ describe("Three browser adapter ownership", () => {
       if (other !== bar) expect(other.remove).toHaveBeenCalledTimes(1);
   });
 
+  it("hides off-camera enemy labels instead of projecting them beyond the host", () => {
+    const dom = rendererDom();
+    const renderer = createThreeRenderer(dom.host);
+    const snapshot = rendererSnapshot();
+    const enemy = snapshot.enemies[0];
+    if (enemy === undefined) throw new Error("Missing fixture enemy");
+
+    renderer.render({
+      ...snapshot,
+      enemies: [{ ...enemy, position: { x: 1000, y: -1000 } }],
+    });
+    const bar = dom.enemyHealthBars.find(
+      (candidate) => candidate.dataset.enemyId === enemy.id,
+    );
+    if (bar === undefined) throw new Error("Missing enemy health bar");
+    expect((bar as unknown as HTMLElement).hidden).toBe(true);
+    const fill = bar.children[0];
+    if (fill === undefined) throw new Error("Missing enemy health fill");
+    renderer.render({
+      ...snapshot,
+      enemies: [{ ...enemy, hp: enemy.maxHp / 2 }],
+    });
+    expect((bar as unknown as HTMLElement).hidden).toBe(false);
+    expect(fill.style.width).toBe("50%");
+    renderer.dispose();
+  });
+
   it("updates health/camera/raycast and releases observer, label, canvas, floor and WebGL exactly once", () => {
     const dom = rendererDom();
     const renderer = createThreeRenderer(dom.host);
