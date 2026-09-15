@@ -3,6 +3,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import { calibratedYawFor, shortestYawTowards } from "./modelFacingHelpers";
 import {
+  environmentFilenameFor,
+  type EnvironmentAssetKey,
+} from "./environmentPresentationHelpers";
+import {
   applyModelPose,
   bindModelPose,
   type BoundModelPose,
@@ -42,6 +46,7 @@ export const modelAssets = Object.freeze({
 });
 
 export type ModelAssetKey =
+  | EnvironmentAssetKey
   | "player-knight"
   | "player-wizard"
   | "player-archer"
@@ -60,6 +65,8 @@ export type ModelAssetKey =
   | "building-Healer";
 
 export const modelFilenameFor = (key: ModelAssetKey): string => {
+  if (key.startsWith("environment-"))
+    return environmentFilenameFor(key as EnvironmentAssetKey);
   const [category, kind] = key.split("-") as [string, string];
   if (category === "player")
     return modelAssets.players[kind as keyof typeof modelAssets.players];
@@ -248,6 +255,9 @@ interface ModelInstance {
   lastElapsed: number;
   resetId: number;
   pose: BoundModelPose | undefined;
+  hasMeshes: boolean;
+  locomotionDistance: number;
+  moving: boolean;
 }
 
 const playerModelFor = (
@@ -263,6 +273,7 @@ export class ModelProjection {
   constructor(
     private readonly templates = new ModelTemplateCache(),
     private readonly onStateChange: () => void = () => {},
+    private readonly ownsTemplates = true,
   ) {}
 
   render(
@@ -385,7 +396,7 @@ export class ModelProjection {
     this.disposed = true;
     for (const [id, instance] of this.instances)
       this.remove(id, instance, () => {});
-    this.templates.dispose();
+    if (this.ownsTemplates) this.templates.dispose();
     this.group.clear();
     this.group.removeFromParent();
   }
@@ -422,6 +433,9 @@ export class ModelProjection {
         lastElapsed: snapshot.presentationElapsed,
         resetId: snapshot.presentationResetId,
         pose: undefined,
+        hasMeshes: false,
+        locomotionDistance: 0,
+        moving: false,
       };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -437,6 +451,8 @@ export class ModelProjection {
           return;
         }
         expected.model = model;
+        expected.hasMeshes =
+          model.getObjectByProperty("isMesh", true) !== undefined;
         expected.poseRoot.add(model);
         expected.pose = bindModelPose(model, expected.poseRoot, expected.asset);
         this.syncVisibility(descriptor.id, expected, setFallbackModelVisible);
@@ -464,10 +480,18 @@ export class ModelProjection {
         x: descriptor.position.x - instance.lastPosition.x,
         y: descriptor.position.y - instance.lastPosition.y,
       };
-      const teleport = Math.hypot(movement.x, movement.y) > 4;
+      const distance = Math.hypot(movement.x, movement.y);
+      const teleport = distance > 4;
       const reset =
         instance.resetId !== snapshot.presentationResetId || teleport;
-      if (reset) instance.targetYaw = descriptor.rotation;
+      instance.moving =
+        !reset &&
+        distance > 0.0001 &&
+        snapshot.presentationElapsed > instance.lastElapsed;
+      if (reset) {
+        instance.targetYaw = descriptor.rotation;
+        instance.locomotionDistance = 0;
+      } else if (instance.moving) instance.locomotionDistance += distance;
       if (!reset && Math.hypot(movement.x, movement.y) > 0.0001)
         instance.targetYaw = calibratedYawFor(movement);
       if (descriptor.attackCue !== undefined)
@@ -499,7 +523,7 @@ export class ModelProjection {
       instance.model !== undefined &&
       instance.model.parent === instance.poseRoot &&
       instance.root.parent === this.group &&
-      instance.model.getObjectByProperty("isMesh", true) !== undefined
+      instance.hasMeshes
     );
   }
 
@@ -533,7 +557,8 @@ export class ModelProjection {
   ): void {
     this.instances.delete(id);
     instance.root.removeFromParent();
-    if (instance.model !== undefined) disposeObject(instance.model);
+    // Pose binding reparents weapon parts outside model; this owns every clone resource.
+    disposeObject(instance.poseRoot);
     instance.root.clear();
     setFallbackModelVisible(id, false);
   }

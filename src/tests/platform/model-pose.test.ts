@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { applyModelPose, bindModelPose } from "../../platform/render/modelPoseHelpers";
+import {
+  applyModelPose,
+  bindModelPose,
+} from "../../platform/render/modelPoseHelpers";
 
 describe("model combat pose binding", () => {
   it("measures a rigid part grip, preserves its authored transform, and restores recovery pose", () => {
@@ -19,7 +22,13 @@ describe("model combat pose binding", () => {
 
     applyModelPose(
       binding,
-      { actorId: "player", sequence: 4, direction: { x: 1, y: 0 }, style: "slash", age: 0.15 },
+      {
+        actorId: "player",
+        sequence: 4,
+        direction: { x: 1, y: 0 },
+        style: "slash",
+        age: 0.15,
+      },
       0,
       1,
     );
@@ -37,13 +46,20 @@ describe("model combat pose binding", () => {
     const model = new THREE.Group();
     const poseRoot = new THREE.Group();
     poseRoot.add(model);
-    for (const name of ["bow_body", "bow_string", "spear", "spear_tip"] as const) {
+    for (const name of [
+      "bow_body",
+      "bow_string",
+      "spear",
+      "spear_tip",
+    ] as const) {
       const part = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
       part.name = name;
       part.position.x = name.length;
       model.add(part);
     }
-    expect(bindModelPose(model, poseRoot, "player-archer")?.neutralParts).toHaveLength(2);
+    expect(
+      bindModelPose(model, poseRoot, "player-archer")?.neutralParts,
+    ).toHaveLength(2);
     const scout = new THREE.Group();
     const scoutPoseRoot = new THREE.Group();
     scoutPoseRoot.add(scout);
@@ -52,6 +68,8 @@ describe("model combat pose binding", () => {
       part.name = name;
       scout.add(part);
     }
-    expect(bindModelPose(scout, scoutPoseRoot, "enemy-scout")?.neutralParts).toHaveLength(2);
+    expect(
+      bindModelPose(scout, scoutPoseRoot, "enemy-scout")?.neutralParts,
+    ).toHaveLength(2);
   });
 });

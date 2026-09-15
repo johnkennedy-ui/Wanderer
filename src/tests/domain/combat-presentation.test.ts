@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { advanceAutoCombatPhase, advanceEnemyCombatPhase } from "../../domain/session/combatTickRuntime";
+import {
+  advanceAutoCombatPhase,
+  advanceEnemyCombatPhase,
+} from "../../domain/session/combatTickRuntime";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
 
 const enemy = (overrides: Partial<RuntimeEnemy> = {}): RuntimeEnemy => ({
@@ -34,7 +37,9 @@ describe("combat presentation commitments", () => {
       nextProjectileSerial: 9,
       nextAttackEventSerial: 12,
     });
-    expect(result.projectiles).toMatchObject([{ id: "projectile:0009", targetId: target.id, damage: 12 }]);
+    expect(result.projectiles).toMatchObject([
+      { id: "projectile:0009", targetId: target.id, damage: 12 },
+    ]);
     expect(result.presentationAttack).toEqual({
       actorId: "player",
       sequence: 12,
@@ -52,7 +57,12 @@ describe("combat presentation commitments", () => {
       player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
       resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
       enemies: new Map([[attacker.id, attacker]]),
-      committedSavePoint: { id: "campfire:home", label: "home", position: { x: 0, y: 0 }, level: 1 },
+      committedSavePoint: {
+        id: "campfire:home",
+        label: "home",
+        position: { x: 0, y: 0 },
+        level: 1,
+      },
       input: { intent: { x: 0, y: 0 }, source: "system", at: 3 },
       destination: null,
       attackElapsed: 0,
@@ -60,7 +70,12 @@ describe("combat presentation commitments", () => {
       deathResourceLossRate: 0.25,
     });
     expect(result.presentationAttacks).toEqual([
-      { actorId: attacker.id, sequence: 1, direction: { x: -1, y: 0 }, committedAt: 0 },
+      {
+        actorId: attacker.id,
+        sequence: 1,
+        direction: { x: -1, y: 0 },
+        committedAt: 0,
+      },
     ]);
     expect(result.player.hp).toBe(97);
     expect(attacker.attackEventOrdinal).toBeUndefined();

@@ -106,6 +106,65 @@ describe("model presentation assets", () => {
     cache.dispose();
   });
 
+  it("shares the same typed template cache with environment clones and leaves disposal to its owner", async () => {
+    const { loader, calls } = loaderDouble();
+    const cache = new ModelTemplateCache(loader, "/Wanderer/");
+    const first = cache.acquire("environment-tree-pine-a");
+    const second = cache.acquire("environment-tree-pine-a");
+    expect(calls.map((call) => call.url)).toEqual([
+      "/Wanderer/assets/models/expansion-v1/tree_pine_a.glb",
+    ]);
+    calls[0].onLoad({ scene: modelScene() });
+    const [one, two] = await Promise.all([first, second]);
+    expect(one).not.toBe(two);
+    const projection = new ModelProjection(cache, () => {}, false);
+    projection.dispose();
+    expect(cache.diagnostics()).toMatchObject({
+      templates: 1,
+      disposed: false,
+    });
+    cache.dispose();
+    expect(cache.diagnostics()).toMatchObject({ templates: 0, disposed: true });
+  });
+
+  it("binds meshes once and disposes reparented weapon resources when changing class", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const frame = playerOnlySnapshot();
+    projection.render(frame, vi.fn());
+    const template = modelScene();
+    const sword = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.9),
+      new THREE.MeshStandardMaterial(),
+    );
+    sword.name = "sword";
+    template.add(sword);
+    calls[0].onLoad({ scene: template });
+    await Promise.resolve();
+    await Promise.resolve();
+    const poseRoot = projection.group.getObjectByName(
+      "pose:player",
+    ) as THREE.Group;
+    const model = poseRoot.children[0] as THREE.Group;
+    const boundSword = poseRoot.getObjectByName("sword") as THREE.Mesh;
+    expect(boundSword.parent).not.toBe(model);
+    const geometry = vi.spyOn(boundSword.geometry, "dispose");
+    const material = vi.spyOn(boundSword.material as THREE.Material, "dispose");
+    const lookup = vi.spyOn(model, "getObjectByProperty");
+    const traversal = vi.spyOn(model, "traverse");
+    for (const presentationElapsed of [0.1, 0.2, 0.3]) {
+      projection.render({ ...frame, presentationElapsed }, vi.fn());
+      projection.diagnostics();
+    }
+    expect(lookup).not.toHaveBeenCalled();
+    expect(traversal).not.toHaveBeenCalled();
+    projection.render({ ...frame, playerClass: "wizard" }, vi.fn());
+    expect(geometry).toHaveBeenCalledTimes(1);
+    expect(material).toHaveBeenCalledTimes(1);
+    expect(projection.diagnostics().instances).toBe(1);
+    projection.dispose();
+  });
+
   it("retains geometric fallback on failure and resolves pending loads during disposal", async () => {
     const { loader, calls } = loaderDouble();
     const cache = new ModelTemplateCache(loader, "/");
