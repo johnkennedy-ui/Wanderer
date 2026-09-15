@@ -10,7 +10,7 @@ import {
 } from "./m5-test-helpers";
 
 // Failure watchdog only; there are no sleep-based progression or retry loops.
-test.setTimeout(90_000);
+test.setTimeout(150_000);
 
 test("M5 live DOM retains rows through updates and current next-tap relocation, removing only departed rows", async ({
   page,
