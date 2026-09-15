@@ -5,15 +5,15 @@
   "assets": [
     {
       "file": "enemy_brute.glb",
-      "sha256": "974f8d8ea245cec8b694041ab2463e3816478d9efa3f833d54b7de81bbe5d97d"
+      "sha256": "dfa7c77a7cb1faef61ce3e8c79caa7945dacd24d9dcbfa89ba7aa9b6b3c285e6"
     },
     {
       "file": "enemy_scout.glb",
-      "sha256": "028dc6ff65864b1d4a18241240f2cb97fa9dcd80a2b35c207c9e7c0313048b07"
+      "sha256": "e1b9896decc1d255be0facc81a581cb129ca6764343f5c53cea9d162f7f0787b"
     },
     {
       "file": "player_archer.glb",
-      "sha256": "e40d143b99935155047583dca9cd8cdaf67061d2dfcdf28ba90dfd17ffcc39f1"
+      "sha256": "7d5df585987d126d70e80640b84a306a2874c08f088f72c8a8c803033c87a240"
     }
   ],
   "grips": {

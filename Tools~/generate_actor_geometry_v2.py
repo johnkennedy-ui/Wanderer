@@ -203,12 +203,42 @@ def box(asset: Asset, name: str, size, color: str, offset=(0, 0, 0), rotate_y=0.
         (-sx, -sy, -sz), (sx, -sy, -sz), (sx, sy, -sz), (-sx, sy, -sz),
         (-sx, -sy, sz), (sx, -sy, sz), (sx, sy, sz), (-sx, sy, sz),
     ]
+    # Counter-clockwise when viewed from outside.  flat_part derives normals
+    # from this winding, so the two contracts must stay together.
+    faces = [
+        (0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7),
+        (0, 5, 4), (0, 1, 5), (3, 6, 2), (3, 7, 6),
+        (1, 6, 5), (1, 2, 6), (0, 7, 3), (0, 4, 7),
+    ]
+    flat_part(asset, name, [tuple(p[index] for index in face) for face in faces], color, rotate_y, offset)
+
+
+def beam_between(asset: Asset, name: str, start, end, width: float, color: str):
+    """Author a small rectangular beam between two measured local points."""
+    dx, dy, dz = (end[index] - start[index] for index in range(3))
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length == 0:
+        raise ValueError(f"{name} requires distinct endpoints")
+    # A stable perpendicular pair, with the first one in the XY plane for the
+    # actor weapon geometry authored here.
+    ux, uy = -dy / length * width / 2, dx / length * width / 2
+    vz = width / 2
+    points = [
+        (start[0] - ux, start[1] - uy, start[2] - vz),
+        (start[0] + ux, start[1] + uy, start[2] - vz),
+        (end[0] + ux, end[1] + uy, end[2] - vz),
+        (end[0] - ux, end[1] - uy, end[2] - vz),
+        (start[0] - ux, start[1] - uy, start[2] + vz),
+        (start[0] + ux, start[1] + uy, start[2] + vz),
+        (end[0] + ux, end[1] + uy, end[2] + vz),
+        (end[0] - ux, end[1] - uy, end[2] + vz),
+    ]
     faces = [
         (0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6),
         (0, 4, 5), (0, 5, 1), (3, 2, 6), (3, 6, 7),
         (1, 5, 6), (1, 6, 2), (0, 3, 7), (0, 7, 4),
     ]
-    flat_part(asset, name, [tuple(p[index] for index in face) for face in faces], color, rotate_y, offset)
+    flat_part(asset, name, [tuple(points[index] for index in face) for face in faces], color)
 
 
 def cylinder(asset: Asset, name: str, radius: float, height: float, color: str, offset=(0, 0, 0), sides=8, rotate_y=0.0, top_radius=None):
@@ -221,7 +251,8 @@ def cylinder(asset: Asset, name: str, radius: float, height: float, color: str, 
         b1 = (radius * math.cos(a1), -height / 2, radius * math.sin(a1))
         t0 = (top_radius * math.cos(a0), height / 2, top_radius * math.sin(a0))
         t1 = (top_radius * math.cos(a1), height / 2, top_radius * math.sin(a1))
-        triangles.extend([(b0, b1, t1), (b0, t1, t0)])
+        # Side faces need the opposite winding to the cap faces below.
+        triangles.extend([(b0, t1, b1), (b0, t0, t1)])
         triangles.extend([((0, height / 2, 0), t1, t0), ((0, -height / 2, 0), b0, b1)])
     flat_part(asset, name, triangles, color, rotate_y, offset)
 
@@ -285,9 +316,12 @@ def make_scout():
     a = Asset("enemy_scout")
     ico(a, "body", 0.42, "moss", (0, 0.47, 0), scale=(0.8, 1.15, 0.7))
     ico(a, "mask", 0.24, "bone", (0, 0.72, -0.26), scale=(1.0, 0.8, 0.45))
-    box(a, "spear", (0.08, 0.08, 0.95), "wood", (0.34, 0.55, 0), rotate_y=-0.5)
-    # The source tip was detached. This overlaps the shaft's forward end.
-    ico(a, "spear_tip", 0.15, "stone", (0.57, 0.55, 0.42), scale=(0.6, 0.6, 1.1))
+    grip = (0.34, 0.55, 0.0)
+    spear_tip = (0.57, 0.55, -0.48)
+    beam_between(a, "spear", grip, spear_tip, 0.08, "wood")
+    # The tip overlaps the shaft endpoint and is deliberately on local -Z,
+    # matching the actor's recorded forward axis.
+    ico(a, "spear_tip", 0.15, "stone", spear_tip, scale=(0.6, 0.6, 1.1))
     box(a, "satchel", (0.25, 0.26, 0.18), "leather", (-0.3, 0.38, 0.15), rotate_y=0.3)
     a.write("enemy_scout.glb")
 
@@ -366,11 +400,20 @@ def make_archer():
     cylinder(a, "body", 0.33, 0.7, "leather", (0, 0.48, 0), sides=7, top_radius=0.26)
     ico(a, "head", 0.25, "bone", (0, 0.98, -0.02), scale=(0.95, 1.0, 0.9))
     box(a, "hood", (0.48, 0.18, 0.35), "moss", (0, 1.18, 0.03))
-    # Named bow grip remains the attachment part; limbs and string make its silhouette explicit.
-    box(a, "bow", (0.10, 0.20, 0.10), "wood", (0.55, 0.60, 0), rotate_y=0.15)
-    box(a, "bow_upper", (0.09, 0.50, 0.09), "wood", (0.66, 0.87, 0), rotate_y=-0.32)
-    box(a, "bow_lower", (0.09, 0.50, 0.09), "wood", (0.66, 0.33, 0), rotate_y=0.32)
-    box(a, "bow_string", (0.025, 0.84, 0.025), "bone", (0.52, 0.60, 0))
+    # A six-segment curved limb and two endpoint-to-grip string segments make
+    # a connected bow rather than parallel detached bars.
+    grip = (0.55, 0.60, 0.0)
+    upper_tip, lower_tip = (0.67, 1.23, 0.0), (0.67, -0.03, 0.0)
+    box(a, "bow", (0.10, 0.20, 0.10), "wood", grip, rotate_y=0.15)
+    for name, start, end in [
+        ("bow_upper_inner", grip, (0.75, 0.88, 0.0)),
+        ("bow_upper_outer", (0.75, 0.88, 0.0), upper_tip),
+        ("bow_lower_inner", grip, (0.75, 0.32, 0.0)),
+        ("bow_lower_outer", (0.75, 0.32, 0.0), lower_tip),
+    ]:
+        beam_between(a, name, start, end, 0.09, "wood")
+    beam_between(a, "bow_string_upper", upper_tip, grip, 0.025, "bone")
+    beam_between(a, "bow_string_lower", grip, lower_tip, 0.025, "bone")
     box(a, "quiver", (0.18, 0.48, 0.18), "teal", (-0.32, 0.6, 0.25), rotate_y=0.25)
     for index in range(3):
         fin(a, f"feather_{index}", 0.12, 0.05, 0.12, "teal", (-0.32 + index * 0.06, 0.88, 0.25), rotate_y=index * 0.5)
