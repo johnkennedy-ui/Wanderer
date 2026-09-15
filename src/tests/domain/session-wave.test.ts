@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../../domain/GameSession";
 import { waveEnemyDraftsFor } from "../../domain/session/wavePolicy";
-import type { ChunkRecipe, WorldIdentity } from "../../domain/types";
+import type {
+  ChunkObstacle,
+  ChunkRecipe,
+  WorldIdentity,
+} from "../../domain/types";
 import { WANDERER_WEB_V3, generateChunk } from "../../domain/world";
 import {
   enemyTerrainClearanceFor,
@@ -12,6 +16,59 @@ import { savedAtHome } from "./session-test-helpers";
 const advance = (session: GameSession, seconds: number): void => {
   for (let step = 0; step < seconds * 10; step += 1) session.tick(0.1);
 };
+
+const blockedWaveFixture = () => {
+  const world = {
+    seed: "wave-expiry-boundary",
+    generatorVersion: WANDERER_WEB_V3,
+  };
+  const sourceObstacles: ChunkObstacle[] = [
+    {
+      id: "water:wave-expiry-boundary",
+      kind: "water",
+      waterKind: "lake",
+      radius: 30,
+      position: { x: 0, y: 0 },
+    },
+  ];
+  const recipeSource = (
+    _world: WorldIdentity,
+    coordinate: { x: number; y: number },
+  ): ChunkRecipe => ({
+    coordinate,
+    key: `${coordinate.x},${coordinate.y}`,
+    domainSeeds: {},
+    // Cached recipes retain this public accessor. It returns a fresh snapshot
+    // of the test-owned source data, so the same session can unblock a retry.
+    get obstacles() {
+      return sourceObstacles.map((obstacle) => ({
+        ...obstacle,
+        position: { ...obstacle.position },
+      }));
+    },
+    campfires: [],
+    spawns: [],
+  });
+  const saved = savedAtHome();
+  const session = new GameSession({
+    saved: {
+      ...saved,
+      world,
+      player: { ...saved.player, position: { x: 1, y: 1 } },
+    },
+    chunkRecipeSource: recipeSource,
+  });
+  advance(session, 120);
+  expect(
+    session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
+  ).toEqual([]);
+  advance(session, 29.9);
+  sourceObstacles.splice(0);
+  return session;
+};
+
+const waveOneEnemies = (session: GameSession) =>
+  session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1);
 
 describe("GameSession timed waves", () => {
   it("materializes one five-times-density wave at 120 seconds and clears only its normal enemies at the window end", () => {
@@ -196,5 +253,46 @@ describe("GameSession timed waves", () => {
     expect(
       session.diagnostics().enemies.filter((enemy) => enemy.waveIndex === 1),
     ).toHaveLength(16);
+  });
+
+  it("extends a pending wave that becomes placeable within, at, or after the expiry tolerance", () => {
+    for (const retryOffset of [0, 0.000_000_2, 0.000_000_4]) {
+      const session = blockedWaveFixture();
+      // The first retry is 149.9999998; the latter two are at and just after
+      // 150. All normalize outside the original wave window.
+      session.tick(0.099_999_8 + retryOffset);
+
+      const materialized = waveOneEnemies(session);
+      const normalEnemies = materialized.filter((enemy) => !enemy.isWaveBoss);
+      expect(session.presentation().ui.wave.active).toBe(false);
+      expect(materialized).toHaveLength(16);
+      expect(normalEnemies).toHaveLength(15);
+      expect(
+        normalEnemies.every((enemy) => (enemy.waveExpiresAt ?? 0) > 150),
+      ).toBe(true);
+
+      session.tick(0.1);
+      expect(waveOneEnemies(session)).toHaveLength(16);
+    }
+  });
+
+  it("keeps the original expiry for a wave retried before the cleanup tolerance", () => {
+    const session = blockedWaveFixture();
+    // This retry remains more than one microsecond before the original end.
+    session.tick(0.099_998);
+
+    const normalEnemies = waveOneEnemies(session).filter(
+      (enemy) => !enemy.isWaveBoss,
+    );
+    expect(session.presentation().ui.wave.active).toBe(true);
+    expect(normalEnemies).toHaveLength(15);
+    expect(normalEnemies.every((enemy) => enemy.waveExpiresAt === 150)).toBe(
+      true,
+    );
+
+    session.tick(0.1);
+    expect(
+      waveOneEnemies(session).filter((enemy) => !enemy.isWaveBoss),
+    ).toEqual([]);
   });
 });

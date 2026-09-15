@@ -564,7 +564,7 @@ export class GameSession {
         if (position === null) return;
         const waveExpiresAt =
           enemy.waveExpiresAt !== undefined &&
-          this.elapsed >= enemy.waveExpiresAt
+          this.elapsed + 0.000_001 >= enemy.waveExpiresAt
             ? this.elapsed + gameplayTuning.waveDurationSeconds
             : enemy.waveExpiresAt;
         this.enemies.set(enemy.id, {
