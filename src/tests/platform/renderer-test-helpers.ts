@@ -9,6 +9,8 @@ export const rendererSnapshot = (): GameRendererSnapshot => ({
   ...new GameSession({
     world: { seed: "wanderer-known-seed", generatorVersion: "wanderer-web-v2" },
   }).presentation().renderer,
+  presentationElapsed: 0,
+  presentationResetId: 1,
   playerClass: null,
   playerHitRecovery: { active: false, flashOn: false },
   visibleBuildings: [

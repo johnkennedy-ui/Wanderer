@@ -3,7 +3,11 @@ import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { Vector2 } from "../../domain/types";
 import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
-import { ModelProjection } from "./modelPresentationHelpers";
+import {
+  ModelProjection,
+  ModelTemplateCache,
+} from "./modelPresentationHelpers";
+import { EnvironmentProjection } from "./environmentPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
@@ -115,7 +119,16 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const setDataset = (key: string, value: string): void => {
     if (canvas.dataset[key] !== value) canvas.dataset[key] = value;
   };
+  const templates = new ModelTemplateCache();
   let models: ModelProjection;
+  let environment: EnvironmentProjection;
+  const writeEnvironmentDiagnostics = (): void => {
+    const info = environment.diagnostics();
+    setDataset("environmentLoadedCount", String(info.loadedInstances));
+    setDataset("environmentPendingCount", String(info.pendingInstances));
+    setDataset("environmentFallbackCount", String(info.fallbackInstances));
+    setDataset("environmentAssetKeys", info.assetKeys.join(","));
+  };
   const writeModelDiagnostics = (): void => {
     const modelDiagnostics = models.diagnostics();
     setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
@@ -124,8 +137,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
     setDataset("modelFailureCount", String(modelDiagnostics.failures));
   };
-  models = new ModelProjection(undefined, writeModelDiagnostics);
-  scene.add(models.group);
+  models = new ModelProjection(templates, writeModelDiagnostics, false);
+  environment = new EnvironmentProjection(
+    templates,
+    writeEnvironmentDiagnostics,
+  );
+  scene.add(models.group, environment.group);
 
   return {
     canvas,
@@ -142,7 +159,11 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       models.render(snapshot, (id, visible) =>
         projection.setModelVisible(id, visible),
       );
+      environment.render(snapshot, (id, visible) =>
+        projection.setModelVisible(id, visible),
+      );
       writeModelDiagnostics();
+      writeEnvironmentDiagnostics();
       camera.position.set(
         snapshot.player.position.x + defaultThreeCameraTuning.playerOffset.x,
         defaultThreeCameraTuning.playerOffset.y,
@@ -197,8 +218,10 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       if (disposed) return;
       disposed = true;
       observer.disconnect();
-      projection.dispose();
+      environment.dispose();
       models.dispose();
+      templates.dispose();
+      projection.dispose();
       enemyHealthOverlay.dispose();
       floor.geometry.dispose();
       floor.material.dispose();

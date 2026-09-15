@@ -30,6 +30,7 @@ import { deterministicChanceSucceeds } from "./deterministicRoll";
 import type {
   RuntimeCrescentAttack,
   RuntimeEnemy,
+  RuntimeAttackPresentation,
   RuntimeProjectile,
   SettlementCampfire,
 } from "./sessionState";
@@ -100,6 +101,7 @@ export interface AutoCombatPhaseResult {
   readonly nextCrescentSerial: number;
   readonly nextAttackEventSerial: number;
   readonly combatStatus: string;
+  readonly presentationAttack: RuntimeAttackPresentation | null;
 }
 
 /** Advances auto-combat and allocates one serial for every authored shot. */
@@ -148,6 +150,7 @@ export const advanceAutoCombatPhase = ({
       nextCrescentSerial,
       nextAttackEventSerial,
       combatStatus: "Stationary: seeking a target",
+      presentationAttack: null,
     };
 
   const combatStatus = `Auto-attacking ${decision.target.kind} (${Math.ceil(
@@ -163,6 +166,7 @@ export const advanceAutoCombatPhase = ({
       nextCrescentSerial,
       nextAttackEventSerial,
       combatStatus,
+      presentationAttack: null,
     };
 
   if (stats.attackStyle === "slash") {
@@ -212,6 +216,13 @@ export const advanceAutoCombatPhase = ({
       nextCrescentSerial: nextCrescentSerial + 1,
       nextAttackEventSerial: nextAttackEventSerial + 1,
       combatStatus,
+      presentationAttack: {
+        actorId: "player",
+        sequence: nextAttackEventSerial,
+        direction: copyVector(direction),
+        style: stats.attackStyle,
+        committedAt: 0,
+      },
     };
   }
 
@@ -278,6 +289,16 @@ export const advanceAutoCombatPhase = ({
     nextCrescentSerial,
     nextAttackEventSerial: nextAttackEventSerial + 1,
     combatStatus,
+    presentationAttack: {
+      actorId: "player",
+      sequence: nextAttackEventSerial,
+      direction: normalize({
+        x: decision.target.position.x - playerPosition.x,
+        y: decision.target.position.y - playerPosition.y,
+      }),
+      style: stats.attackStyle,
+      committedAt: 0,
+    },
   };
 };
 
@@ -318,6 +339,7 @@ export interface EnemyCombatPhaseResult {
   readonly playerHitRecoveryEndsAt: number;
   readonly notice: GameNotice | null;
   readonly resetHarvest: boolean;
+  readonly presentationAttacks: readonly RuntimeAttackPresentation[];
 }
 
 /** Advances pursuit, respawn, and enemy attacks in their original phase order. */
@@ -351,6 +373,7 @@ export const advanceEnemyCombatPhase = ({
   const destination =
     currentDestination === null ? null : copyVector(currentDestination);
   let playerHitRecoveryEndsAt = currentPlayerHitRecoveryEndsAt;
+  const presentationAttacks: RuntimeAttackPresentation[] = [];
 
   for (const enemy of enemies.values()) {
     if (enemy.defeated) continue;
@@ -397,6 +420,15 @@ export const advanceEnemyCombatPhase = ({
     if (resolution.kind === "waiting") continue;
     const attackEventOrdinal = enemy.attackEventOrdinal ?? 0;
     enemy.attackEventOrdinal = attackEventOrdinal + 1;
+    presentationAttacks.push({
+      actorId: enemy.id,
+      sequence: attackEventOrdinal + 1,
+      direction: normalize({
+        x: player.position.x - enemy.position.x,
+        y: player.position.y - enemy.position.y,
+      }),
+      committedAt: 0,
+    });
     /* A recovery-protected attempt is still consumed before dodge/damage. */
     if (elapsed < playerHitRecoveryEndsAt) continue;
     if (
@@ -436,6 +468,7 @@ export const advanceEnemyCombatPhase = ({
         resourceLossRate: deathResourceLossRate,
       },
       resetHarvest: true,
+      presentationAttacks,
     };
   }
 
@@ -449,5 +482,6 @@ export const advanceEnemyCombatPhase = ({
     playerHitRecoveryEndsAt,
     notice: null,
     resetHarvest: false,
+    presentationAttacks,
   };
 };

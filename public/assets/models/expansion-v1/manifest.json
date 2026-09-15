@@ -1,0 +1,655 @@
+{
+  "pack": "wanderer-expansion-v1",
+  "version": 1,
+  "upAxis": "+Y",
+  "units": "metres",
+  "static": true,
+  "notes": "New meshes only; no built-in animation. Water is a flat opaque visual treatment, not collision terrain.",
+  "assets": [
+    {
+      "id": "rock_granite_a",
+      "file": "rock_granite_a.glb",
+      "category": "rock",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.4254384314392147,
+          -0.014982272325997081,
+          -0.37690899919669
+        ],
+        "max": [
+          0.4285459367467691,
+          0.6941915509553918,
+          0.3374096468965065
+        ]
+      },
+      "triangles": 20,
+      "meshCount": 1,
+      "sha256": "bf7f6f9a5f6d730978954d7f2a8da181c3a501207157c652ae16dcbc49f51da3",
+      "bytes": 2880,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "rock_granite_b",
+      "file": "rock_granite_b.glb",
+      "category": "rock",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.31730336689536215,
+          -0.04908532308813329,
+          -0.2843515122784021
+        ],
+        "max": [
+          0.3338915607375261,
+          1.0972232285704009,
+          0.2847811207353891
+        ]
+      },
+      "triangles": 20,
+      "meshCount": 1,
+      "sha256": "07bd9a183a96a0c02f67a40a37e0e0bfd852c0726067a67c13a0379fe5818ef1",
+      "bytes": 2880,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "rock_granite_c",
+      "file": "rock_granite_c.glb",
+      "category": "rock",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.5654579384012205,
+          -0.02647166360837158,
+          -0.4060878898739279
+        ],
+        "max": [
+          0.5526664523412754,
+          0.4712732519447876,
+          0.3600128447055436
+        ]
+      },
+      "triangles": 20,
+      "meshCount": 1,
+      "sha256": "dffcc438f0d98a4e0542f157e78d201c490c67e185bfb38c960ae4a22bad6577",
+      "bytes": 2880,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "rock_moss_a",
+      "file": "rock_moss_a.glb",
+      "category": "rock",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.4074192969076508,
+          -0.02272330205913453,
+          -0.39252468880479857
+        ],
+        "max": [
+          0.4805973850467347,
+          0.7755256594951827,
+          0.40244993071565593
+        ]
+      },
+      "triangles": 40,
+      "meshCount": 2,
+      "sha256": "eec0cadda6504584f6dcc34584fedb89d9343d6edad7de528558cd8c5e284625",
+      "bytes": 5452,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "rock_ore_bronze",
+      "file": "rock_ore_bronze.glb",
+      "category": "rock",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.3745190739528573,
+          0.005339714610006041,
+          -0.34339802260232954
+        ],
+        "max": [
+          0.3711597266112839,
+          0.8486366697539285,
+          0.3453568877518926
+        ]
+      },
+      "triangles": 80,
+      "meshCount": 4,
+      "sha256": "f013e221a4b6ced52fc0699fa9101aeb121885cd27a36e8935e70de98243cd59",
+      "bytes": 10444,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "tree_pine_a",
+      "file": "tree_pine_a.glb",
+      "category": "tree",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.8189394462327318,
+          0.0,
+          -0.84
+        ],
+        "max": [
+          0.8189394462327318,
+          2.66,
+          0.7568138490380321
+        ]
+      },
+      "triangles": 70,
+      "meshCount": 4,
+      "sha256": "41c4d8279719de678a4be99c8f3dee61004f532e8817c3a175fbe27e4d75a98f",
+      "bytes": 9664,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "tree_pine_b",
+      "file": "tree_pine_b.glb",
+      "category": "tree",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.8189394462327318,
+          0.0,
+          -0.84
+        ],
+        "max": [
+          0.8189394462327318,
+          2.9000000000000004,
+          0.7568138490380321
+        ]
+      },
+      "triangles": 70,
+      "meshCount": 4,
+      "sha256": "08dd10320cb925ade8d81075e43acc826c539bbd29d123e27ecbd3cf0d4856d2",
+      "bytes": 9668,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "tree_broadleaf_a",
+      "file": "tree_broadleaf_a.glb",
+      "category": "tree",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -1.0803219940407498,
+          -0.007554203212101614,
+          -0.8090003613968878
+        ],
+        "max": [
+          1.1113250438353712,
+          2.791193874554744,
+          0.9784225340072138
+        ]
+      },
+      "triangles": 188,
+      "meshCount": 9,
+      "sha256": "2d83af26743b11097d8e9568965ae455568384f828984b3dccc839bab9725899",
+      "bytes": 23424,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "tree_broadleaf_b",
+      "file": "tree_broadleaf_b.glb",
+      "category": "tree",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -1.0697806615516234,
+          -0.006394148064857837,
+          -0.8401401701112613
+        ],
+        "max": [
+          1.0847901863592218,
+          3.082397381966641,
+          1.0056722777580984
+        ]
+      },
+      "triangles": 188,
+      "meshCount": 9,
+      "sha256": "1bce2da75cef15db4f8001b3046ca1dfbcdfad944bde4fd7a60a59aff703e821",
+      "bytes": 23424,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "tree_dead_a",
+      "file": "tree_dead_a.glb",
+      "category": "tree",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.5586496051078466,
+          -0.006912036297552383,
+          -0.16997058632674744
+        ],
+        "max": [
+          0.6568514009323689,
+          2.151817008823595,
+          0.3108951385057281
+        ]
+      },
+      "triangles": 88,
+      "meshCount": 4,
+      "sha256": "733660c452e8cc71290969aae8ffb7a3dc62c56f6e411a75f56a81b51fb484a0",
+      "bytes": 10832,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "stump_a",
+      "file": "stump_a.glb",
+      "category": "prop",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.2924783736545471,
+          0.0,
+          -0.3923909236273085
+        ],
+        "max": [
+          0.4369582306227121,
+          0.44,
+          0.39229553910268644
+        ]
+      },
+      "triangles": 116,
+      "meshCount": 5,
+      "sha256": "811426c71ca0cc66ff24a10a2337171ea4c5800a0a54951ef06227e4f5fc8a8e",
+      "bytes": 13976,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "fallen_log_a",
+      "file": "fallen_log_a.glb",
+      "category": "prop",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.9,
+          -0.004734861558182951,
+          -0.18920346225950802
+        ],
+        "max": [
+          0.915,
+          0.4708118267934438,
+          0.21
+        ]
+      },
+      "triangles": 76,
+      "meshCount": 3,
+      "sha256": "00ccf4ed29a32fbdab36c4bedfc48e0d76cdc913c05c8a854c75874d9a5a903b",
+      "bytes": 9288,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "bush_a",
+      "file": "bush_a.glb",
+      "category": "foliage",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.6152927631871203,
+          -0.009158584355194399,
+          -0.4969757630820259
+        ],
+        "max": [
+          0.560195634198444,
+          0.6385788241150187,
+          0.36151150689352507
+        ]
+      },
+      "triangles": 60,
+      "meshCount": 3,
+      "sha256": "f59a0cc6c83a26ceb1421269afe93ed1763912cb740a599a515ad7deb81fd12c",
+      "bytes": 8032,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "reeds_a",
+      "file": "reeds_a.glb",
+      "category": "foliage",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.16419504905557844,
+          -0.0014195049055578458,
+          -0.152
+        ],
+        "max": [
+          0.2546996562658722,
+          0.98,
+          0.14302379873562254
+        ]
+      },
+      "triangles": 240,
+      "meshCount": 12,
+      "sha256": "e04eb4e1b53008802053511c1c7ac74c2446e7f24aff531951e87b1ad170139f",
+      "bytes": 29580,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "water_tile_4m",
+      "file": "water_tile_4m.glb",
+      "category": "water",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -2.0,
+          0.035,
+          -2.0
+        ],
+        "max": [
+          2.0,
+          0.046,
+          2.0
+        ]
+      },
+      "triangles": 62,
+      "meshCount": 6,
+      "sha256": "5bc9abfd7186b66c4c9b91b4f1b2c46a139dd9a40178f8758a0badd224e9e78c",
+      "bytes": 9992,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "water_pond_small",
+      "file": "water_pond_small.glb",
+      "category": "water",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -1.4839826036119843,
+          0.035,
+          -1.0878805747905833
+        ],
+        "max": [
+          1.4327576275254954,
+          0.04,
+          1.0934602591868234
+        ]
+      },
+      "triangles": 96,
+      "meshCount": 4,
+      "sha256": "0f597cb5926faaa445c0b99eddc9302b07a9fbcdb049e4aaa2710a518015ae00",
+      "bytes": 11300,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "water_shore_strip",
+      "file": "water_shore_strip.glb",
+      "category": "water",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -2.0,
+          0.025,
+          -0.275
+        ],
+        "max": [
+          2.0,
+          0.0475,
+          0.24
+        ]
+      },
+      "triangles": 14,
+      "meshCount": 2,
+      "sha256": "166938abbf84a89e0e16b8a25c32fa0b05dc3dc2d2e310a97fe5c5ea82ae6e94",
+      "bytes": 3020,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "water_ripple_ring",
+      "file": "water_ripple_ring.glb",
+      "category": "effect",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.39,
+          0.02,
+          -0.39
+        ],
+        "max": [
+          0.39,
+          0.02,
+          0.39
+        ]
+      },
+      "triangles": 48,
+      "meshCount": 1,
+      "sha256": "32e1a0759c4391d9c0e3dff8d6b76fe7e67290742d6dd7cbe6f0b7d315eb9726",
+      "bytes": 5156,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "projectile_arrow_v2",
+      "file": "projectile_arrow_v2.glb",
+      "category": "projectile",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
+      "bounds": {
+        "min": [
+          -0.13890381056766582,
+          -0.10937149937394267,
+          -0.76
+        ],
+        "max": [
+          0.13890381056766576,
+          0.15,
+          0.56
+        ]
+      },
+      "triangles": 58,
+      "meshCount": 5,
+      "sha256": "1343c4e9fb5b2b73e556ec906e4f5edca015345099540e9d8e2288cc641dc834",
+      "bytes": 9264,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "projectile_flame_orb_v2",
+      "file": "projectile_flame_orb_v2.glb",
+      "category": "projectile",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
+      "bounds": {
+        "min": [
+          -0.1956496859209692,
+          -0.1956496859209692,
+          -0.407597621252806
+        ],
+        "max": [
+          0.1956496859209692,
+          0.1956496859209692,
+          0.6
+        ]
+      },
+      "triangles": 70,
+      "meshCount": 5,
+      "sha256": "e1d2e41c419f42b561ef46557bf612d838a484fb656a58c50afaebb0702dabfd",
+      "bytes": 10376,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "projectile_toxic_spit",
+      "file": "projectile_toxic_spit.glb",
+      "category": "projectile",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
+      "bounds": {
+        "min": [
+          -0.1446106374198468,
+          -0.127597621252806,
+          -0.31266270208801
+        ],
+        "max": [
+          0.1446106374198468,
+          0.133798810626403,
+          0.6080520646681632
+        ]
+      },
+      "triangles": 100,
+      "meshCount": 5,
+      "sha256": "dd9f8e506f1bcbfca18a1165c97e183a37ae80542ed56e3b891aee11ca55ce01",
+      "bytes": 12752,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "projectile_ember_bolt",
+      "file": "projectile_ember_bolt.glb",
+      "category": "projectile",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
+      "bounds": {
+        "min": [
+          -0.17,
+          -0.14722431864335458,
+          -0.42415619400448956
+        ],
+        "max": [
+          0.17,
+          0.14722431864335458,
+          0.55
+        ]
+      },
+      "triangles": 32,
+      "meshCount": 2,
+      "sha256": "13fb19c9ee4a89cb1a2740a3a1e70529c203f12b1bb1095992facfbaaf45b357",
+      "bytes": 4776,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "fx_blade_arc_v2",
+      "file": "fx_blade_arc_v2.glb",
+      "category": "effect",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
+      "bounds": {
+        "min": [
+          -0.7589157199741379,
+          0,
+          -0.9240865701267648
+        ],
+        "max": [
+          0.7589157199741379,
+          0.003,
+          -0.33916757234596157
+        ]
+      },
+      "triangles": 76,
+      "meshCount": 2,
+      "sha256": "51a701ebcca11e9e214c048f428c6867bdbc519056a7ca5410e97392c7bdb02c",
+      "bytes": 8284,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "fx_impact_sparks",
+      "file": "fx_impact_sparks.glb",
+      "category": "effect",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.2545118146724224,
+          -0.0020780970022447887,
+          -0.2722619852994794
+        ],
+        "max": [
+          0.27827928637584176,
+          0.3620780970022448,
+          0.2722619852994794
+        ]
+      },
+      "triangles": 140,
+      "meshCount": 7,
+      "sha256": "0326ff92fb74cbd1339912d11691f3f76ec24e944f32cdd52e7c907e6254400f",
+      "bytes": 17608,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "fx_smoke_puff",
+      "file": "fx_smoke_puff.glb",
+      "category": "effect",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -0.2943632645977472,
+          0.0036335427715431245,
+          -0.2618889222222551
+        ],
+        "max": [
+          0.2749375371186517,
+          0.6899008235959548,
+          0.2632258541211642
+        ]
+      },
+      "triangles": 80,
+      "meshCount": 4,
+      "sha256": "674f01537f3f818beb4e423f5e701e243e551a6d173dfe28ed0cf727bda70396",
+      "bytes": 10148,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    }
+  ]
+}

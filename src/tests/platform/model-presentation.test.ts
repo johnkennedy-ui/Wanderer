@@ -55,28 +55,28 @@ const playerOnlySnapshot = () => ({
 describe("model presentation assets", () => {
   it("maps every supplied GLB and respects the Vite base path", () => {
     const expected: readonly [ModelAssetKey, string][] = [
-      ["player-knight", "player_knight.glb"],
-      ["player-wizard", "player_wizard.glb"],
-      ["player-archer", "player_archer.glb"],
-      ["enemy-scout", "enemy_scout.glb"],
-      ["enemy-brute", "enemy_brute.glb"],
-      ["enemy-spitter", "enemy_spitter.glb"],
-      ["enemy-elite", "enemy_elite.glb"],
-      ["enemy-boss", "enemy_ember_wyrm.glb"],
-      ["projectile-knight", "projectile_knight_blade_arc.glb"],
-      ["projectile-wizard", "projectile_wizard_flame_orb.glb"],
-      ["projectile-archer", "projectile_archer_arrow.glb"],
-      ["building-Campfire", "building_campfire.glb"],
-      ["building-Workshop", "building_workshop.glb"],
-      ["building-Farm", "building_farm.glb"],
-      ["building-Storage", "building_storage.glb"],
-      ["building-Healer", "building_healing_hut.glb"],
+      ["player-knight", "winding-fixed-v1/player_knight.glb"],
+      ["player-wizard", "winding-fixed-v1/player_wizard.glb"],
+      ["player-archer", "actor-geometry-v2/player_archer.glb"],
+      ["enemy-scout", "actor-geometry-v2/enemy_scout.glb"],
+      ["enemy-brute", "actor-geometry-v2/enemy_brute.glb"],
+      ["enemy-spitter", "winding-fixed-v1/enemy_spitter.glb"],
+      ["enemy-elite", "winding-fixed-v1/enemy_elite.glb"],
+      ["enemy-boss", "winding-fixed-v1/enemy_ember_wyrm.glb"],
+      ["projectile-knight", "expansion-v1/fx_blade_arc_v2.glb"],
+      ["projectile-wizard", "expansion-v1/projectile_flame_orb_v2.glb"],
+      ["projectile-archer", "expansion-v1/projectile_arrow_v2.glb"],
+      ["building-Campfire", "winding-fixed-v1/building_campfire.glb"],
+      ["building-Workshop", "winding-fixed-v1/building_workshop.glb"],
+      ["building-Farm", "winding-fixed-v1/building_farm.glb"],
+      ["building-Storage", "winding-fixed-v1/building_storage.glb"],
+      ["building-Healer", "winding-fixed-v1/building_healing_hut.glb"],
     ];
     expect(expected.map(([key]) => modelFilenameFor(key))).toEqual(
       expected.map(([, filename]) => filename),
     );
     expect(modelAssetUrlFor("enemy-boss", "/Wanderer/")).toBe(
-      "/Wanderer/assets/models/enemy_ember_wyrm.glb",
+      "/Wanderer/assets/models/winding-fixed-v1/enemy_ember_wyrm.glb",
     );
     expect(projectileModelFor("slash")).toBe("projectile-knight");
     expect(projectileModelFor("magic")).toBe("projectile-wizard");
@@ -104,6 +104,65 @@ describe("model presentation assets", () => {
       failures: 0,
     });
     cache.dispose();
+  });
+
+  it("shares the same typed template cache with environment clones and leaves disposal to its owner", async () => {
+    const { loader, calls } = loaderDouble();
+    const cache = new ModelTemplateCache(loader, "/Wanderer/");
+    const first = cache.acquire("environment-tree-pine-a");
+    const second = cache.acquire("environment-tree-pine-a");
+    expect(calls.map((call) => call.url)).toEqual([
+      "/Wanderer/assets/models/expansion-v1/tree_pine_a.glb",
+    ]);
+    calls[0].onLoad({ scene: modelScene() });
+    const [one, two] = await Promise.all([first, second]);
+    expect(one).not.toBe(two);
+    const projection = new ModelProjection(cache, () => {}, false);
+    projection.dispose();
+    expect(cache.diagnostics()).toMatchObject({
+      templates: 1,
+      disposed: false,
+    });
+    cache.dispose();
+    expect(cache.diagnostics()).toMatchObject({ templates: 0, disposed: true });
+  });
+
+  it("binds meshes once and disposes reparented weapon resources when changing class", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const frame = playerOnlySnapshot();
+    projection.render(frame, vi.fn());
+    const template = modelScene();
+    const sword = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.9),
+      new THREE.MeshStandardMaterial(),
+    );
+    sword.name = "sword";
+    template.add(sword);
+    calls[0].onLoad({ scene: template });
+    await Promise.resolve();
+    await Promise.resolve();
+    const poseRoot = projection.group.getObjectByName(
+      "pose:player",
+    ) as THREE.Group;
+    const model = poseRoot.children[0] as THREE.Group;
+    const boundSword = poseRoot.getObjectByName("sword") as THREE.Mesh;
+    expect(boundSword.parent).not.toBe(model);
+    const geometry = vi.spyOn(boundSword.geometry, "dispose");
+    const material = vi.spyOn(boundSword.material as THREE.Material, "dispose");
+    const lookup = vi.spyOn(model, "getObjectByProperty");
+    const traversal = vi.spyOn(model, "traverse");
+    for (const presentationElapsed of [0.1, 0.2, 0.3]) {
+      projection.render({ ...frame, presentationElapsed }, vi.fn());
+      projection.diagnostics();
+    }
+    expect(lookup).not.toHaveBeenCalled();
+    expect(traversal).not.toHaveBeenCalled();
+    projection.render({ ...frame, playerClass: "wizard" }, vi.fn());
+    expect(geometry).toHaveBeenCalledTimes(1);
+    expect(material).toHaveBeenCalledTimes(1);
+    expect(projection.diagnostics().instances).toBe(1);
+    projection.dispose();
   });
 
   it("retains geometric fallback on failure and resolves pending loads during disposal", async () => {
@@ -155,7 +214,7 @@ describe("model presentation assets", () => {
       vi.fn(),
     );
     expect(calls.map((call) => call.url)).toEqual([
-      "/Wanderer/assets/models/player_archer.glb",
+      "/Wanderer/assets/models/actor-geometry-v2/player_archer.glb",
     ]);
     projection.dispose();
   });
@@ -181,9 +240,130 @@ describe("model presentation assets", () => {
     const player = projection.group.getObjectByName("model:player");
     const projectile = projection.group.getObjectByName("model:projectile:1");
     expect(player?.position.toArray()).toEqual([3, 0, 4]);
-    expect(player?.rotation.y).toBe(Math.PI);
+    expect(player?.rotation.y).toBe(0);
     expect(projectile?.position.toArray()).toEqual([4, 0.72, -2]);
-    expect(projectile?.rotation.y).toBe(Math.atan2(4, 2));
+    expect(projectile?.rotation.y).toBe(Math.atan2(4, 2) - Math.PI);
+    projection.dispose();
+  });
+
+  it("clears stale movement facing on reset/teleport and retains a projectile tangent at zero displacement", () => {
+    const { loader } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    projection.render(base, vi.fn());
+    projection.render(
+      {
+        ...base,
+        presentationElapsed: 1,
+        player: { ...base.player, position: { x: 3, y: 0 } },
+      },
+      vi.fn(),
+    );
+    expect(
+      projection.group.getObjectByName("model:player")?.rotation.y,
+    ).toBeCloseTo(-Math.PI / 2);
+    projection.render(
+      {
+        ...base,
+        presentationElapsed: 1.1,
+        presentationResetId: base.presentationResetId + 1,
+        player: { ...base.player, position: { x: 40, y: 40 } },
+      },
+      vi.fn(),
+    );
+    expect(projection.group.getObjectByName("model:player")?.rotation.y).toBe(
+      0,
+    );
+
+    const projectileSnapshot = {
+      ...base,
+      projectiles: [
+        {
+          ...rendererSnapshot().projectiles[0],
+          origin: { x: 0, y: 0 },
+          targetPosition: { x: 2, y: 0 },
+          progress: 0.5,
+        },
+      ],
+    };
+    projection.render(projectileSnapshot, vi.fn());
+    projection.render(
+      {
+        ...projectileSnapshot,
+        presentationElapsed: 1.2,
+        projectiles: [{ ...projectileSnapshot.projectiles[0], progress: 0.75 }],
+      },
+      vi.fn(),
+    );
+    const tangent =
+      projection.group.getObjectByName("model:projectile:1")?.rotation.y;
+    projection.render(
+      {
+        ...projectileSnapshot,
+        presentationElapsed: 1.3,
+        projectiles: [{ ...projectileSnapshot.projectiles[0], progress: 0.75 }],
+      },
+      vi.fn(),
+    );
+    expect(
+      projection.group.getObjectByName("model:projectile:1")?.rotation.y,
+    ).toBe(tangent);
+    projection.dispose();
+  });
+
+  it("wires distance-based motion, freezes paused poses, and suppresses stale teleport cues until the next attack", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    projection.render(base, vi.fn());
+    const template = modelScene();
+    template.children[0].name = "sword";
+    calls[0].onLoad({ scene: template });
+    await Promise.resolve();
+    await Promise.resolve();
+    const moved = {
+      ...base,
+      presentationElapsed: 0.1,
+      player: { ...base.player, position: { x: 0.2, y: 0 } },
+    };
+    projection.render(moved, vi.fn());
+    const pose = projection.group.getObjectByName("pose:player")!;
+    const bob = pose.position.y;
+    expect(bob).not.toBe(0);
+    projection.render(moved, vi.fn());
+    expect(pose.position.y).toBe(bob);
+    projection.render({ ...moved, presentationElapsed: 0.2 }, vi.fn());
+    expect(pose.position.y).toBe(0);
+    const teleported = {
+      ...moved,
+      presentationElapsed: 0.3,
+      player: { ...base.player, position: { x: 30, y: 30 } },
+      attackCues: [
+        {
+          actorId: "player",
+          sequence: 10,
+          direction: { x: 1, y: 0 },
+          style: "slash" as const,
+          age: 0.1,
+        },
+      ],
+    };
+    projection.render(teleported, vi.fn());
+    projection.render({ ...teleported, presentationElapsed: 0.4 }, vi.fn());
+    expect(pose.position.y).toBe(0);
+    expect(projection.group.getObjectByName("model:player")?.rotation.y).toBe(
+      0,
+    );
+    expect(pose.getObjectByName("weaponPivot")?.rotation.x).toBe(0);
+    projection.render(
+      {
+        ...teleported,
+        presentationElapsed: 0.5,
+        attackCues: [{ ...teleported.attackCues[0], sequence: 11 }],
+      },
+      vi.fn(),
+    );
+    expect(pose.getObjectByName("weaponPivot")?.rotation.x).not.toBe(0);
     projection.dispose();
   });
 

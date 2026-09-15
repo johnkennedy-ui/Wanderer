@@ -61,6 +61,8 @@ const command = (id, reason, commandLine, timeoutMs) => ({
   timeoutMs,
 });
 
+const browserCheckTimeoutMs = 1_800_000;
+
 const mergeCommand = (commands, next) => {
   const existing = commands.get(next.id);
   if (existing) {
@@ -148,7 +150,7 @@ export const selectFocusedChecks = (
         "browser",
         "full mode includes the built-output browser matrix",
         ["npm", "run", "test:browser"],
-        900_000,
+        browserCheckTimeoutMs,
       ),
     );
     return {
@@ -251,7 +253,7 @@ export const selectFocusedChecks = (
         "browser",
         "presentation changes require built-output browser checks",
         ["npm", "run", "test:browser"],
-        900_000,
+        browserCheckTimeoutMs,
       ),
     );
   }

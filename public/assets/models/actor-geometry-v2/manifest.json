@@ -1,0 +1,41 @@
+{
+  "pack": "actor-geometry-v2",
+  "version": 2,
+  "source": "original actor identities with connected authored weapon geometry",
+  "assets": [
+    {
+      "file": "enemy_brute.glb",
+      "sha256": "dfa7c77a7cb1faef61ce3e8c79caa7945dacd24d9dcbfa89ba7aa9b6b3c285e6"
+    },
+    {
+      "file": "enemy_scout.glb",
+      "sha256": "e1b9896decc1d255be0facc81a581cb129ca6764343f5c53cea9d162f7f0787b"
+    },
+    {
+      "file": "player_archer.glb",
+      "sha256": "7d5df585987d126d70e80640b84a306a2874c08f088f72c8a8c803033c87a240"
+    }
+  ],
+  "grips": {
+    "enemy_scout": [
+      0.34,
+      0.55,
+      0.0
+    ],
+    "enemy_brute": [
+      0.78,
+      0.58,
+      0.05
+    ],
+    "player_archer": [
+      0.55,
+      0.6,
+      0.0
+    ]
+  },
+  "forward": [
+    0,
+    0,
+    -1
+  ]
+}

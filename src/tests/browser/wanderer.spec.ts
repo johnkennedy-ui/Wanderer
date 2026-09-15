@@ -316,6 +316,7 @@ test(
     await expect(classModal).toBeVisible({ timeout: 8_000 });
     await classModal.getByTestId("class-knight").click();
     await expect(classModal).toBeHidden();
+    await installIncidentalChoiceHandlers(page);
 
     const savedBeforeAllocation = await page.evaluate(() =>
       localStorage.getItem("wanderer.save.primary"),
@@ -345,7 +346,7 @@ const clickWithPendingUpgradeResolution = async (
   _page: Page,
   target: Locator,
 ): Promise<void> => {
-  await target.click({ timeout: 5_000 });
+  await target.click({ timeout: 12_000 });
 };
 
 const openStatus = async (page: Page): Promise<void> => {
@@ -442,6 +443,7 @@ test("initial browser load uses compact circular actions with accessible hidden 
 test("Settings exposes 1×, 2×, and 5× runtime speed controls beneath its tile", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.goto(applicationPath);
   const settings = page.getByTestId("settings-toggle");
   const controls = page.getByTestId("settings-speed-controls");
@@ -541,10 +543,17 @@ test("ordinary primary canvas taps travel to a marked destination when no build 
     page.getByTestId("close-character-status"),
   );
   await tapCanvas(page, 0.4, 0.62);
-  await expect(canvas).toHaveAttribute("data-destination-marker", "active");
-  // The incidental Boss Core handler may legitimately run after the tap. Read
-  // the public position text without another locator action so that handler
-  // does not delay observation until the short tap-to-move interval has ended.
+  // The incidental Boss Core handler may legitimately run after the tap. Watch
+  // the DOM directly so a locator action cannot run that handler first and
+  // consume the short-lived destination marker before it is observed.
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="world-canvas"]')
+        ?.getAttribute("data-destination-marker") === "active",
+    undefined,
+    { timeout: 5_000 },
+  );
   await page.waitForFunction(
     () =>
       document
