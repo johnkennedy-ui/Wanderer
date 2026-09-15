@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { GameRendererSnapshot } from "../../domain/notices";
+import { calibratedYawFor, shortestYawTowards } from "./modelFacingHelpers";
 import type {
   AttackStyle,
   BuildingKind,
@@ -223,6 +224,8 @@ interface ModelDescriptor {
   readonly height: number;
   readonly scale: number;
   readonly rotation: number;
+  readonly facing?: boolean;
+  readonly tangent?: boolean;
   readonly playerHitRecovery?: boolean;
 }
 
@@ -232,6 +235,11 @@ interface ModelInstance {
   model: THREE.Group | undefined;
   playerHitRecovery: boolean;
   fallbackVisible: boolean;
+  yaw: number;
+  targetYaw: number;
+  lastPosition: Vector2;
+  lastElapsed: number;
+  resetId: number;
 }
 
 const playerModelFor = (
@@ -261,7 +269,8 @@ export class ModelProjection {
         position: snapshot.player.position,
         height: 0,
         scale: 0.78,
-        rotation: Math.PI,
+        rotation: 0,
+        facing: true,
         playerHitRecovery: snapshot.playerHitRecovery.active,
       },
       ...snapshot.visibleChunks.flatMap((chunk) =>
@@ -289,7 +298,8 @@ export class ModelProjection {
         position: enemy.position,
         height: 0,
         scale: enemy.isWaveBoss ? 0.9 : 0.72,
-        rotation: Math.PI,
+        rotation: 0,
+        facing: true,
       })),
       ...snapshot.projectiles.map((projectile) => {
         const position = {
@@ -308,10 +318,11 @@ export class ModelProjection {
           position,
           height: 0.72,
           scale: projectile.style === "arrow" ? 0.55 : 0.5,
-          rotation: Math.atan2(
-            projectile.targetPosition.x - projectile.origin.x,
-            -(projectile.targetPosition.y - projectile.origin.y),
-          ),
+          rotation: calibratedYawFor({
+            x: projectile.targetPosition.x - projectile.origin.x,
+            y: projectile.targetPosition.y - projectile.origin.y,
+          }),
+          tangent: true,
         };
       }),
       ...snapshot.crescentAttacks.map((attack) => ({
@@ -320,12 +331,12 @@ export class ModelProjection {
         position: attack.origin,
         height: 0.08,
         scale: Math.max(0.45, attack.radius * 0.28),
-        rotation: Math.atan2(attack.direction.x, -attack.direction.y),
+        rotation: calibratedYawFor(attack.direction, { x: 0, y: 1 }),
       })),
     ];
     const visible = new Set(descriptors.map((descriptor) => descriptor.id));
     for (const descriptor of descriptors)
-      this.present(descriptor, setFallbackModelVisible);
+      this.present(descriptor, snapshot, setFallbackModelVisible);
     for (const [id, instance] of this.instances)
       if (!visible.has(id)) this.remove(id, instance, setFallbackModelVisible);
   }
@@ -365,6 +376,10 @@ export class ModelProjection {
 
   private present(
     descriptor: ModelDescriptor,
+    snapshot: Pick<
+      GameRendererSnapshot,
+      "presentationElapsed" | "presentationResetId"
+    >,
     setFallbackModelVisible: (id: string, visible: boolean) => void,
   ): void {
     let instance = this.instances.get(descriptor.id);
@@ -381,6 +396,11 @@ export class ModelProjection {
         model: undefined,
         playerHitRecovery: descriptor.playerHitRecovery === true,
         fallbackVisible: true,
+        yaw: descriptor.rotation,
+        targetYaw: descriptor.rotation,
+        lastPosition: { ...descriptor.position },
+        lastElapsed: snapshot.presentationElapsed,
+        resetId: snapshot.presentationResetId,
       };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -407,7 +427,33 @@ export class ModelProjection {
       descriptor.height,
       -descriptor.position.y,
     );
-    instance.root.rotation.set(0, descriptor.rotation, 0);
+    if (descriptor.tangent === true) {
+      const movement = {
+        x: descriptor.position.x - instance.lastPosition.x,
+        y: descriptor.position.y - instance.lastPosition.y,
+      };
+      if (Math.hypot(movement.x, movement.y) > 0.0001)
+        instance.yaw = calibratedYawFor(movement);
+      instance.lastPosition = { ...descriptor.position };
+    } else if (descriptor.facing === true) {
+      const movement = {
+        x: descriptor.position.x - instance.lastPosition.x,
+        y: descriptor.position.y - instance.lastPosition.y,
+      };
+      if (Math.hypot(movement.x, movement.y) > 0.0001)
+        instance.targetYaw = calibratedYawFor(movement);
+      const reset = instance.resetId !== snapshot.presentationResetId;
+      const delta = reset
+        ? 0
+        : snapshot.presentationElapsed - instance.lastElapsed;
+      instance.yaw = reset
+        ? instance.targetYaw
+        : shortestYawTowards(instance.yaw, instance.targetYaw, delta);
+      instance.lastPosition = { ...descriptor.position };
+      instance.lastElapsed = snapshot.presentationElapsed;
+      instance.resetId = snapshot.presentationResetId;
+    } else instance.yaw = descriptor.rotation;
+    instance.root.rotation.set(0, instance.yaw, 0);
     instance.root.scale.setScalar(descriptor.scale);
     this.syncVisibility(descriptor.id, instance, setFallbackModelVisible);
   }

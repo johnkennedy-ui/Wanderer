@@ -163,6 +163,10 @@ export interface PlayerHitRecoveryPresentation {
 
 /** The disposable Three renderer receives only world-projection fields. */
 export interface GameRendererSnapshot {
+  /** Simulation-owned presentation time; rendering never reads a wall clock. */
+  readonly presentationElapsed: number;
+  /** Changes when the session replaces its runtime world. */
+  readonly presentationResetId: number;
   readonly player: PlayerState;
   /** Authoritative selected class for disposable player presentation; never saved by rendering. */
   readonly playerClass: PlayerClass | null;

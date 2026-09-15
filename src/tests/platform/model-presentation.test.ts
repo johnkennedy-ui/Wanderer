@@ -181,9 +181,9 @@ describe("model presentation assets", () => {
     const player = projection.group.getObjectByName("model:player");
     const projectile = projection.group.getObjectByName("model:projectile:1");
     expect(player?.position.toArray()).toEqual([3, 0, 4]);
-    expect(player?.rotation.y).toBe(Math.PI);
+    expect(player?.rotation.y).toBe(0);
     expect(projectile?.position.toArray()).toEqual([4, 0.72, -2]);
-    expect(projectile?.rotation.y).toBe(Math.atan2(4, 2));
+    expect(projectile?.rotation.y).toBe(Math.atan2(4, 2) - Math.PI);
     projection.dispose();
   });
 

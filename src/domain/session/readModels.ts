@@ -63,6 +63,8 @@ export interface ReadModelCrescentAttackInput {
 
 /** Explicit facts from which the two narrow presentation views are built. */
 export interface PresentationProjectionInput {
+  readonly presentationElapsed: number;
+  readonly presentationResetId: number;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly playerStats: PlayerStats;
@@ -207,6 +209,8 @@ export const projectGamePresentation = (
     notice,
   };
   const renderer = {
+    presentationElapsed: input.presentationElapsed,
+    presentationResetId: input.presentationResetId,
     player,
     playerClass: input.classProgression.playerClass,
     playerHitRecovery,

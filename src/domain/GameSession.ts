@@ -127,6 +127,7 @@ export class GameSession {
   private input!: MoveCommand;
   private destination!: Vector2 | null;
   private elapsed!: number;
+  private presentationResetId = 0;
   private attackElapsed!: number;
   private playerHitRecoveryEndsAt = 0;
   private startedWaveIndices = new Set<number>();
@@ -146,6 +147,7 @@ export class GameSession {
     this.ensureNeighborhoodEnemies();
   }
   private replaceState(state: SessionState): void {
+    this.presentationResetId += 1;
     this.chunkRecipes.clear();
     this.world = state.world;
     this.player = state.player;
@@ -441,6 +443,8 @@ export class GameSession {
       this.classProgression,
     ).filter((effect) => !effect.startsWith("Storage"));
     return projectGamePresentation({
+      presentationElapsed: this.elapsed,
+      presentationResetId: this.presentationResetId,
       world: this.world,
       player: this.player,
       playerStats: playerStatsFor(this.classProgression),
