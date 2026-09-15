@@ -90,12 +90,14 @@ test("a missing GLB falls back without preventing active gameplay", async ({
   page,
 }, testInfo) => {
   const faults = captureBrowserFaults(page);
-  await page.route("**/assets/models/player_wizard.glb", async (route) =>
-    route.fulfill({
-      status: 404,
-      contentType: "text/plain",
-      body: "missing test model",
-    }),
+  await page.route(
+    "**/assets/models/winding-fixed-v1/player_wizard.glb",
+    async (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: "text/plain",
+        body: "missing test model",
+      }),
   );
   await primeModelWorld(page, "wizard", ["Campfire"]);
   await page.goto(applicationPath, { waitUntil: "commit" });
@@ -116,6 +118,7 @@ test("a missing GLB falls back without preventing active gameplay", async ({
   await attachStableModelScreenshot(page, testInfo, "missing-model-fallback");
   expectOnlyMissingModelFaults(
     faults,
-    new URL("assets/models/player_wizard.glb", page.url()).href,
+    new URL("assets/models/winding-fixed-v1/player_wizard.glb", page.url())
+      .href,
   );
 });

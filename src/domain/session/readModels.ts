@@ -72,6 +72,7 @@ export interface PresentationProjectionInput {
   readonly resources: ReadonlyResourceBag;
   readonly buildings: readonly BuildingState[];
   readonly enemies: ReadonlyMap<string, ReadModelEnemyInput>;
+  readonly attackPresentation: readonly import("./sessionState").RuntimeAttackPresentation[];
   readonly projectiles: readonly ReadModelProjectileInput[];
   readonly crescentAttacks: readonly ReadModelCrescentAttackInput[];
   readonly floorDrops: readonly FloorDropState[];
@@ -167,6 +168,15 @@ export const projectGamePresentation = (
       arcCosine: attack.arcCosine,
       progress: Math.min(1, attack.elapsed / 0.18),
     }));
+  const attackCues = input.attackPresentation
+    .filter((attack) => attack.committedAt >= input.presentationElapsed - 0.45)
+    .map((attack) => ({
+      actorId: attack.actorId,
+      sequence: attack.sequence,
+      direction: copyVector(attack.direction),
+      ...(attack.style === undefined ? {} : { style: attack.style }),
+      age: input.presentationElapsed - attack.committedAt,
+    }));
   const floorDrops = input.floorDrops
     .filter((drop) =>
       visibleChunkKeys.has(chunkKey(chunkCoordinateFor(drop.position))),
@@ -217,6 +227,7 @@ export const projectGamePresentation = (
     enemies,
     projectiles,
     crescentAttacks,
+    attackCues,
     floorDrops,
     weaponRelicDrops,
     visibleBuildings,

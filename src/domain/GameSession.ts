@@ -42,6 +42,7 @@ import { advanceProjectileCombatPhase } from "./session/projectileCombatRuntime"
 import { resolveMeleeCombatPhase } from "./session/meleeCombatRuntime";
 import type {
   RuntimeEnemy,
+  RuntimeAttackPresentation,
   RuntimeCrescentAttack,
   RuntimeProjectile,
   SessionState,
@@ -111,6 +112,7 @@ export class GameSession {
   private resources!: ResourceBag;
   private settlement!: SettlementRuntime;
   private enemies!: Map<string, RuntimeEnemy>;
+  private attackPresentation!: RuntimeAttackPresentation[];
   private projectiles!: RuntimeProjectile[];
   private crescentAttacks!: RuntimeCrescentAttack[];
   private floorDrops!: FloorDropState[];
@@ -161,6 +163,7 @@ export class GameSession {
       this.chunkRecipes.get,
     );
     this.enemies = state.enemies;
+    this.attackPresentation = state.attackPresentation;
     this.projectiles = state.projectiles;
     this.crescentAttacks = state.crescentAttacks;
     this.floorDrops = state.floorDrops;
@@ -207,6 +210,9 @@ export class GameSession {
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
+    this.attackPresentation = this.attackPresentation.filter(
+      (attack) => attack.committedAt >= this.elapsed - 0.45,
+    );
     this.updateWaveLifecycle();
     this.updateProjectiles(delta);
     const movementDistance = this.playerMoveDistanceFor(delta);
@@ -459,6 +465,7 @@ export class GameSession {
       buildRadius,
       destination: this.destination,
       enemies: this.enemies,
+      attackPresentation: this.attackPresentation,
       projectiles: this.projectiles,
       crescentAttacks: this.crescentAttacks,
       floorDrops: this.floorDrops,
@@ -635,6 +642,8 @@ export class GameSession {
     this.nextCrescentSerial = result.nextCrescentSerial;
     this.nextAttackEventSerial = result.nextAttackEventSerial;
     this.combatStatus = result.combatStatus;
+    if (result.presentationAttack !== null)
+      this.recordPresentationAttacks([result.presentationAttack]);
     if (result.meleeImpacts.length > 0)
       this.updateMeleeCombat(result.meleeImpacts);
   }
@@ -809,8 +818,23 @@ export class GameSession {
     this.destination = result.destination;
     this.attackElapsed = result.attackElapsed;
     this.playerHitRecoveryEndsAt = result.playerHitRecoveryEndsAt;
+    this.recordPresentationAttacks(result.presentationAttacks);
     if (result.notice !== null) this.notice = result.notice;
-    if (result.resetHarvest) this.settlement.resetHarvest();
+    if (result.resetHarvest) {
+      this.presentationResetId += 1;
+      this.attackPresentation = [];
+      this.settlement.resetHarvest();
+    }
+  }
+  /** Keeps only a short, renderer-only recovery window for each committed attack. */
+  private recordPresentationAttacks(
+    attacks: readonly RuntimeAttackPresentation[],
+  ): void {
+    if (attacks.length === 0) return;
+    this.attackPresentation = [
+      ...this.attackPresentation,
+      ...attacks.map((attack) => ({ ...attack, committedAt: this.elapsed })),
+    ].slice(-32);
   }
   private collectNearbyFloorDrops(): void {
     if (this.floorDrops.length === 0) return;

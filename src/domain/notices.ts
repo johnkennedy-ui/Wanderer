@@ -161,6 +161,15 @@ export interface PlayerHitRecoveryPresentation {
   readonly flashOn: boolean;
 }
 
+/** Copied combat commitment for renderer release/recovery; never persisted. */
+export interface AttackPresentationCue {
+  readonly actorId: string;
+  readonly sequence: number;
+  readonly direction: Vector2;
+  readonly style?: "basic" | "slash" | "magic" | "arrow";
+  readonly age: number;
+}
+
 /** The disposable Three renderer receives only world-projection fields. */
 export interface GameRendererSnapshot {
   /** Simulation-owned presentation time; rendering never reads a wall clock. */
@@ -174,6 +183,7 @@ export interface GameRendererSnapshot {
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
   readonly crescentAttacks: readonly CrescentAttackState[];
+  readonly attackCues: readonly AttackPresentationCue[];
   readonly floorDrops: readonly FloorDropState[];
   readonly weaponRelicDrops: readonly WeaponRelicDropState[];
   readonly visibleBuildings: readonly BuildingState[];

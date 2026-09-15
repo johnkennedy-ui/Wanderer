@@ -2,6 +2,11 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import { calibratedYawFor, shortestYawTowards } from "./modelFacingHelpers";
+import {
+  applyModelPose,
+  bindModelPose,
+  type BoundModelPose,
+} from "./modelPoseHelpers";
 import type {
   AttackStyle,
   BuildingKind,
@@ -11,28 +16,28 @@ import type {
 
 export const modelAssets = Object.freeze({
   players: Object.freeze({
-    knight: "player_knight.glb",
-    wizard: "player_wizard.glb",
-    archer: "player_archer.glb",
+    knight: "winding-fixed-v1/player_knight.glb",
+    wizard: "winding-fixed-v1/player_wizard.glb",
+    archer: "actor-geometry-v2/player_archer.glb",
   }),
   enemies: Object.freeze({
-    scout: "enemy_scout.glb",
-    brute: "enemy_brute.glb",
-    spitter: "enemy_spitter.glb",
-    elite: "enemy_elite.glb",
-    boss: "enemy_ember_wyrm.glb",
+    scout: "actor-geometry-v2/enemy_scout.glb",
+    brute: "actor-geometry-v2/enemy_brute.glb",
+    spitter: "winding-fixed-v1/enemy_spitter.glb",
+    elite: "winding-fixed-v1/enemy_elite.glb",
+    boss: "winding-fixed-v1/enemy_ember_wyrm.glb",
   } satisfies Record<EnemyKind, string>),
   projectiles: Object.freeze({
-    knight: "projectile_knight_blade_arc.glb",
-    wizard: "projectile_wizard_flame_orb.glb",
-    archer: "projectile_archer_arrow.glb",
+    knight: "expansion-v1/fx_blade_arc_v2.glb",
+    wizard: "expansion-v1/projectile_flame_orb_v2.glb",
+    archer: "expansion-v1/projectile_arrow_v2.glb",
   }),
   buildings: Object.freeze({
-    Campfire: "building_campfire.glb",
-    Workshop: "building_workshop.glb",
-    Farm: "building_farm.glb",
-    Storage: "building_storage.glb",
-    Healer: "building_healing_hut.glb",
+    Campfire: "winding-fixed-v1/building_campfire.glb",
+    Workshop: "winding-fixed-v1/building_workshop.glb",
+    Farm: "winding-fixed-v1/building_farm.glb",
+    Storage: "winding-fixed-v1/building_storage.glb",
+    Healer: "winding-fixed-v1/building_healing_hut.glb",
   } satisfies Record<BuildingKind, string>),
 });
 
@@ -227,10 +232,12 @@ interface ModelDescriptor {
   readonly facing?: boolean;
   readonly tangent?: boolean;
   readonly playerHitRecovery?: boolean;
+  readonly attackCue?: GameRendererSnapshot["attackCues"][number];
 }
 
 interface ModelInstance {
   readonly root: THREE.Group;
+  readonly poseRoot: THREE.Group;
   asset: ModelAssetKey;
   model: THREE.Group | undefined;
   playerHitRecovery: boolean;
@@ -240,6 +247,7 @@ interface ModelInstance {
   lastPosition: Vector2;
   lastElapsed: number;
   resetId: number;
+  pose: BoundModelPose | undefined;
 }
 
 const playerModelFor = (
@@ -262,6 +270,12 @@ export class ModelProjection {
     setFallbackModelVisible: (id: string, visible: boolean) => void,
   ): void {
     if (this.disposed) return;
+    const attackCueByActor = new Map<
+      string,
+      GameRendererSnapshot["attackCues"][number]
+    >();
+    for (const cue of snapshot.attackCues)
+      attackCueByActor.set(cue.actorId, cue);
     const descriptors: ModelDescriptor[] = [
       {
         id: "player",
@@ -271,6 +285,7 @@ export class ModelProjection {
         scale: 0.78,
         rotation: 0,
         facing: true,
+        attackCue: attackCueByActor.get("player"),
         playerHitRecovery: snapshot.playerHitRecovery.active,
       },
       ...snapshot.visibleChunks.flatMap((chunk) =>
@@ -300,6 +315,7 @@ export class ModelProjection {
         scale: enemy.isWaveBoss ? 0.9 : 0.72,
         rotation: 0,
         facing: true,
+        attackCue: attackCueByActor.get(enemy.id),
       })),
       ...snapshot.projectiles.map((projectile) => {
         const position = {
@@ -378,7 +394,7 @@ export class ModelProjection {
     descriptor: ModelDescriptor,
     snapshot: Pick<
       GameRendererSnapshot,
-      "presentationElapsed" | "presentationResetId"
+      "presentationElapsed" | "presentationResetId" | "attackCues"
     >,
     setFallbackModelVisible: (id: string, visible: boolean) => void,
   ): void {
@@ -390,8 +406,12 @@ export class ModelProjection {
     if (instance === undefined) {
       const root = new THREE.Group();
       root.name = `model:${descriptor.id}`;
+      const poseRoot = new THREE.Group();
+      poseRoot.name = `pose:${descriptor.id}`;
+      root.add(poseRoot);
       instance = {
         root,
+        poseRoot,
         asset: descriptor.asset,
         model: undefined,
         playerHitRecovery: descriptor.playerHitRecovery === true,
@@ -401,6 +421,7 @@ export class ModelProjection {
         lastPosition: { ...descriptor.position },
         lastElapsed: snapshot.presentationElapsed,
         resetId: snapshot.presentationResetId,
+        pose: undefined,
       };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -416,7 +437,8 @@ export class ModelProjection {
           return;
         }
         expected.model = model;
-        expected.root.add(model);
+        expected.poseRoot.add(model);
+        expected.pose = bindModelPose(model, expected.poseRoot, expected.asset);
         this.syncVisibility(descriptor.id, expected, setFallbackModelVisible);
         this.onStateChange();
       });
@@ -434,15 +456,22 @@ export class ModelProjection {
       };
       if (Math.hypot(movement.x, movement.y) > 0.0001)
         instance.yaw = calibratedYawFor(movement);
+      else if (instance.lastElapsed === snapshot.presentationElapsed)
+        instance.yaw = descriptor.rotation;
       instance.lastPosition = { ...descriptor.position };
     } else if (descriptor.facing === true) {
       const movement = {
         x: descriptor.position.x - instance.lastPosition.x,
         y: descriptor.position.y - instance.lastPosition.y,
       };
-      if (Math.hypot(movement.x, movement.y) > 0.0001)
+      const teleport = Math.hypot(movement.x, movement.y) > 4;
+      const reset =
+        instance.resetId !== snapshot.presentationResetId || teleport;
+      if (reset) instance.targetYaw = descriptor.rotation;
+      if (!reset && Math.hypot(movement.x, movement.y) > 0.0001)
         instance.targetYaw = calibratedYawFor(movement);
-      const reset = instance.resetId !== snapshot.presentationResetId;
+      if (descriptor.attackCue !== undefined)
+        instance.targetYaw = calibratedYawFor(descriptor.attackCue.direction);
       const delta = reset
         ? 0
         : snapshot.presentationElapsed - instance.lastElapsed;
@@ -455,6 +484,12 @@ export class ModelProjection {
     } else instance.yaw = descriptor.rotation;
     instance.root.rotation.set(0, instance.yaw, 0);
     instance.root.scale.setScalar(descriptor.scale);
+    applyModelPose(
+      instance.pose,
+      descriptor.attackCue,
+      instance.yaw,
+      snapshot.presentationElapsed,
+    );
     this.syncVisibility(descriptor.id, instance, setFallbackModelVisible);
   }
 
@@ -462,7 +497,7 @@ export class ModelProjection {
   private hasAttachedMesh(instance: ModelInstance): boolean {
     return (
       instance.model !== undefined &&
-      instance.model.parent === instance.root &&
+      instance.model.parent === instance.poseRoot &&
       instance.root.parent === this.group &&
       instance.model.getObjectByProperty("isMesh", true) !== undefined
     );

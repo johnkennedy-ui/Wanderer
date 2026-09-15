@@ -86,6 +86,19 @@ export interface RuntimeCrescentAttack {
   elapsed: number;
 }
 
+/**
+ * A copied combat commitment for the disposable renderer. It is deliberately
+ * runtime-only: it neither participates in combat policy nor crosses a save
+ * boundary.
+ */
+export interface RuntimeAttackPresentation {
+  readonly actorId: string;
+  readonly sequence: number;
+  readonly direction: Vector2;
+  readonly style?: AttackStyle;
+  readonly committedAt: number;
+}
+
 export interface SettlementCampfire {
   readonly id: string;
   readonly label: string;
@@ -111,6 +124,7 @@ export interface SessionState {
   enemies: Map<string, RuntimeEnemy>;
   projectiles: RuntimeProjectile[];
   crescentAttacks: RuntimeCrescentAttack[];
+  attackPresentation: RuntimeAttackPresentation[];
   floorDrops: FloorDropState[];
   weaponRelicDrops: WeaponRelicDropState[];
   defeatedBossIds: Set<string>;
@@ -217,6 +231,7 @@ export const createFreshSessionState = (
     enemies: new Map(),
     projectiles: [],
     crescentAttacks: [],
+    attackPresentation: [],
     floorDrops: [],
     weaponRelicDrops: [],
     defeatedBossIds: new Set(),
@@ -255,6 +270,7 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
   enemies: new Map(),
   projectiles: [],
   crescentAttacks: [],
+  attackPresentation: [],
   floorDrops: [],
   weaponRelicDrops: [],
   defeatedBossIds: new Set(saved.defeatedBossIds),

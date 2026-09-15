@@ -55,28 +55,28 @@ const playerOnlySnapshot = () => ({
 describe("model presentation assets", () => {
   it("maps every supplied GLB and respects the Vite base path", () => {
     const expected: readonly [ModelAssetKey, string][] = [
-      ["player-knight", "player_knight.glb"],
-      ["player-wizard", "player_wizard.glb"],
-      ["player-archer", "player_archer.glb"],
-      ["enemy-scout", "enemy_scout.glb"],
-      ["enemy-brute", "enemy_brute.glb"],
-      ["enemy-spitter", "enemy_spitter.glb"],
-      ["enemy-elite", "enemy_elite.glb"],
-      ["enemy-boss", "enemy_ember_wyrm.glb"],
-      ["projectile-knight", "projectile_knight_blade_arc.glb"],
-      ["projectile-wizard", "projectile_wizard_flame_orb.glb"],
-      ["projectile-archer", "projectile_archer_arrow.glb"],
-      ["building-Campfire", "building_campfire.glb"],
-      ["building-Workshop", "building_workshop.glb"],
-      ["building-Farm", "building_farm.glb"],
-      ["building-Storage", "building_storage.glb"],
-      ["building-Healer", "building_healing_hut.glb"],
+      ["player-knight", "winding-fixed-v1/player_knight.glb"],
+      ["player-wizard", "winding-fixed-v1/player_wizard.glb"],
+      ["player-archer", "actor-geometry-v2/player_archer.glb"],
+      ["enemy-scout", "actor-geometry-v2/enemy_scout.glb"],
+      ["enemy-brute", "actor-geometry-v2/enemy_brute.glb"],
+      ["enemy-spitter", "winding-fixed-v1/enemy_spitter.glb"],
+      ["enemy-elite", "winding-fixed-v1/enemy_elite.glb"],
+      ["enemy-boss", "winding-fixed-v1/enemy_ember_wyrm.glb"],
+      ["projectile-knight", "expansion-v1/fx_blade_arc_v2.glb"],
+      ["projectile-wizard", "expansion-v1/projectile_flame_orb_v2.glb"],
+      ["projectile-archer", "expansion-v1/projectile_arrow_v2.glb"],
+      ["building-Campfire", "winding-fixed-v1/building_campfire.glb"],
+      ["building-Workshop", "winding-fixed-v1/building_workshop.glb"],
+      ["building-Farm", "winding-fixed-v1/building_farm.glb"],
+      ["building-Storage", "winding-fixed-v1/building_storage.glb"],
+      ["building-Healer", "winding-fixed-v1/building_healing_hut.glb"],
     ];
     expect(expected.map(([key]) => modelFilenameFor(key))).toEqual(
       expected.map(([, filename]) => filename),
     );
     expect(modelAssetUrlFor("enemy-boss", "/Wanderer/")).toBe(
-      "/Wanderer/assets/models/enemy_ember_wyrm.glb",
+      "/Wanderer/assets/models/winding-fixed-v1/enemy_ember_wyrm.glb",
     );
     expect(projectileModelFor("slash")).toBe("projectile-knight");
     expect(projectileModelFor("magic")).toBe("projectile-wizard");
@@ -155,7 +155,7 @@ describe("model presentation assets", () => {
       vi.fn(),
     );
     expect(calls.map((call) => call.url)).toEqual([
-      "/Wanderer/assets/models/player_archer.glb",
+      "/Wanderer/assets/models/actor-geometry-v2/player_archer.glb",
     ]);
     projection.dispose();
   });
@@ -184,6 +184,71 @@ describe("model presentation assets", () => {
     expect(player?.rotation.y).toBe(0);
     expect(projectile?.position.toArray()).toEqual([4, 0.72, -2]);
     expect(projectile?.rotation.y).toBe(Math.atan2(4, 2) - Math.PI);
+    projection.dispose();
+  });
+
+  it("clears stale movement facing on reset/teleport and retains a projectile tangent at zero displacement", () => {
+    const { loader } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    projection.render(base, vi.fn());
+    projection.render(
+      {
+        ...base,
+        presentationElapsed: 1,
+        player: { ...base.player, position: { x: 3, y: 0 } },
+      },
+      vi.fn(),
+    );
+    expect(
+      projection.group.getObjectByName("model:player")?.rotation.y,
+    ).toBeCloseTo(-Math.PI / 2);
+    projection.render(
+      {
+        ...base,
+        presentationElapsed: 1.1,
+        presentationResetId: base.presentationResetId + 1,
+        player: { ...base.player, position: { x: 40, y: 40 } },
+      },
+      vi.fn(),
+    );
+    expect(projection.group.getObjectByName("model:player")?.rotation.y).toBe(
+      0,
+    );
+
+    const projectileSnapshot = {
+      ...base,
+      projectiles: [
+        {
+          ...rendererSnapshot().projectiles[0],
+          origin: { x: 0, y: 0 },
+          targetPosition: { x: 2, y: 0 },
+          progress: 0.5,
+        },
+      ],
+    };
+    projection.render(projectileSnapshot, vi.fn());
+    projection.render(
+      {
+        ...projectileSnapshot,
+        presentationElapsed: 1.2,
+        projectiles: [{ ...projectileSnapshot.projectiles[0], progress: 0.75 }],
+      },
+      vi.fn(),
+    );
+    const tangent =
+      projection.group.getObjectByName("model:projectile:1")?.rotation.y;
+    projection.render(
+      {
+        ...projectileSnapshot,
+        presentationElapsed: 1.3,
+        projectiles: [{ ...projectileSnapshot.projectiles[0], progress: 0.75 }],
+      },
+      vi.fn(),
+    );
+    expect(
+      projection.group.getObjectByName("model:projectile:1")?.rotation.y,
+    ).toBe(tangent);
     projection.dispose();
   });
 
