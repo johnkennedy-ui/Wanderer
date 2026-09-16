@@ -399,8 +399,32 @@ test("initial browser load uses compact circular actions with accessible hidden 
   );
   await expect(buildToggle).toHaveAccessibleName("Build");
   await expect(statusToggle).toHaveAccessibleName("Character Status");
-  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
-  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  // Capture both initial panels in one public DOM read, without observing
+  // independent frames between their visibility and native hidden state.
+  const initialPanels = await page.evaluate(() =>
+    ["build-menu-panel", "character-status-panel"].map((id) => {
+      const matches = document.querySelectorAll<HTMLElement>(
+        `[data-testid="${id}"]`,
+      );
+      const panel = matches[0];
+      return {
+        id,
+        count: matches.length,
+        hidden: panel?.hidden ?? null,
+        display: panel ? getComputedStyle(panel).display : null,
+        renderedBoxes: panel?.getClientRects().length ?? null,
+      };
+    }),
+  );
+  expect(initialPanels).toEqual(
+    ["build-menu-panel", "character-status-panel"].map((id) => ({
+      id,
+      count: 1,
+      hidden: true,
+      display: "none",
+      renderedBoxes: 0,
+    })),
+  );
   await expect(page.getByTestId("toggle-status-panel")).toHaveCount(0);
   await expect(page.getByTestId("toggle-world-controls-panel")).toHaveCount(0);
   await expect(page.getByTestId("building-x")).toHaveCount(0);
