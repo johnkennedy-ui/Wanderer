@@ -171,7 +171,10 @@ export const tapWorldPosition = async (
   expect(position.y).toBeGreaterThan(0);
   expect(position.y).toBeLessThan(bounds.height);
   await canvas.click({ position });
+  await openStatus(page);
   await expect(page.getByTestId("position")).toHaveText(player.positionText);
+  await page.getByTestId("close-character-status").click();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
   await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
 };
 
