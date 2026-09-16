@@ -82,6 +82,16 @@ export class EnemyHealthOverlay {
     this.projectedPosition
       .set(enemy.position.x, healthBarHeightFor(enemy), -enemy.position.y)
       .project(camera);
+    const visible =
+      Number.isFinite(this.projectedPosition.x) &&
+      Number.isFinite(this.projectedPosition.y) &&
+      Number.isFinite(this.projectedPosition.z) &&
+      Math.abs(this.projectedPosition.x) <= 1 &&
+      Math.abs(this.projectedPosition.y) <= 1 &&
+      this.projectedPosition.z >= -1 &&
+      this.projectedPosition.z <= 1;
+    if (bar.element.hidden !== !visible) bar.element.hidden = !visible;
+    if (!visible) return;
     const left = `${((this.projectedPosition.x + 1) / 2) * 100}%`;
     const top = `${((1 - this.projectedPosition.y) / 2) * 100}%`;
     const width = `${healthRatio * 100}%`;

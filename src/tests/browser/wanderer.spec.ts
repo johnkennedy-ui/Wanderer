@@ -399,8 +399,32 @@ test("initial browser load uses compact circular actions with accessible hidden 
   );
   await expect(buildToggle).toHaveAccessibleName("Build");
   await expect(statusToggle).toHaveAccessibleName("Character Status");
-  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
-  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  // Capture both initial panels in one public DOM read, without observing
+  // independent frames between their visibility and native hidden state.
+  const initialPanels = await page.evaluate(() =>
+    ["build-menu-panel", "character-status-panel"].map((id) => {
+      const matches = document.querySelectorAll<HTMLElement>(
+        `[data-testid="${id}"]`,
+      );
+      const panel = matches[0];
+      return {
+        id,
+        count: matches.length,
+        hidden: panel?.hidden ?? null,
+        display: panel ? getComputedStyle(panel).display : null,
+        renderedBoxes: panel?.getClientRects().length ?? null,
+      };
+    }),
+  );
+  expect(initialPanels).toEqual(
+    ["build-menu-panel", "character-status-panel"].map((id) => ({
+      id,
+      count: 1,
+      hidden: true,
+      display: "none",
+      renderedBoxes: 0,
+    })),
+  );
   await expect(page.getByTestId("toggle-status-panel")).toHaveCount(0);
   await expect(page.getByTestId("toggle-world-controls-panel")).toHaveCount(0);
   await expect(page.getByTestId("building-x")).toHaveCount(0);
@@ -529,7 +553,7 @@ test("a present corrupt save is surfaced and left untouched on built-output boot
 
 test("ordinary primary canvas taps travel to a marked destination when no build mode is active", async ({
   page,
-}) => {
+}, testInfo: TestInfo) => {
   await page.goto(applicationPath);
   await openStatus(page);
   const position = page.getByTestId("position");
@@ -537,32 +561,116 @@ test("ordinary primary canvas taps travel to a marked destination when no build 
   const initialPosition = await position.textContent();
   if (initialPosition === null)
     throw new Error("World position text was not available");
+  const initialCoordinates =
+    /^Position: (-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)/.exec(initialPosition);
+  if (initialCoordinates === null)
+    throw new Error("World position coordinates were not available");
 
   await clickWithPendingUpgradeResolution(
     page,
     page.getByTestId("close-character-status"),
   );
-  await tapCanvas(page, 0.4, 0.62);
-  // The incidental Boss Core handler may legitimately run after the tap. Watch
-  // the DOM directly so a locator action cannot run that handler first and
-  // consume the short-lived destination marker before it is observed.
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector('[data-testid="world-canvas"]')
-        ?.getAttribute("data-destination-marker") === "active",
-    undefined,
-    { timeout: 5_000 },
+  // Capture public DOM changes before the real tap without giving the observer
+  // an independent deadline that can reject while the action is still settling.
+  const movingTapObserver = await page.evaluateHandle(
+    (initial) => {
+      const state: {
+        witness: null | {
+          readonly marker: string | null;
+          readonly input: string;
+          readonly combat: string;
+          readonly x: number;
+          readonly y: number;
+        };
+        resolve?: (witness: NonNullable<typeof state.witness>) => void;
+        observer: MutationObserver;
+      } = {
+        witness: null,
+        observer: new MutationObserver(() => capture()),
+      };
+      const capture = () => {
+        const canvas = document.querySelector('[data-testid="world-canvas"]');
+        const position = document.querySelector('[data-testid="position"]');
+        const combat = document.querySelector('[data-testid="combat-status"]');
+        const input = position?.textContent ?? "";
+        const match = /^Position: (-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)/.exec(
+          input,
+        );
+        if (
+          state.witness === null &&
+          canvas?.getAttribute("data-destination-marker") === "active" &&
+          input.includes("input: tap-to-move") &&
+          combat?.textContent?.includes("suppressed") &&
+          match !== null &&
+          (Number(match[1]) !== initial.x || Number(match[2]) !== initial.y)
+        ) {
+          state.witness = {
+            marker: canvas.getAttribute("data-destination-marker"),
+            input,
+            combat: combat.textContent,
+            x: Number(match[1]),
+            y: Number(match[2]),
+          };
+          state.resolve?.(state.witness);
+        }
+      };
+      state.observer.observe(document, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+      });
+      capture();
+      return state;
+    },
+    { x: Number(initialCoordinates[1]), y: Number(initialCoordinates[2]) },
   );
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector('[data-testid="position"]')
-        ?.textContent?.includes("input: tap-to-move") ?? false,
-    undefined,
-    { timeout: 5_000 },
-  );
-  await expect(page.getByTestId("combat-status")).toContainText("suppressed");
+  try {
+    await tapCanvas(page, 0.4, 0.62);
+    const witness = await movingTapObserver.evaluate(
+      (state) =>
+        new Promise<NonNullable<typeof state.witness>>((resolve, reject) => {
+          if (state.witness !== null) return resolve(state.witness);
+          const timeout = window.setTimeout(
+            () => reject(new Error("Moving tap frame was not observed")),
+            5_000,
+          );
+          state.resolve = (captured) => {
+            window.clearTimeout(timeout);
+            resolve(captured);
+          };
+        }),
+    );
+    expect(witness.marker).toBe("active");
+    expect(witness.input).toContain("input: tap-to-move");
+    expect(witness.combat).toContain("suppressed");
+    expect(
+      witness.x !== Number(initialCoordinates[1]) ||
+        witness.y !== Number(initialCoordinates[2]),
+    ).toBe(true);
+    await testInfo.attach("moving-tap-public-witness.json", {
+      body: JSON.stringify({
+        initial: {
+          x: Number(initialCoordinates[1]),
+          y: Number(initialCoordinates[2]),
+        },
+        witness,
+      }),
+      contentType: "application/json",
+    });
+    console.log(
+      `moving-tap public witness: ${JSON.stringify({
+        initial: {
+          x: Number(initialCoordinates[1]),
+          y: Number(initialCoordinates[2]),
+        },
+        witness,
+      })}`,
+    );
+  } finally {
+    await movingTapObserver.evaluate((state) => state.observer.disconnect());
+    await movingTapObserver.dispose();
+  }
   await expect(position).not.toHaveText(initialPosition);
 });
 

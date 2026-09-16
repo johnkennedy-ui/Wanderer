@@ -107,6 +107,17 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     projectedHealth
       .set(snapshot.player.position.x, 1.75, -snapshot.player.position.y)
       .project(camera);
+    const visible =
+      Number.isFinite(projectedHealth.x) &&
+      Number.isFinite(projectedHealth.y) &&
+      Number.isFinite(projectedHealth.z) &&
+      Math.abs(projectedHealth.x) <= 1 &&
+      Math.abs(projectedHealth.y) <= 1 &&
+      projectedHealth.z >= -1 &&
+      projectedHealth.z <= 1;
+    if (playerHealthLabel.hidden !== !visible)
+      playerHealthLabel.hidden = !visible;
+    if (!visible) return;
     const left = `${((projectedHealth.x + 1) / 2) * 100}%`;
     const top = `${((1 - projectedHealth.y) / 2) * 100}%`;
     const health = `${Math.ceil(snapshot.player.hp)} / ${snapshot.player.maxHp} HP`;

@@ -154,12 +154,24 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
     '[data-testid="world-enemy-hp"][data-enemy-id="boss:ember-wyrm"]',
   );
   await expect(boss).toBeVisible();
-  await expect(boss).toHaveAttribute("role", "meter");
-  await expect(boss).toHaveAttribute("aria-label", "boss health");
-  await expect(boss).toHaveAttribute("aria-valuemin", "0");
-  await expect(boss).toHaveAttribute("aria-valuemax", "72");
-  await expect(boss).toHaveAttribute("aria-valuenow", "72");
-  await expect(boss).toHaveAttribute("aria-valuetext", "72 / 72 HP");
+  // Live combat continues between protocol calls; bind all attributes to one
+  // public DOM observation so the initial accessibility state is atomic.
+  const initialHealth = await boss.evaluate((node) => ({
+    role: node.getAttribute("role"),
+    label: node.getAttribute("aria-label"),
+    min: node.getAttribute("aria-valuemin"),
+    max: node.getAttribute("aria-valuemax"),
+    value: node.getAttribute("aria-valuenow"),
+    text: node.getAttribute("aria-valuetext"),
+  }));
+  expect(initialHealth).toEqual({
+    role: "meter",
+    label: "boss health",
+    min: "0",
+    max: "72",
+    value: "72",
+    text: "72 / 72 HP",
+  });
   const retainedBoss = await boss.elementHandle();
   if (retainedBoss === null) throw new Error("Missing retained boss bar");
   // Live combat can advance through more than one authored 12-damage event

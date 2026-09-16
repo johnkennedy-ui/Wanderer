@@ -94,6 +94,7 @@ import {
   nearestTerrainSafePosition,
   sweepTerrainMovement,
 } from "./world/terrainCollision";
+import { EnemyNavigationCache } from "./session/enemyNavigation";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -136,6 +137,7 @@ export class GameSession {
   private pendingWaveIndices = new Set<number>();
   private notice!: GameNotice;
   private combatStatus!: string;
+  private enemyNavigation = new EnemyNavigationCache();
   constructor(options: SessionOptions = {}) {
     this.chunkRecipes = new ChunkRecipeCache(
       undefined,
@@ -151,6 +153,7 @@ export class GameSession {
   private replaceState(state: SessionState): void {
     this.presentationResetId += 1;
     this.chunkRecipes.clear();
+    this.enemyNavigation.clear();
     this.world = state.world;
     this.player = state.player;
     this.resources = state.resources;
@@ -803,13 +806,20 @@ export class GameSession {
       playerDodgeChance: combatStats.dodgeChance,
       worldSeed: this.world.seed,
       constrainEnemyPosition: (from, desired, enemy) =>
-        sweepTerrainMovement(
-          this.world,
+        this.enemyNavigation.route({
           from,
           desired,
-          this.chunkRecipes.get,
-          enemyTerrainClearanceFor(enemy.kind),
-        ),
+          target: this.player.position,
+          enemyId: enemy.id,
+          constrain: (routeFrom, routeDesired) =>
+            sweepTerrainMovement(
+              this.world,
+              routeFrom,
+              routeDesired,
+              this.chunkRecipes.get,
+              enemyTerrainClearanceFor(enemy.kind),
+            ),
+        }),
     });
     this.player = result.player;
     this.resources = result.resources;
