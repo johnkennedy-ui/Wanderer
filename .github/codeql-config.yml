@@ -1,0 +1,9 @@
+name: Wanderer production JavaScript and TypeScript
+
+# Test files deliberately construct disposable child-process fixtures from
+# temporary paths. They are exercised by Vitest and the scanner-process
+# security tests, but CodeQL's code-construction query treats those test-only
+# strings as production code. Keep CodeQL focused on shipped and CI/runtime
+# implementation while retaining the separate executable test gate.
+paths-ignore:
+  - src/tests/**

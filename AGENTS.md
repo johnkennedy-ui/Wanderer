@@ -139,18 +139,32 @@ npx playwright install chromium
 npx playwright install --with-deps chromium
 ```
 
-After that browser prerequisite, the required local release gate is:
+Start the repository mission on the clean feature branch before changing source;
+see `Documentation~/agent-workflow.md`. Keep the original baseline and fixture
+hashes. Upgrade an existing historical mission record with `--upgrade-record`,
+not by discarding its history or restarting the task.
+
+After review, freeze all source, configuration and documentation in local
+commits. The supported completion route is:
 
 ```bash
 npm ci
-npm run verify
-npm run test:browser
-VITE_BASE_PATH=/Wanderer/ npm run build
+npm run agent:doctor
+npm run agent:finish
 ```
 
-`npm run test:browser` builds `dist/`, serves it with `vite preview`, and
-exercises both `/` and `/Wanderer/`; it is not a Vite development-server test.
-See `TEST_MATRIX.md` for the covered browser scenarios.
+`agent:finish` records the complete `verify`, root/Pages browser, fresh security
+and pre-upload artifact gates. It rejects stale, foreign, incomplete or changed
+inputs, rehashes fixtures, and separates local/remote/settings/deployment scopes.
+`agent:check` is local iteration; `agent:evidence` only writes an inspection
+report. Neither is permission to claim completion or perform remote writes.
+
+`test:browser` uses the production static preview for both `/` and `/Wanderer/`,
+not the Vite development server. Finish reuses the root build from `verify` and
+leaves the exact tested Pages output. Do not rebuild, modify output or recreate
+its manifest before publication. Follow `Documentation~/CI_SECURITY_CONTRACT.md`
+for pinned scanner tooling, fail-closed CI, independent owner review and rollback.
+See `TEST_MATRIX.md` for covered scenarios and unverified boundaries.
 
 ### Change classification
 

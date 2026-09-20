@@ -1,57 +1,19 @@
 import { commandText } from "./common.mjs";
-
-const forcedFullPaths = [
-  /^package\.json$/,
-  /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock)$/,
-  /(?:^|\/)(?:vite|playwright|capacitor)\.config\.[cm]?[jt]s$/,
-  /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/,
-  /^\.github\/workflows\//,
-];
-
-const matches = (path, expressions) =>
-  expressions.some((expression) => expression.test(path));
+import { buildImpactMap, classifyImpactPath } from "./impact-map.mjs";
 
 export const classifyChangedPath = (path) => {
-  const normalized = path.replace(/\\/g, "/");
-  const lower = normalized.toLowerCase();
-
-  if (matches(normalized, forcedFullPaths)) return "full";
-  if (
-    normalized.startsWith("scripts/agent/") ||
-    normalized.startsWith("src/tests/agent/")
-  )
-    return "agent";
-  if (
-    normalized.includes("architecture-guard") ||
-    normalized === "ARCHITECTURE.md"
-  )
-    return "architecture";
-  if (/^(Documentation~\/|.*\.md$)/.test(normalized)) return "documentation";
-  if (
-    /(?:^|\/)(?:save|persistence|storage)(?:\/|\.|$)/.test(lower) ||
-    normalized === "SAVE_FORMAT.md"
-  )
-    return "save";
-  if (/(?:^|\/)(?:world|generator|generation)(?:\/|\.|$)/.test(lower))
-    return "world";
-  if (/(?:^|\/)(?:input|inputpolicy)(?:\/|\.|$)/.test(lower)) return "input";
-  if (/(?:^|\/)(?:ui|rendering|renderer|app|lifecycle)(?:\/|\.|$)/.test(lower))
-    return "presentation";
-  if (
-    /(?:^|\/)(?:gamesession|session)(?:\/|[.-]|$)/.test(lower) ||
-    /(?:^|\/)(?:economy|settlement|combat|progression)(?:\/|\.|$)/.test(lower)
-  )
-    return "session";
-  return "other";
+  return classifyImpactPath(path)[0];
 };
 
 export const isFormattingEligiblePath = (path) => {
   const normalized = path.replace(/\\/g, "/");
   if (/^src\/.*\.(?:ts|mjs|css)$/.test(normalized)) return true;
-  if (/^scripts\/.*\.mjs$/.test(normalized)) return true;
+  if (/^scripts\/.*\.(?:mjs|json)$/.test(normalized)) return true;
   if (/^\.github\/.*\.(?:yml|yaml)$/.test(normalized)) return true;
   if (/^Documentation~\/.*\.md$/.test(normalized)) return true;
-  return !normalized.includes("/") && /\.(?:ts|json|md)$/.test(normalized);
+  if (/^(?:package-lock\.json|npm-shrinkwrap\.json)$/.test(normalized))
+    return false;
+  return !normalized.includes("/") && /\.(?:ts|json|md|html)$/.test(normalized);
 };
 
 const command = (id, reason, commandLine, timeoutMs) => ({
@@ -98,14 +60,20 @@ export const selectFocusedChecks = (
     nodePath = process.execPath,
   } = {},
 ) => {
-  const classifications = changedFiles.map((path) => ({
-    path,
-    category: classifyChangedPath(path),
+  const impactMap = buildImpactMap(changedFiles);
+  const classifications = impactMap.map((entry) => ({
+    path: entry.path,
+    category: entry.impacts[0],
+    impacts: entry.impacts,
+    status: entry.status,
   }));
-  const categories = new Set(classifications.map(({ category }) => category));
-  const forcedFull = full || categories.has("full") || categories.has("other");
+  const categories = new Set(impactMap.flatMap((entry) => entry.impacts));
+  const forcedFull =
+    full || categories.has("full") || categories.has("unknown");
   const commands = new Map();
-  const changedEligibleFiles = changedFiles.filter(isFormattingEligiblePath);
+  const changedEligibleFiles = impactMap
+    .map((entry) => entry.path)
+    .filter(isFormattingEligiblePath);
   const formatAction = formatMode === "write" ? "--write" : "--check";
 
   mergeCommand(
@@ -178,6 +146,31 @@ export const selectFocusedChecks = (
           ...changedEligibleFiles,
         ],
         180_000,
+      ),
+    );
+
+  const changedTests = impactMap
+    .filter((entry) => entry.executableTest)
+    .map((entry) => entry.path);
+  if (changedTests.length > 0)
+    mergeCommand(
+      commands,
+      command(
+        "changed-tests",
+        "changed tests must execute themselves or a proven present-file superset",
+        ["npm", "run", "test", "--", ...changedTests],
+        240_000,
+      ),
+    );
+
+  if (impactMap.some((entry) => entry.deletedTest))
+    mergeCommand(
+      commands,
+      command(
+        "deleted-test-owner-suite",
+        "deleted tests require their current owning suite and coverage review",
+        ["npm", "run", "test", "--", "src/tests"],
+        240_000,
       ),
     );
 

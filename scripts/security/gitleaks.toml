@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated dependency, tool-cache, and security-evidence paths"
+paths = [
+  '''^node_modules/''',
+  '''^dist/''',
+  '''^\.agent/(tools|security)/''',
+]

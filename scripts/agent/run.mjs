@@ -4,14 +4,20 @@ import { join } from "node:path";
 
 import {
   AgentError,
+  AGENT_EVIDENCE_SCHEMA_VERSION,
   agentPath,
+  collectInputFingerprint,
   commandText,
   ensureAgentDirectory,
   failureSignature,
   lastLogLines,
   readMissionState,
+  runtimeIdentity,
+  sha256Text,
   writeJsonAtomic,
   writeMissionState,
+  validationIdentity,
+  readRegularFile,
 } from "./common.mjs";
 
 export const DEFAULT_TIMEOUT_MS = 300_000;
@@ -86,7 +92,7 @@ const writeRunRecord = (cwd, id, record) => {
 };
 
 const refusalRecord = ({ id, command, timeoutMs, state, now }) => ({
-  schemaVersion: 1,
+  schemaVersion: AGENT_EVIDENCE_SCHEMA_VERSION,
   id,
   command,
   commandText: commandText(command),
@@ -112,6 +118,7 @@ export const runCommand = async ({
   diagnosis = "",
   now = () => new Date().toISOString(),
   spawnChild = spawn,
+  fingerprint = collectInputFingerprint,
 } = {}) => {
   if (!Array.isArray(command) || command.length === 0)
     throw new AgentError(
@@ -119,9 +126,12 @@ export const runCommand = async ({
       "MISSING_COMMAND",
     );
   const state = readMissionState(cwd);
+  const identity = validationIdentity(cwd, state);
   const id = runIdentifier();
   const renderedCommand = commandText(command);
   const startedAt = now();
+  const inputBefore = fingerprint({ cwd });
+  const toolchain = runtimeIdentity(cwd);
   const repeatedCommand =
     state.lastFailureCommand === renderedCommand &&
     state.repeatedFailureCount >= 2;
@@ -143,7 +153,8 @@ export const runCommand = async ({
   const logPath = agentPath(cwd, "runs", `${id}.log`);
   const statusPath = agentPath(cwd, "runs", `${id}.json`);
   const runningRecord = {
-    schemaVersion: 1,
+    schemaVersion: AGENT_EVIDENCE_SCHEMA_VERSION,
+    identity,
     id,
     command,
     commandText: renderedCommand,
@@ -157,6 +168,13 @@ export const runCommand = async ({
     failureTail: "",
     failureSignature: null,
     logPath: join(AGENT_LOG_ROOT, `${id}.log`),
+    inputBefore,
+    inputAfter: null,
+    toolchain,
+    workingDirectory: cwd,
+    environment: inputBefore.env,
+    durationMs: null,
+    logHash: null,
   };
   writeJsonAtomic(statusPath, runningRecord);
 
@@ -169,14 +187,23 @@ export const runCommand = async ({
   const interruptionHandler = (signal) => {
     interruptedBy = signal;
     terminateChildTree(child);
+    forceKillTimer = setTimeout(
+      () => terminateChildTree(child, "SIGKILL"),
+      1_000,
+    );
   };
+  const onInterrupt = () => interruptionHandler("SIGINT");
+  const onTerminate = () => interruptionHandler("SIGTERM");
 
   const completed = await new Promise((resolveResult) => {
+    let settled = false;
     const settle = (result) => {
+      if (settled) return;
+      settled = true;
       if (timeoutTimer !== null) clearTimeout(timeoutTimer);
       if (forceKillTimer !== null) clearTimeout(forceKillTimer);
-      process.removeListener("SIGINT", interruptionHandler);
-      process.removeListener("SIGTERM", interruptionHandler);
+      process.removeListener("SIGINT", onInterrupt);
+      process.removeListener("SIGTERM", onTerminate);
       resolveResult(result);
     };
 
@@ -191,8 +218,8 @@ export const runCommand = async ({
       return;
     }
 
-    process.once("SIGINT", interruptionHandler);
-    process.once("SIGTERM", interruptionHandler);
+    process.once("SIGINT", onInterrupt);
+    process.once("SIGTERM", onTerminate);
     timeoutTimer = setTimeout(() => {
       timedOut = true;
       terminateChildTree(child);
@@ -211,11 +238,25 @@ export const runCommand = async ({
 
   closeSync(logDescriptor);
   const failureTail = lastLogLines(logPath);
+  let inputAfter = null;
+  let inputAfterError = null;
+  try {
+    inputAfter = fingerprint({ cwd });
+  } catch (error) {
+    inputAfterError = error.code || "INPUT_AFTER_UNREADABLE";
+  }
+  const commandPassed =
+    completed.code === 0 &&
+    !completed.signal &&
+    !completed.spawnError &&
+    interruptedBy === null;
   const status = timedOut
     ? "timed-out"
-    : completed.code === 0 && !completed.signal && !completed.spawnError
-      ? "passed"
-      : "failed";
+    : inputBefore.digest !== inputAfter?.digest
+      ? "invalidated"
+      : commandPassed
+        ? "passed"
+        : "failed";
   const exitCode = completed.code ?? (interruptedBy ? 130 : 1);
   const signature =
     status === "passed"
@@ -229,6 +270,8 @@ export const runCommand = async ({
   const record = {
     ...runningRecord,
     status,
+    inputAfterError,
+    diagnosis: diagnosis || null,
     finishedAt: now(),
     exitCode,
     signal: completed.signal ?? interruptedBy,
@@ -236,6 +279,9 @@ export const runCommand = async ({
     interrupted: interruptedBy !== null,
     failureTail: status === "passed" ? "" : failureTail,
     failureSignature: signature,
+    inputAfter,
+    durationMs: Math.max(0, Date.parse(now()) - Date.parse(startedAt)),
+    logHash: "sha256:" + sha256Text(readRegularFile(logPath)),
   };
   writeJsonAtomic(statusPath, record);
 
@@ -246,10 +292,12 @@ export const runCommand = async ({
       completedAt: record.finishedAt,
       runId: id,
     };
-    nextState.lastFailureSignature = null;
-    nextState.repeatedFailureCount = 0;
-    nextState.lastFailureCommand = null;
-    nextState.lastFailureDiagnosis = null;
+    if (state.lastFailureCommand === renderedCommand) {
+      nextState.lastFailureSignature = null;
+      nextState.repeatedFailureCount = 0;
+      nextState.lastFailureCommand = null;
+      nextState.lastFailureDiagnosis = null;
+    }
   } else {
     const equivalent = state.lastFailureSignature === signature;
     nextState.lastFailureSignature = signature;

@@ -557,7 +557,6 @@ test("ordinary primary canvas taps travel to a marked destination when no build 
   await page.goto(applicationPath);
   await openStatus(page);
   const position = page.getByTestId("position");
-  const canvas = page.getByTestId("world-canvas");
   const initialPosition = await position.textContent();
   if (initialPosition === null)
     throw new Error("World position text was not available");

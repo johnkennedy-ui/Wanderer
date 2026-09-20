@@ -1,82 +1,113 @@
+# Reviewed constrained workflow; see scripts/ci/contract.mjs and Documentation~/CI_SECURITY_CONTRACT.md.
 name: Verify and deploy Pages
-
 on:
-  pull_request:
+  pull_request: null
   push:
     branches:
       - main
-  workflow_dispatch:
-
-concurrency:
-  group: pages-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+  merge_group: null
+  workflow_dispatch: null
 permissions:
   contents: read
-
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: .nvmrc
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Run canonical verification
-        run: npm run verify
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run built-output browser verification
-        run: npm run test:browser
-
-  build-pages:
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'workflow_dispatch'
-    needs: verify
+          package-manager-cache: false
+      - run: npm ci
+      - run: node node_modules/playwright/cli.js install --with-deps chromium
+      - run: npm run verify
+      - run: npm run test:browser -- --reuse-root-build
+      - run: node scripts/security/artifact.mjs verify --base /Wanderer/
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: dist
+          retention-days: 1
+      - id: verification-evidence
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: |-
+            .agent/artifacts/pages.json
+            .agent/artifacts/pages.browser.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+  security:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run security:check
+  ci-required:
+    if: ${{ always() }}
+    needs:
+      - verify
+      - security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        with:
+          script: |-
+            const needs = JSON.parse(process.env.NEEDS);
+            if (!(function requiredResultsPass(needs) {
+              return (
+                needs !== null &&
+                typeof needs === "object" &&
+                !Array.isArray(needs) &&
+                Object.keys(needs).length === 2 &&
+                ["verify", "security"].every((name) => needs[name]?.result === "success")
+              );
+            })(needs)) {
+              core.setFailed('Every mandatory predecessor must succeed; missing, skipped, cancelled and failed results are rejected.');
+            }
+  deploy:
+    if: ${{ success() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.ci-required.result == 'success' && needs.verify.result == 'success' }}
+    needs:
+      - ci-required
+      - verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    steps:
-      - name: Checkout validated commit
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build Pages artifact from validated commit
-        env:
-          VITE_BASE_PATH: /Wanderer/
-        run: npm run build
-      - name: Configure Pages
-        uses: actions/configure-pages@v6
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-
-  deploy:
-    needs: build-pages
-    runs-on: ubuntu-latest
-    permissions:
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages-publication-${{ github.repository }}
+      cancel-in-progress: false
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |-
+            const { data } = await github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: 'main' });
+            if (data.commit.sha !== context.sha) core.setFailed('main advanced after verification; publication refused');
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}

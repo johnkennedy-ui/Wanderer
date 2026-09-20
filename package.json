@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": "22.x"
+    "node": "22.x",
+    "npm": "10.x"
   },
   "scripts": {
     "dev": "vite",
@@ -13,17 +14,22 @@
     "test": "vitest run",
     "test:soak": "vitest run src/tests/domain/session-soak.test.ts src/tests/domain/session-runtime-bounds.test.ts src/tests/domain/session-world-runtime.test.ts",
     "check:architecture": "node src/tests/architecture-guard.mjs",
-    "build": "vite build",
+    "build": "vite build && node scripts/security/artifact.mjs create",
     "preview": "node scripts/agent/browser-preview.mjs",
-    "verify": "npm run format:check && npm run typecheck && npm run test && npm run check:architecture && npm run build",
-    "test:browser": "VITE_BASE_PATH=/ npm run build && VITE_BASE_PATH=/ PLAYWRIGHT_BASE_PATH=/ playwright test && VITE_BASE_PATH=/Wanderer/ npm run build && VITE_BASE_PATH=/Wanderer/ PLAYWRIGHT_BASE_PATH=/Wanderer/ playwright test",
+    "verify": "npm run format:check && npm run typecheck && npm run test && npm run check:architecture && npm run check:ci-policy && npm run build",
+    "test:browser": "node scripts/agent/browser-test.mjs",
     "format": "node scripts/agent/format.mjs --write",
     "agent:mission-start": "node scripts/agent/mission-start.mjs",
     "agent:status": "node scripts/agent/status.mjs",
     "agent:run": "node scripts/agent/run.mjs",
     "agent:check": "node scripts/agent/check.mjs",
     "agent:evidence": "node scripts/agent/evidence.mjs",
-    "android:sync": "npm run build && npx cap sync android"
+    "android:sync": "npm run build && npx cap sync android",
+    "check:ci-policy": "node scripts/ci/policy.mjs",
+    "test:ci-policy": "vitest run src/tests/agent/ci-policy.test.ts",
+    "security:check": "node scripts/security/check.mjs",
+    "agent:doctor": "node scripts/agent/doctor.mjs",
+    "agent:finish": "node scripts/agent/finish.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
@@ -38,6 +44,16 @@
     "prettier": "^3.6.2",
     "typescript": "^5.8.3",
     "vite": "^7.1.3",
-    "vitest": "^3.2.4"
+    "vitest": "4.1.11",
+    "yaml": "2.9.1"
+  },
+  "overrides": {
+    "xcode": {
+      "uuid": "11.1.1"
+    },
+    "vite": "$vite",
+    "plist": {
+      "@xmldom/xmldom": "0.9.12"
+    }
   }
 }

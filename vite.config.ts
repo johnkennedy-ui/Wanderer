@@ -12,6 +12,6 @@ export default defineConfig({
   base: normalizeBasePath(process.env.VITE_BASE_PATH),
   build: {
     outDir: "dist",
-    sourcemap: true,
+    sourcemap: false,
   },
 });

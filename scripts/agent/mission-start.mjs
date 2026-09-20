@@ -2,8 +2,11 @@ import { existsSync } from "node:fs";
 
 import {
   AgentError,
+  AGENT_EVIDENCE_SCHEMA_VERSION,
+  AGENT_POLICY_VERSION,
   REQUIRED_BASELINE,
   SUPPORTED_NODE_MAJOR,
+  collectInputFingerprint,
   collectFixtureHashes,
   gitOutput,
   gitSucceeds,
@@ -12,6 +15,13 @@ import {
   readWorktreeState,
   missionStatePath,
   writeMissionState,
+  readMissionState,
+  repositoryIdentity,
+  ensureAgentDirectory,
+  agentPath,
+  writeJsonAtomic,
+  sha256Text,
+  readRegularFile,
 } from "./common.mjs";
 
 const parseArguments = (argv) => {
@@ -20,6 +30,7 @@ const parseArguments = (argv) => {
     missionId: null,
     requestedObjective: null,
     replace: false,
+    upgrade: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -29,6 +40,7 @@ const parseArguments = (argv) => {
     else if (argument === "--baseline")
       options.baselineCommit = argv[++index] ?? null;
     else if (argument === "--replace") options.replace = true;
+    else if (argument === "--upgrade-record") options.upgrade = true;
     else
       throw new AgentError(`Unknown argument: ${argument}`, "INVALID_ARGUMENT");
   }
@@ -46,6 +58,8 @@ export const evaluateMissionStart = ({
   npmVersion: installedNpmVersion,
   worktree,
   fixtureHashes,
+  baselineFingerprint,
+  repository,
   startedAt = new Date().toISOString(),
 }) => {
   if (!missionId?.trim())
@@ -79,7 +93,7 @@ export const evaluateMissionStart = ({
     );
 
   return {
-    schemaVersion: 1,
+    schemaVersion: AGENT_EVIDENCE_SCHEMA_VERSION,
     missionId: missionId.trim(),
     requestedObjective: requestedObjective.trim(),
     branch,
@@ -89,6 +103,9 @@ export const evaluateMissionStart = ({
     worktree,
     startedAt,
     compatibilityFixtureHashes: fixtureHashes,
+    baselineFingerprint,
+    repository,
+    policyVersion: AGENT_POLICY_VERSION,
     phase: "started",
     lastSuccessfulCheck: null,
     lastFailureSignature: null,
@@ -120,6 +137,8 @@ export const collectMissionStartFacts = ({
     npmVersion: npmVersion(cwd),
     worktree: readWorktreeState(cwd),
     fixtureHashes: collectFixtureHashes(cwd),
+    baselineFingerprint: collectInputFingerprint({ cwd }),
+    repository: repositoryIdentity(cwd),
   };
 };
 
@@ -138,9 +157,77 @@ export const startMission = ({ cwd = process.cwd(), ...options }) => {
   return state;
 };
 
+export const upgradeMissionRecord = ({ cwd = process.cwd() } = {}) => {
+  const state = readMissionState(cwd);
+  if (
+    state.schemaVersion !== 1 ||
+    !state.missionId ||
+    state.branch !== gitOutput(cwd, ["branch", "--show-current"]).trim() ||
+    !gitSucceeds(cwd, [
+      "merge-base",
+      "--is-ancestor",
+      state.baselineCommit,
+      "HEAD",
+    ])
+  )
+    throw new AgentError(
+      "Only an existing matching schema-1 mission may be upgraded.",
+      "UPGRADE_REJECTED",
+    );
+  const current = collectFixtureHashes(cwd);
+  if (
+    JSON.stringify(current) !== JSON.stringify(state.compatibilityFixtureHashes)
+  )
+    throw new AgentError(
+      "Historical fixture baseline changed; upgrade refused.",
+      "FIXTURE_DRIFT",
+    );
+  for (const group of Object.values(current))
+    for (const [path, expected] of Object.entries(group)) {
+      if (
+        sha256Text(
+          gitOutput(cwd, ["show", state.baselineCommit + ":" + path]),
+        ) !== expected
+      )
+        throw new AgentError(
+          "Fixture baseline does not match committed mission ancestry.",
+          "FIXTURE_DRIFT",
+        );
+    }
+  ensureAgentDirectory(cwd, "history");
+  const oldText = readRegularFile(missionStatePath(cwd), "utf8");
+  const priorRecord = agentPath(
+    cwd,
+    "history",
+    "mission-v1-" + sha256Text(oldText) + ".json",
+  );
+  if (!existsSync(priorRecord)) writeJsonAtomic(priorRecord, state);
+  const upgraded = {
+    ...state,
+    schemaVersion: AGENT_EVIDENCE_SCHEMA_VERSION,
+    policyVersion: AGENT_POLICY_VERSION,
+    repository: repositoryIdentity(cwd),
+    schemaUpgrade: {
+      at: new Date().toISOString(),
+      priorRecord,
+      historicalRunsRetained: true,
+      note: "Original mission/baseline/time/fixtures retained; historical runs are not current validation.",
+    },
+  };
+  writeMissionState(cwd, upgraded);
+  return upgraded;
+};
+
 const main = () => {
   const options = parseArguments(process.argv.slice(2));
-  const state = startMission(options);
+  if (options.upgrade && process.argv.slice(2).length !== 1)
+    throw new AgentError(
+      "--upgrade-record cannot replace mission fields.",
+      "INVALID_ARGUMENT",
+    );
+  const state = options.upgrade
+    ? upgradeMissionRecord()
+    : startMission(options);
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 };
 
