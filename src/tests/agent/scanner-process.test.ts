@@ -1830,8 +1830,8 @@ open(ready,'w').write('ready')`,
         JSON.stringify(childCode) +
         "])",
       "open(" + JSON.stringify(childPidPath) + ",'w').write(str(child.pid))",
-      "os.fdopen(3,'w',encoding='utf8',closefd=True)",
-      "os.fdopen(4,'w',encoding='utf8',closefd=True)",
+      "status=os.fdopen(3,'w',encoding='utf8',closefd=True)",
+      "control=os.fdopen(4,'w',encoding='utf8',closefd=True)",
       "time.sleep(5)",
     ].join("\n");
     writeFileSync(supervisorPath, source);
