@@ -1149,6 +1149,10 @@ open(ready,'w').write('ready')`,
       directory,
       "status-flood-supervisor-exited",
     );
+    const identitiesCapturedPath = join(
+      directory,
+      "status-flood-identities-captured",
+    );
     const validForwardedPath = join(
       directory,
       ".guardian-valid-status-forwarded",
@@ -1184,6 +1188,9 @@ open(ready,'w').write('ready')`,
       "open(" + JSON.stringify(childPidPath) + ",'w').write(str(child.pid))",
       "while not os.path.exists(" +
         JSON.stringify(childReadyPath) +
+        "): time.sleep(.002)",
+      "while not os.path.exists(" +
+        JSON.stringify(identitiesCapturedPath) +
         "): time.sleep(.002)",
       "status=os.fdopen(3,'w',encoding='utf8',closefd=True)",
       "status.write(json.dumps({'version':1,'exitCode':0,'signal':None,'termination':'none','reaping':'reaped','error':None},separators=(',',':'))+'\\n');status.flush()",
@@ -1288,6 +1295,7 @@ open(ready,'w').write('ready')`,
       supervisor = captureOwnedProcess(
         Number(readFileSync(supervisorPidPath, "utf8")),
       );
+      writeFileSync(identitiesCapturedPath, "captured");
       await waitFor(() => existsSync(validForwardedPath));
       await waitFor(() => existsSync(outputBlockedPath));
       await waitFor(() => existsSync(floodStartedPath));
