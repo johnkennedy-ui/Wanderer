@@ -1,6 +1,6 @@
 import {
   AgentError,
-  changedFilesSince,
+  changedPathsSince,
   readMissionState,
   writeMissionState,
 } from "./common.mjs";
@@ -24,7 +24,7 @@ export const runSelectedChecks = async ({
   formatMode = "check",
 } = {}) => {
   const initialState = readMissionState(cwd);
-  const changedFiles = changedFilesSince(cwd, initialState.baselineCommit);
+  const changedFiles = changedPathsSince(cwd, initialState.baselineCommit);
   const selection = selectFocusedChecks(changedFiles, {
     baselineCommit: initialState.baselineCommit,
     full,

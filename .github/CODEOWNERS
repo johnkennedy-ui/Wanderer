@@ -1,0 +1,9 @@
+# Source-only ownership signal. Branch protection/review enforcement is NOT VERIFIED.
+# The repository has one eligible collaborator (@johnkennedy-ui), so this cannot
+# provide independent self-approval.
+/.github/ @johnkennedy-ui
+/scripts/ci/ @johnkennedy-ui
+/scripts/security/ @johnkennedy-ui
+/scripts/agent/ @johnkennedy-ui
+/package.json @johnkennedy-ui
+/package-lock.json @johnkennedy-ui

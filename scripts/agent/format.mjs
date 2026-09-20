@@ -1,4 +1,5 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, lstatSync } from "node:fs";
+import * as prettier from "prettier";
 import { spawnSync } from "node:child_process";
 import { join, relative } from "node:path";
 
@@ -8,11 +9,19 @@ import {
   isApprovedSpecification,
   normaliseRepositoryPath,
   resolveWithinRepository,
+  assertNoSymlinkAncestors,
+  readRegularFile,
 } from "./common.mjs";
 import { isFormattingEligiblePath } from "./checks.mjs";
 
 const trackedFormattingFiles = (cwd) =>
-  gitOutput(cwd, ["ls-files", "-z"])
+  gitOutput(cwd, [
+    "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ])
     .split("\0")
     .filter(Boolean)
     .map(normaliseRepositoryPath)
@@ -51,7 +60,13 @@ const selectCanonicalTrackedFile = (cwd, trackedFiles, requestedPath) => {
     repositoryRoot,
     normalizedPath,
   );
+  assertNoSymlinkAncestors(requestedLocation);
   if (!existsSync(requestedLocation)) return null;
+  if (!lstatSync(requestedLocation).isFile())
+    throw new AgentError(
+      "Formatting inputs must be regular files.",
+      "FORMATTING_INPUT_INVALID",
+    );
 
   const canonicalRelativePath = normaliseRepositoryPath(
     relative(repositoryRoot, realpathSync(requestedLocation)),
@@ -76,10 +91,17 @@ export const selectTrackedFormattingFiles = (cwd, requestedFiles = null) => {
   ].sort();
 };
 
-export const runFormat = ({ cwd = process.cwd(), action, files = null }) => {
+export const runFormat = async ({
+  cwd = process.cwd(),
+  action,
+  files = null,
+  execute = spawnSync,
+}) => {
   const selectedFiles = selectTrackedFormattingFiles(cwd, files);
   if (selectedFiles.length === 0) {
-    process.stdout.write("format: no eligible tracked files selected\n");
+    process.stdout.write(
+      "format: no eligible source files selected; no formatting work\n",
+    );
     return 0;
   }
 
@@ -95,28 +117,62 @@ export const runFormat = ({ cwd = process.cwd(), action, files = null }) => {
       "Local Prettier is unavailable; run npm ci before formatting.",
       "PRETTIER_UNAVAILABLE",
     );
-  const result = spawnSync(
+  const dirty = [];
+  const options = new Map();
+  for (const file of selectedFiles) {
+    const path = join(cwd, file);
+    const info = await prettier.getFileInfo(path, {
+      ignorePath: [
+        join(cwd, ".gitignore"),
+        join(cwd, ".prettierignore"),
+      ].filter(existsSync),
+      withNodeModules: false,
+    });
+    if (info.ignored || !info.inferredParser) {
+      process.stdout.write(
+        `format: skipped ${JSON.stringify(file)} (${info.ignored ? "ignored" : "unsupported"})\n`,
+      );
+      continue;
+    }
+    const config = { ...(await prettier.resolveConfig(path)), filepath: path };
+    options.set(file, config);
+    if (!(await prettier.check(readRegularFile(path, "utf8"), config)))
+      dirty.push(file);
+    else
+      process.stdout.write(
+        `format: already formatted ${JSON.stringify(file)}\n`,
+      );
+  }
+  if (!dirty.length) return 0;
+  const result = execute(
     process.execPath,
-    [prettierPath, action, ...selectedFiles],
-    {
-      cwd,
-      stdio: "inherit",
-    },
+    [prettierPath, action, ...dirty.map((path) => "./" + path)],
+    { cwd, stdio: "inherit", timeout: 180_000 },
   );
   if (result.error) throw result.error;
-  return result.status ?? 1;
+  if (result.signal || result.status !== 0) return result.status || 1;
+  for (const file of dirty) {
+    const path = join(cwd, file);
+    assertNoSymlinkAncestors(path);
+    if (
+      !(await prettier.check(readRegularFile(path, "utf8"), options.get(file)))
+    )
+      throw new AgentError(
+        "Formatter did not produce formatted bytes: " + file,
+        "FALSE_FORMAT_PASS",
+      );
+  }
+  return 0;
 };
 
-const main = () => {
+const main = async () => {
   const { action, files } = parseArguments(process.argv.slice(2));
-  process.exitCode = runFormat({ action, files });
+  process.exitCode = await runFormat({ action, files });
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
-  }
+  });
 }

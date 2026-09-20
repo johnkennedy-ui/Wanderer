@@ -453,7 +453,7 @@ export class ModelProjection {
           return;
         }
         if (this.disposed || this.instances.get(descriptor.id) !== expected) {
-          if (model !== undefined) disposeObject(model);
+          disposeObject(model);
           return;
         }
         expected.model = model;

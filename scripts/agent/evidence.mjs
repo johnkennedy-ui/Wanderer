@@ -1,14 +1,18 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   AgentError,
+  collectFixtureHashes,
+  collectInputFingerprint,
   changedFilesSince,
   gitOutput,
   readMissionState,
   readWorktreeState,
   resolveWithinRepository,
+  sha256Text,
 } from "./common.mjs";
+import { impactSummary } from "./impact-map.mjs";
 
 const parseArguments = (argv) => {
   if (argv.length === 0) return { outputDirectory: ".agent/evidence" };
@@ -23,35 +27,57 @@ const parseArguments = (argv) => {
 const hasPath = (paths, expression) =>
   paths.some((path) => expression.test(path));
 
-export const impactStatements = (changedFiles) => ({
-  save: hasPath(
-    changedFiles,
-    /(?:^|\/)(?:save|persistence|storage)(?:\/|\.|$)|^SAVE_FORMAT\.md$/i,
-  )
-    ? "Save/persistence/storage paths changed; review schema-v2 and storage-key compatibility evidence."
-    : "No save, persistence, or storage paths changed since the mission baseline.",
-  generator: hasPath(
-    changedFiles,
-    /(?:^|\/)(?:world|generator|generation)(?:\/|\.|$)/i,
-  )
-    ? "World/generator paths changed; review wanderer-web-v1 fixture compatibility evidence."
-    : "No world or generator paths changed since the mission baseline.",
-  ids: hasPath(
-    changedFiles,
-    /(?:definitions|catalogue|identifier|persistent|building)/i,
-  )
-    ? "Persistent-ID-adjacent paths changed; review append-only identifier compatibility evidence."
-    : "No persistent-ID-adjacent paths changed since the mission baseline.",
-  gameplay: hasPath(changedFiles, /^src\/(?:domain|app|platform|ui)\//)
-    ? "Gameplay or presentation production paths changed; review default-gameplay compatibility evidence."
-    : "No production gameplay, application, platform, or UI paths changed since the mission baseline.",
-});
+export const impactStatements = (changedFiles) => {
+  const impacts = impactSummary(changedFiles).impacts;
+  return {
+    save: impacts.includes("save")
+      ? "Save/persistence/storage paths changed; review supported historical/current schemas in SAVE_FORMAT.md and src/domain/persistence/decodeSave.ts, bound by the collected contract hashes, plus storage-key evidence."
+      : "No classified save, persistence, or storage paths changed since the mission baseline.",
+    generator: impacts.includes("world")
+      ? "World/generator paths changed; review WORLD_GENERATION.md, Documentation~/TERRAIN_V3.md and the current src/domain/world/generatorTypes.ts contract hashes; do not assume a historical version list is still complete."
+      : "No classified world or generator paths changed since the mission baseline.",
+    ids: hasPath(
+      changedFiles,
+      /(?:definitions|catalogue|identifier|persistent|building)/i,
+    )
+      ? "Persistent-ID-adjacent paths changed; review append-only identifier compatibility evidence."
+      : "No persistent-ID-adjacent paths changed since the mission baseline.",
+    gameplay: hasPath(changedFiles, /^src\/(?:domain|app|platform|ui)\//)
+      ? "Gameplay or presentation production paths changed; review default-gameplay compatibility evidence."
+      : "No production gameplay, application, platform, or UI paths changed since the mission baseline.",
+  };
+};
+
+const fixtureComparison = (baseline, current) => {
+  const flatten = (value) =>
+    Object.fromEntries(
+      Object.values(value ?? {}).flatMap((group) => Object.entries(group)),
+    );
+  const expected = flatten(baseline);
+  const actual = flatten(current);
+  const missing = Object.keys(expected).filter((path) => !(path in actual));
+  const unexpected = Object.keys(actual).filter((path) => !(path in expected));
+  const changed = Object.keys(expected).filter(
+    (path) => actual[path] && actual[path] !== expected[path],
+  );
+  return {
+    matches: missing.length + unexpected.length + changed.length === 0,
+    missing,
+    unexpected,
+    changed,
+  };
+};
 
 export const collectEvidence = ({ cwd = process.cwd() } = {}) => {
   const state = readMissionState(cwd);
   const currentCommit = gitOutput(cwd, ["rev-parse", "HEAD"]).trim();
   const changedFiles = changedFilesSince(cwd, state.baselineCommit);
   const runs = state.runs ?? [];
+  const currentFixtureHashes = collectFixtureHashes(cwd);
+  const fixtures = fixtureComparison(
+    state.compatibilityFixtureHashes,
+    currentFixtureHashes,
+  );
   const unresolvedWarnings = [
     ...(state.warnings ?? []),
     ...runs
@@ -95,6 +121,18 @@ export const collectEvidence = ({ cwd = process.cwd() } = {}) => {
       count: state.repeatedFailureCount,
     },
     compatibilityFixtureHashes: state.compatibilityFixtureHashes,
+    currentCompatibilityFixtureHashes: currentFixtureHashes,
+    compatibilityContractHashes: Object.fromEntries(
+      [
+        "SAVE_FORMAT.md",
+        "WORLD_GENERATION.md",
+        "Documentation~/TERRAIN_V3.md",
+        "src/domain/persistence/decodeSave.ts",
+        "src/domain/world/generatorTypes.ts",
+      ].map((path) => [path, sha256Text(readFileSync(join(cwd, path)))]),
+    ),
+    fixtureComparison: fixtures,
+    inputFingerprint: collectInputFingerprint({ cwd }),
     impact: impactStatements(changedFiles),
     unresolvedWarnings,
     trackedWorktree: readWorktreeState(cwd),
@@ -106,7 +144,7 @@ const markdown = (evidence) => {
     ? evidence.validationCommands
         .map(
           (run) =>
-            `| ${run.command.replace(/\|/g, "\\|")} | ${run.status} | ${run.exitCode ?? ""} | ${run.timedOut ? "yes" : "no"} |`,
+            `| ${run.command.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")} | ${run.status} | ${run.exitCode ?? ""} | ${run.timedOut ? "yes" : "no"} |`,
         )
         .join("\n")
     : "| No commands recorded | n/a | n/a | n/a |";

@@ -46,8 +46,10 @@ export const choosePendingClassChoicesIfOpen = async (
     const wizard = modal.getByTestId("class-wizard");
     const button =
       (await wizard.count()) === 1 ? wizard : modal.getByRole("button").first();
-    const id = await button.getAttribute("data-testid");
-    const label = (await button.innerText()).split(":")[0];
+    const { id, label } = await button.evaluate((node) => ({
+      id: node.getAttribute("data-testid"),
+      label: (node as HTMLElement).innerText.split(":")[0],
+    }));
     if (!id || !label) throw new Error("Class choice lacks public identity");
     await button.click();
     await expect(modal.getByTestId(id)).toHaveCount(0);

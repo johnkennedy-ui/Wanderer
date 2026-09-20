@@ -1,7 +1,20 @@
-import { readMissionState } from "./common.mjs";
+import { collectInputFingerprint, readMissionState } from "./common.mjs";
 
-export const readStatus = ({ cwd = process.cwd() } = {}) =>
-  readMissionState(cwd);
+export const readStatus = ({ cwd = process.cwd() } = {}) => {
+  const state = readMissionState(cwd);
+  try {
+    return {
+      ...state,
+      currentFingerprint: collectInputFingerprint({ cwd }).digest,
+    };
+  } catch (error) {
+    return {
+      ...state,
+      currentFingerprint: null,
+      fingerprintError: error.message,
+    };
+  }
+};
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {

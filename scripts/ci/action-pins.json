@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "verification": "verified-official-release-ref-and-commit",
+  "actions": {
+    "actions/checkout": {
+      "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "release": "v7.0.1",
+      "source": "https://github.com/actions/checkout",
+      "actionYamlSha256": "d59219cb79590abdb877deaa14e3b65a00c05318bf5a6f3b989b9162b5d08c35",
+      "verifiedAt": "2026-09-18T08:40:51.048452+00:00"
+    },
+    "actions/deploy-pages": {
+      "sha": "368f82528645a54fb793d4d04e342629a3f51346",
+      "release": "v5.0.1",
+      "source": "https://github.com/actions/deploy-pages",
+      "actionYamlSha256": "64c44539fba53559a157b5de16c01d3ab91dbc999c1b98b5c0b2fc3528d5d059",
+      "verifiedAt": "2026-09-18T08:40:51.023236+00:00"
+    },
+    "actions/github-script": {
+      "sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
+      "release": "v9.0.0",
+      "source": "https://github.com/actions/github-script",
+      "actionYamlSha256": "2155c7b84863afcfe81a73ab8eafcb2c2f304a995cbe282c31617aa847dff1d8",
+      "verifiedAt": "2026-09-18T08:40:50.255527+00:00"
+    },
+    "actions/setup-node": {
+      "sha": "820762786026740c76f36085b0efc47a31fe5020",
+      "release": "v7.0.0",
+      "source": "https://github.com/actions/setup-node",
+      "actionYamlSha256": "5d765941ab5d8bef27f08e81b0b041cdb2df2050ea0261dc925d157a2bafbd2b",
+      "verifiedAt": "2026-09-18T08:40:50.057018+00:00"
+    },
+    "actions/upload-artifact": {
+      "sha": "bbbca2ddaa5d8feaa63e36b76fdaad77386f024f",
+      "release": "v7.0.0",
+      "source": "https://github.com/actions/upload-artifact",
+      "actionYamlSha256": "c5979822866a72362e609844b6ebe77d4b7e759af68cc1c2c425dcf51481fab4",
+      "verifiedAt": "2026-09-18T08:45:53.228513+00:00"
+    },
+    "actions/upload-pages-artifact": {
+      "sha": "fc324d3547104276b827a68afc52ff2a11cc49c9",
+      "release": "v5.0.0",
+      "source": "https://github.com/actions/upload-pages-artifact",
+      "actionYamlSha256": "f84e759011e0c497e696f5bce4ebb5fbe9bbdc5aea309b73795283fa139c1558",
+      "verifiedAt": "2026-09-18T08:40:50.747702+00:00"
+    }
+  }
+}
