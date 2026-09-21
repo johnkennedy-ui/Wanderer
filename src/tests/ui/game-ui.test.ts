@@ -93,6 +93,15 @@ class ElementDouble extends EventTarget {
     this.dispatchEvent(new Event("click"));
   }
 }
+const primaryTouchUp = (): Event => {
+  const event = new Event("pointerup");
+  Object.defineProperties(event, {
+    pointerType: { value: "touch" },
+    isPrimary: { value: true },
+    button: { value: 0 },
+  });
+  return event;
+};
 const asElement = (element: ElementDouble): HTMLElement =>
   element as unknown as HTMLElement;
 const installDom = (): void => {
@@ -364,6 +373,28 @@ const setupUi = () => {
 };
 
 describe("current HUD placement port", () => {
+  it("starts a build choice from a primary touch release without waiting for a synthetic click", () => {
+    const { ui, get } = setupUi();
+    ui.render(snapshot());
+    const wood = get("build-buttons").children.find(
+      (button) => button.dataset.testid === "build-WoodWall",
+    );
+    if (wood === undefined) throw new Error("Missing Wood Wall build choice");
+
+    wood.dispatchEvent(primaryTouchUp());
+
+    expect(ui.isWorldPlacementEnabled()).toBe(true);
+    expect(get("placement-mode").textContent).toContain("Wood Wall selected");
+    expect(get("build-menu-panel").hidden).toBe(true);
+    expect(wood.getAttribute("aria-pressed")).toBe("true");
+    // The paired synthetic click from the same touch must leave the choice
+    // active rather than toggling or cancelling it.
+    wood.click();
+    expect(ui.isWorldPlacementEnabled()).toBe(true);
+    expect(wood.getAttribute("aria-pressed")).toBe("true");
+    ui.dispose();
+  });
+
   it("opens Settings above runtime-only 1×, 2×, and 5× speed controls", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot());
