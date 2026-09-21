@@ -583,6 +583,7 @@ describe("retained Three CPU projection", () => {
     expect(root?.position.toArray()).toEqual([4, 0.14, 3]);
     expect(root?.children).toHaveLength(8);
     expect(projection.diagnostics().maps.mageExplosions).toBe(1);
+    expect(projection.mageExplosionCount()).toBe(1);
 
     projection.render({
       ...snapshot,
@@ -603,6 +604,7 @@ describe("retained Three CPU projection", () => {
       projection.group.getObjectByName("mage-explosion:fireball:1"),
     ).toBeUndefined();
     expect(projection.diagnostics().maps.mageExplosions).toBe(0);
+    expect(projection.mageExplosionCount()).toBe(0);
     projection.dispose();
   });
 
@@ -1197,6 +1199,10 @@ describe("Three browser adapter ownership", () => {
 
   it("preserves and resets all current canvas diagnostics, with warm adapter allocations stable", () => {
     const dom = rendererDom();
+    const projectionDiagnostics = vi.spyOn(
+      RetainedProjection.prototype,
+      "diagnostics",
+    );
     const renderer = createThreeRenderer(dom.host);
     const snapshot: GameRendererSnapshot = {
       ...visualVariantSnapshot(),
@@ -1226,11 +1232,14 @@ describe("Three browser adapter ownership", () => {
       },
     });
     renderer.render(snapshot);
+    expect(projectionDiagnostics).not.toHaveBeenCalled();
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "1",
       weaponRelicDropCount: "0",
       homingProjectileCount: "0",
       projectileCount: "8",
+      mageFireballCount: "2",
+      mageExplosionCount: "0",
       crescentAttackCount: "5",
       playerHitRecovery: "active",
       playerHitFlash: "on",
@@ -1238,6 +1247,7 @@ describe("Three browser adapter ownership", () => {
       healingHutAuraRadii: "3,4,5,3",
     });
     const before = renderer.diagnostics();
+    expect(projectionDiagnostics).toHaveBeenCalledTimes(1);
     const styleWrites = writeStyle.mock.calls.length;
     const datasetWrites = writeDataset.mock.calls.length;
     expect(writeHealth).toHaveBeenCalledTimes(1);

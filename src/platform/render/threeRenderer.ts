@@ -204,7 +204,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       );
       setDataset(
         "mageExplosionCount",
-        String(projection.diagnostics().maps.mageExplosions),
+        String(projection.mageExplosionCount()),
       );
       setDataset(
         "crescentAttackCount",

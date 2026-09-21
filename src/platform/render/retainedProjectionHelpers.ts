@@ -321,6 +321,11 @@ export class RetainedProjection {
     });
   }
 
+  /** Hot-path canvas telemetry must not traverse the whole retained scene. */
+  mageExplosionCount(): number {
+    return this.mageExplosions.size;
+  }
+
   /** Keeps the proven geometric marker as an async GLB fallback. */
   setModelVisible(id: string, visible: boolean): void {
     const mesh =
