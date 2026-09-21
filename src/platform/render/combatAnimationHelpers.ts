@@ -24,12 +24,12 @@ export const knightSlashAnimationFor = (
   const windup = ramp(phase, 0, 0.16);
   const sweep = ramp(phase, 0.06, 0.72);
   const recovery = ramp(phase, 0.7, 1);
-  return Object.freeze({
+  return {
     forward: (0.14 + sweep * 0.31) * (1 - recovery * 0.35),
     height: 0.08 + Math.sin(phase * Math.PI) * 0.14,
     scale: (0.76 + sweep * 0.38) * (1 - recovery * 0.28),
     turn: (-windup * 0.92 + sweep * 1.84) * (1 - recovery),
-  });
+  };
 };
 
 export interface MageFireballAnimation {
@@ -46,12 +46,12 @@ export const mageFireballAnimationFor = (
 ): MageFireballAnimation => {
   const phase = unit(progress);
   const pulse = (Math.sin(presentationElapsed * 20 + phase * 5) + 1) * 0.5;
-  return Object.freeze({
+  return {
     height: 0.72 + Math.sin(phase * Math.PI) * 0.11 + pulse * 0.025,
     scale: 0.9 + pulse * 0.22,
     spin: presentationElapsed * 8,
     trailLength: 1.45 + pulse * 0.85 + phase * 0.3,
-  });
+  };
 };
 
 export const mageExplosionDurationSeconds = 0.42;
@@ -70,11 +70,11 @@ export const mageExplosionAnimationFor = (
 ): MageExplosionAnimation => {
   const phase = unit(age / mageExplosionDurationSeconds);
   const expansion = smoothstep(phase);
-  return Object.freeze({
+  return {
     complete: age >= mageExplosionDurationSeconds,
     coreScale: Math.max(0.12, 1.25 - phase * 0.93),
     emberDistance: 0.14 + expansion * 0.92,
     emberHeight: 0.08 + Math.sin(phase * Math.PI) * 0.3,
     ringScale: 0.45 + expansion * 2.15,
-  });
+  };
 };

@@ -190,18 +190,14 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         String(snapshot.weaponRelicDrops.length),
       );
       let homingProjectileCount = 0;
-      for (const projectile of snapshot.projectiles)
+      let mageFireballCount = 0;
+      for (const projectile of snapshot.projectiles) {
         if (projectile.homing === true) homingProjectileCount += 1;
+        if (projectile.style === "magic") mageFireballCount += 1;
+      }
       setDataset("homingProjectileCount", String(homingProjectileCount));
       setDataset("projectileCount", String(snapshot.projectiles.length));
-      setDataset(
-        "mageFireballCount",
-        String(
-          snapshot.projectiles.filter(
-            (projectile) => projectile.style === "magic",
-          ).length,
-        ),
-      );
+      setDataset("mageFireballCount", String(mageFireballCount));
       setDataset(
         "mageExplosionCount",
         String(projection.mageExplosionCount()),

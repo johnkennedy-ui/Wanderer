@@ -350,29 +350,33 @@ export class ModelProjection {
           y:
             projectile.origin.y +
             (projectile.targetPosition.y - projectile.origin.y) *
-              projectile.progress,
+            projectile.progress,
         };
-        const fireball =
-          projectile.style === "magic"
-            ? mageFireballAnimationFor(
-                projectile.progress,
-                snapshot.presentationElapsed,
-              )
-            : undefined;
+        const direction = {
+          x: projectile.targetPosition.x - projectile.origin.x,
+          y: projectile.targetPosition.y - projectile.origin.y,
+        };
+        if (projectile.style !== "magic")
+          return {
+            id: projectile.id,
+            asset: projectileModelFor(projectile.style),
+            position,
+            height: 0.72,
+            scale: projectile.style === "arrow" ? 0.55 : 0.5,
+            rotation: calibratedYawFor(direction),
+            tangent: true,
+          };
+        const fireball = mageFireballAnimationFor(
+          projectile.progress,
+          snapshot.presentationElapsed,
+        );
         return {
           id: projectile.id,
           asset: projectileModelFor(projectile.style),
           position,
           height: fireball?.height ?? 0.72,
-          scale:
-            (projectile.style === "arrow" ? 0.55 : 0.5) *
-            (fireball?.scale ?? 1),
-          rotation:
-            calibratedYawFor({
-              x: projectile.targetPosition.x - projectile.origin.x,
-              y: projectile.targetPosition.y - projectile.origin.y,
-            }) + (fireball?.spin ?? 0),
-          ...(fireball === undefined ? { tangent: true } : {}),
+          scale: 0.5 * fireball.scale,
+          rotation: calibratedYawFor(direction) + fireball.spin,
         };
       }),
       ...snapshot.crescentAttacks.map((attack) => {

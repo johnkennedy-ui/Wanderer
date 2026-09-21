@@ -197,15 +197,17 @@ export class RetainedProjection {
         fireball?.height ?? 0.72,
       );
       mesh.scale.setScalar(fireball?.scale ?? 1);
-      const trailId = `fireball-trail:${projectile.id}`;
-      retainedFireballTrails.add(trailId);
       if (fireball === undefined) {
         mesh.rotation.set(0, 0, 0);
-        const retainedTrail = this.fireballTrails.get(trailId);
-        if (retainedTrail !== undefined) retainedTrail.visible = false;
+        const retainedTrail = this.fireballTrails.get(projectile.id);
+        if (retainedTrail !== undefined) {
+          retainedFireballTrails.add(projectile.id);
+          retainedTrail.visible = false;
+        }
         continue;
       }
 
+      retainedFireballTrails.add(projectile.id);
       magicProjectiles.set(projectile.id, { ...projectile.targetPosition });
       const direction = {
         x: projectile.targetPosition.x - projectile.origin.x,
@@ -218,7 +220,7 @@ export class RetainedProjection {
           : { x: 0, y: 1 };
       const trail = this.marker(
         this.fireballTrails,
-        trailId,
+        projectile.id,
         {
           x: position.x - normalized.x * 0.28,
           y: position.y - normalized.y * 0.28,
@@ -227,13 +229,20 @@ export class RetainedProjection {
         this.resources.material(0xffc56b, 0.2, 0xff5b00, 1.3),
         fireball.height - 0.02,
       );
+      trail.name = `fireball-trail:${projectile.id}`;
       trail.visible = true;
       trail.rotation.set(0, Math.atan2(normalized.x, -normalized.y), 0);
       trail.scale.set(0.62, 0.52, fireball.trailLength);
     }
     this.removeMissing(this.projectiles, projectiles);
-    this.removeMissing(this.fireballTrails, retainedFireballTrails);
-    this.reconcileMageExplosions(snapshot, magicProjectiles);
+    if (this.fireballTrails.size > 0 || retainedFireballTrails.size > 0)
+      this.removeMissing(this.fireballTrails, retainedFireballTrails);
+    if (
+      this.lastMagicProjectiles.size > 0 ||
+      magicProjectiles.size > 0 ||
+      this.mageExplosions.size > 0
+    )
+      this.reconcileMageExplosions(snapshot, magicProjectiles);
     const crescents = new Set<string>();
     for (const attack of snapshot.crescentAttacks) {
       crescents.add(attack.id);
