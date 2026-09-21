@@ -5,29 +5,100 @@ import {
   playerClasses,
 } from "../types";
 import type {
+  BuildingState,
   ClassProgression,
   ClassSkillId,
   LegacyClassSkillId,
   PlayerClass,
   PlayerStatAllocations,
+  UpgradeId,
 } from "../types";
+import { buildingKinds } from "../types";
 import {
   isContiguousClassSkillPrefixFor,
   playerLevelForExperience,
 } from "../session/progressionRules";
-import { isSaveV2Document } from "./saveV2";
-import type { SaveV2Document } from "./saveV2";
+import {
+  saveV2ResourceKeys,
+  saveV2UpgradeIds,
+  type SaveV2Document,
+} from "./saveV2";
 
 /** Current explicit wire format for the level-25 progression catalogue. */
 export const SAVE_V4_SCHEMA_VERSION = 4 as const;
 
-export interface SaveV4Document extends Omit<SaveV2Document, "schemaVersion"> {
+export interface SaveV4Document extends Omit<
+  SaveV2Document,
+  "schemaVersion" | "buildings"
+> {
   readonly schemaVersion: typeof SAVE_V4_SCHEMA_VERSION;
+  readonly buildings: readonly BuildingState[];
   readonly classProgression: ClassProgression;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const isFiniteVector = (value: unknown): boolean =>
+  isRecord(value) && Number.isFinite(value.x) && Number.isFinite(value.y);
+
+const isCurrentBuilding = (value: unknown): value is BuildingState =>
+  isRecord(value) &&
+  typeof value.id === "string" &&
+  value.id.length > 0 &&
+  buildingKinds.includes(value.kind as BuildingState["kind"]) &&
+  (value.level === 1 || value.level === 2 || value.level === 3) &&
+  isFiniteVector(value.position);
+
+const hasExpectedKeys = (
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean => {
+  const keys = Object.keys(value).sort();
+  const sorted = [...expected].sort();
+  return (
+    keys.length === sorted.length &&
+    keys.every((key, index) => key === sorted[index])
+  );
+};
+
+const hasCurrentCommonFields = (value: Record<string, unknown>): boolean => {
+  const resources = isRecord(value.resources) ? value.resources : null;
+  return (
+    isRecord(value.world) &&
+    typeof value.world.seed === "string" &&
+    typeof value.world.generatorVersion === "string" &&
+    isRecord(value.player) &&
+    isFiniteVector(value.player.position) &&
+    Number.isFinite(value.player.hp) &&
+    Number.isFinite(value.player.maxHp) &&
+    (value.player.hp as number) >= 0 &&
+    (value.player.maxHp as number) > 0 &&
+    (value.player.hp as number) <= (value.player.maxHp as number) &&
+    resources !== null &&
+    hasExpectedKeys(resources, saveV2ResourceKeys) &&
+    saveV2ResourceKeys.every(
+      (key) =>
+        Number.isInteger(resources[key]) && (resources[key] as number) >= 0,
+    ) &&
+    Array.isArray(value.buildings) &&
+    value.buildings.every(isCurrentBuilding) &&
+    new Set(value.buildings.map((building) => building.id)).size ===
+      value.buildings.length &&
+    Array.isArray(value.defeatedBossIds) &&
+    value.defeatedBossIds.every((id) => typeof id === "string") &&
+    new Set(value.defeatedBossIds).size === value.defeatedBossIds.length &&
+    Array.isArray(value.upgrades) &&
+    value.upgrades.every((id) => saveV2UpgradeIds.includes(id as UpgradeId)) &&
+    new Set(value.upgrades).size === value.upgrades.length &&
+    Number.isInteger(value.nextBuildingSerial) &&
+    (value.nextBuildingSerial as number) >= 1 &&
+    Number.isFinite(value.committedAt) &&
+    typeof value.savePointId === "string" &&
+    value.savePointId.length > 0 &&
+    isFiniteVector(value.savePointPosition)
+  );
+};
 
 const classProgressionKeys = Object.freeze([
   "experience",
@@ -145,9 +216,8 @@ export const isClassProgressionV4 = (
 export const isSaveV4Document = (value: unknown): value is SaveV4Document => {
   if (!isRecord(value) || value.schemaVersion !== SAVE_V4_SCHEMA_VERSION)
     return false;
-  const historicalShape = { ...value, schemaVersion: 2 as const };
   return (
-    isSaveV2Document(historicalShape) &&
+    hasCurrentCommonFields(value) &&
     isClassProgressionV4(value.classProgression)
   );
 };

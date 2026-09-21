@@ -73,6 +73,8 @@ const buildingPlaceholderIcons: Record<BuildingKind, string> = {
   Farm: "⌘",
   Storage: "▣",
   Healer: "✚",
+  WoodWall: "🪵",
+  StoneWall: "🪨",
 };
 
 const resourcePlaceholderIcons = {
@@ -87,8 +89,8 @@ const placementModeDescription = (mode: PlacementMode): string => {
   if (mode === null) return "Placement mode inactive.";
   const label = buildingDefinitions[mode.buildingKind].label;
   return mode.kind === "place"
-    ? `${label} selected. Tap an open location in the world to place it.`
-    : `${label} relocation selected. Tap an open location in the world to move it.`;
+    ? `${label} selected. Tap an open location in the world to place it; placement snaps to the nearest 1m tile centre.`
+    : `${label} relocation selected. Tap an open location in the world to move it; placement snaps to the nearest 1m tile centre.`;
 };
 
 export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
@@ -173,7 +175,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     </section>
     <section id="build-menu-panel" data-testid="build-menu-panel" class="side-panel panel" aria-label="Build" hidden>
       <header class="panel-heading"><h2>Build</h2><button type="button" class="panel-close" data-testid="close-build-menu" aria-label="Close Build">×</button></header>
-      <p class="subtle" data-testid="build-radius">Campfire can bootstrap anywhere valid. Other buildings use the active Campfire L1–L3 radius.</p>
+      <p class="subtle" data-testid="build-radius">Campfire can bootstrap anywhere valid. Other buildings use the active Campfire L1–L3 radius. Building placements snap to 1m tile centres.</p>
       <div class="build-buttons" data-testid="build-buttons"></div>
       <div class="building-list" data-testid="building-list"></div>
     </section>
@@ -401,7 +403,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     button.type = "button";
     button.className = "build-option";
     button.dataset.testid = `build-${kind}`;
-    button.textContent = buildingPlaceholderIcons[kind];
+    button.textContent = `${buildingPlaceholderIcons[kind]} ${buildingDefinitions[kind].label}`;
     button.setAttribute(
       "aria-label",
       `Place ${buildingDefinitions[kind].label}`,
@@ -576,7 +578,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       );
       text(
         byTestId("build-radius"),
-        `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m. Healing Hut L1/L2/L3 auras use 3m/4m/5m.`,
+        `Campfire can bootstrap anywhere valid. Nearby settlement placement currently reaches ${snapshot.buildRadius}m; Campfire L1/L2/L3 use 6m/9m/12m. Healing Hut L1/L2/L3 auras use 3m/4m/5m. Building placements snap to 1m tile centres.`,
       );
       text(byTestId("message"), presentGameNotice(snapshot.notice));
       if (saveButton.disabled !== !snapshot.canSave)

@@ -29,6 +29,8 @@ export type PlacementRejection =
   | { readonly kind: "outside-settlement-radius"; readonly radius: number }
   | { readonly kind: "insufficient-resources" }
   | { readonly kind: "unknown-building" }
+  | { readonly kind: "occupied-by-actor" }
+  | { readonly kind: "building-not-upgradeable" }
   | { readonly kind: "already-level-3" };
 
 /** A typed command result; UI code must not infer it from display text. */

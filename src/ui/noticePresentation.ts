@@ -41,6 +41,10 @@ export const presentPlacementRejection = (
       return "insufficient resources";
     case "unknown-building":
       return "unknown building";
+    case "occupied-by-actor":
+      return "tile blocks a character or campfire return point";
+    case "building-not-upgradeable":
+      return "walls are single-tier and cannot be upgraded";
     case "already-level-3":
       return "already level 3";
     default:

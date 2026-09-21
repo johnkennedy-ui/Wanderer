@@ -28,7 +28,7 @@ The only resource keys are `wood`, `stone`, `scrap`, `essence`, and `bossCore`. 
 
 ## Buildings and settlement rule
 
-Every building has a stable session-generated ID, three levels, data-driven costs, and a visible description. Placement validates before it changes any resource or record. Invalid terrain, overlaps, unaffordable cost, and an ordinary building outside the applicable campfire radius reject atomically.
+Every building has a stable session-generated ID, data-driven costs, and a visible description. Existing building kinds have three levels; Wood Wall and Stone Wall are single-tier. New placement and relocation snap to the nearest integer-centred 1m tile before terrain, footprint overlap, campfire range and affordability checks. Adjacent wall tiles meet at their edges. Invalid placement rejects atomically without spending resources or consuming an ID. Previously saved fractional building positions remain unchanged until explicitly relocated.
 
 | Type     | L1                          | L2                              | L3                                          |
 | -------- | --------------------------- | ------------------------------- | ------------------------------------------- |
@@ -38,7 +38,9 @@ Every building has a stable session-generated ID, three levels, data-driven cost
 | Storage  | 180 each common material    | 260 each common material        | 360 each common material                    |
 | Healer   | +1 campfire health/s        | +3 campfire health/s            | +6 campfire health/s                        |
 
-Relocation validates the destination before replacing the old record. Demolition removes only the selected building and returns 50% of its invested resources, subject to current common-material capacity. No building action automatically saves.
+Wood Wall costs 6 Wood; Stone Wall costs 8 Stone. Both occupy a solid 1×1m tile and are available in the Build menu, with distinct procedural plank and masonry visuals. They have no durability, gates or upgrades. Walls block players, enemies, projectile flight and attacks across them; placement over a live actor or campfire return point is rejected. Enemy spawns that conflict with a wall use a bounded, deterministic wall-and-terrain-safe fallback; exhausted searches remain retryable. Trees, rocks and mountains also stop projectiles, while water does not. Projectile sweeps include fast and homing flight; blocked primary or secondary impacts give no damage, hit healing or defeat rewards.
+
+Relocation validates the snapped destination before replacing the old record. Wall relocation and demolition immediately invalidate enemy navigation paths. Demolition removes only the selected building and returns 50% of its invested resources, subject to current common-material capacity. No building action automatically saves.
 
 ## Death and explicit saves
 

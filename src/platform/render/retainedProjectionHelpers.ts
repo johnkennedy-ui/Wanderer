@@ -83,6 +83,8 @@ export class RetainedProjection {
     const auras = new Set<string>();
     for (const building of snapshot.visibleBuildings) {
       buildings.add(building.id);
+      const wall =
+        building.kind === "WoodWall" || building.kind === "StoneWall";
       if (building.kind === "Healer") {
         auras.add(building.id);
         const aura = this.marker(
@@ -102,11 +104,16 @@ export class RetainedProjection {
         this.buildings,
         building.id,
         building.position,
-        this.resources.cylinder(
-          0.48 + building.level * 0.07,
-          0.7 + building.level * 0.15,
-        ),
-        this.resources.material(buildingColors[building.kind]),
+        wall
+          ? this.resources.wall()
+          : this.resources.cylinder(
+              0.48 + building.level * 0.07,
+              0.7 + building.level * 0.15,
+            ),
+        wall
+          ? this.resources.wallMaterial(building.kind)
+          : this.resources.material(buildingColors[building.kind]),
+        wall ? 0.5 : 0,
       );
     }
     this.removeMissing(this.buildings, buildings);

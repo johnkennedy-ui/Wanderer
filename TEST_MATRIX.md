@@ -65,6 +65,30 @@ are mandatory in the separate read-only security job; mocked parser tests alone
 are insufficient. This table describes controls, not a passing candidate.
 See `Documentation~/CI_SECURITY_CONTRACT.md` for tool support and owner actions.
 
+## Walls and snapped base building
+
+- `src/tests/domain/building-geometry.test.ts` covers deterministic grid ties,
+  adjacent footprints, swept contacts, rounding-safe stops and overlap retreat.
+- `src/tests/domain/wall-settlement.test.ts` and
+  `src/tests/domain/session-walls-integration.test.ts` exercise snapped validation,
+  atomic rejection, occupied actors, stable IDs, adjoining wall collision,
+  demolition and real session projectile/persistence behavior.
+- `src/tests/domain/wall-spawns.test.ts` covers saved-wall enemy creation,
+  a real defeated enemy respawning after wall placement, safe fallback and
+  deferred retry, callback copy-out and protected campfire return points.
+- `src/tests/domain/projectile-obstacles.test.ts` covers flight styles, homing
+  retarget sweeps, high-delta crossings, blocked primary/secondary rewards,
+  terrain boundaries and optional wall-only melee policies.
+- Save tests preserve frozen V2/V3 compatibility and round-trip both V4 wall
+  kinds without resnapping old fractional positions or changing storage keys.
+- `src/tests/platform/wall-material.test.ts` and renderer/UI tests cover tile
+  footprints, distinct plank/masonry materials, retained resource disposal,
+  accessible choices and single-tier row actions.
+- `src/tests/browser/building-grid.spec.ts` adds real desktop click and touch
+  placement, adjoining walls, overlap rejection, negative relocation and cancel
+  to both canonical built base-path matrices. Independent combined-candidate
+  gameplay QA remains a separate acceptance gate, not a claim made by this list.
+
 ## M4 deterministic runtime evidence
 
 `npm run test:soak` runs the fixed-seed headless soak, invariant/mutation-isolation

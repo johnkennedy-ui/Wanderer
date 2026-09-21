@@ -102,6 +102,14 @@ is derived from the world seed and the serial is the persisted
 GUIDs. A new building kind may be appended to the active catalogue only with
 the same explicit compatibility discipline.
 
+`WoodWall` and `StoneWall` are append-only current-schema (V4) building kinds,
+using the existing `{ id, kind, position, level }` record with level 1. No schema
+number, storage key or migration changes are introduced. V2/V3 validators keep
+their frozen historical building-kind lists and reject those new IDs; the V2
+copy-out boundary explicitly rejects unsupported current content. Current save
+copy-out retains only declared fields. Legacy fractional positions load and
+re-save unchanged: snapping applies only to new placement or explicit relocation.
+
 Runtime-only enemy cooldowns, projectiles, floor drops, Three.js meshes, DOM identity, keyboard/touch state, and framework identifiers are never persisted.
 
 ## RO-inspired stat rules

@@ -41,6 +41,67 @@ afterEach(() => {
 });
 
 describe("retained Three CPU projection", () => {
+  it("renders retained one-metre procedural wood and stone wall tiles without models", () => {
+    const projection = new RetainedProjection();
+    const snapshot = rendererSnapshot();
+    projection.render({
+      ...snapshot,
+      visibleBuildings: [
+        {
+          id: "wall:wood",
+          kind: "WoodWall",
+          level: 1,
+          position: { x: 2, y: -1 },
+        },
+        {
+          id: "wall:stone",
+          kind: "StoneWall",
+          level: 1,
+          position: { x: 3, y: -1 },
+        },
+      ],
+    });
+    const wood = meshFor(projection, "wall:wood");
+    const stone = meshFor(projection, "wall:stone");
+    for (const wall of [wood, stone]) {
+      expect(wall.geometry).toBeInstanceOf(THREE.BoxGeometry);
+      expect((wall.geometry as THREE.BoxGeometry).parameters).toMatchObject({
+        width: 1,
+        height: 1,
+        depth: 1,
+      });
+      expect(wall.position.y).toBe(0.5);
+    }
+    expect((wood.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      0x8b5a2b,
+    );
+    expect((stone.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      0x78828a,
+    );
+    const before = projection.diagnostics();
+    projection.render(
+      structuredClone({
+        ...snapshot,
+        visibleBuildings: [
+          {
+            id: "wall:wood",
+            kind: "WoodWall",
+            level: 1,
+            position: { x: 2, y: -1 },
+          },
+          {
+            id: "wall:stone",
+            kind: "StoneWall",
+            level: 1,
+            position: { x: 3, y: -1 },
+          },
+        ],
+      }),
+    );
+    expect(projection.diagnostics()).toEqual(before);
+    projection.dispose();
+  });
+
   it("projects typed terrain with visual bases aligned to supplied footprints", () => {
     const projection = new RetainedProjection();
     const snapshot = rendererSnapshot();
@@ -630,7 +691,9 @@ describe("retained Three CPU projection", () => {
   it("selects every building/enemy/drop variant in place without growing visible maps", () => {
     const projection = new RetainedProjection();
     const snapshot = rendererSnapshot();
-    const colors = [0xff9f43, 0x8d6e63, 0x4caf50, 0x607d8b, 0x9c6ade];
+    const colors = [
+      0xff9f43, 0x8d6e63, 0x4caf50, 0x607d8b, 0x9c6ade, 0x8b5a2b, 0x78828a,
+    ];
     const enemyColors = [0xc75c5c, 0x8e2424, 0x6a9f58, 0xfbc02d, 0xd84315];
     projection.render(snapshot);
     const buildingMesh = meshFor(projection, "building:fixture:1");
@@ -644,16 +707,27 @@ describe("retained Three CPU projection", () => {
           visibleBuildings: [{ ...snapshot.visibleBuildings[0], kind, level }],
         });
         expect(meshFor(projection, "building:fixture:1")).toBe(buildingMesh);
-        expect(
-          (buildingMesh.geometry as THREE.CylinderGeometry).parameters,
-        ).toMatchObject({
-          radiusTop: 0.48 + level * 0.07,
-          height: 0.7 + level * 0.15,
-        });
+        if (kind === "WoodWall" || kind === "StoneWall")
+          expect(
+            (buildingMesh.geometry as THREE.BoxGeometry).parameters,
+          ).toMatchObject({
+            width: 1,
+            height: 1,
+            depth: 1,
+          });
+        else
+          expect(
+            (buildingMesh.geometry as THREE.CylinderGeometry).parameters,
+          ).toMatchObject({
+            radiusTop: 0.48 + level * 0.07,
+            height: 0.7 + level * 0.15,
+          });
         expect(
           (buildingMesh.material as THREE.MeshStandardMaterial).color.getHex(),
         ).toBe(colors[index]);
-        expect(buildingMesh.position.y).toBe(0);
+        expect(buildingMesh.position.y).toBe(
+          kind === "WoodWall" || kind === "StoneWall" ? 0.5 : 0,
+        );
       }
     }
     let enemyMesh: THREE.Mesh | undefined;
