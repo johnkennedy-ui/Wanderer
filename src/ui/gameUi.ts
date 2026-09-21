@@ -398,6 +398,39 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setStatsPanelVisible(false);
     setSettingsVisible(false);
   };
+  const attachBuildChoiceActivation = (
+    button: HTMLButtonElement,
+    kind: BuildingKind,
+  ): void => {
+    // A canvas placement consumes a touch pointer-up event. Handle the next
+    // touch choice at its primary pointer-up too, rather than relying only on
+    // the browser's later synthesized click. The following click is a
+    // duplicate of that same touch, so suppress it for this event turn while
+    // preserving ordinary mouse and keyboard click activation.
+    let suppressNextClick = false;
+    const activate = (): void =>
+      startPlacement({ kind: "place", buildingKind: kind });
+    button.addEventListener("pointerup", (event) => {
+      if (
+        event.pointerType !== "touch" ||
+        !event.isPrimary ||
+        event.button !== 0
+      )
+        return;
+      suppressNextClick = true;
+      activate();
+      setTimeout(() => {
+        suppressNextClick = false;
+      }, 0);
+    });
+    button.addEventListener("click", () => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      activate();
+    });
+  };
   for (const kind of buildingKinds.filter((kind) => kind !== "Storage")) {
     const button = document.createElement("button");
     button.type = "button";
@@ -409,9 +442,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       `Place ${buildingDefinitions[kind].label}`,
     );
     button.title = `${buildingDefinitions[kind].label}: ${buildingDefinitions[kind].description}`;
-    button.addEventListener("click", () =>
-      startPlacement({ kind: "place", buildingKind: kind }),
-    );
+    attachBuildChoiceActivation(button, kind);
     buildButtons.append(button);
   }
   setPlacementMode(null);
