@@ -154,6 +154,47 @@ describe("model combat pose binding", () => {
     }
   });
 
+  it("gives Knight slash and Mage fireball casts separate wind-up, release, and recovery poses", async () => {
+    const knightPoseRoot = new THREE.Group();
+    const knightModel = await loadModel("winding-fixed-v1/player_knight.glb");
+    knightPoseRoot.add(knightModel);
+    const knight = bindModelPose(knightModel, knightPoseRoot, "player-knight");
+    const slashCue = {
+      actorId: "player",
+      sequence: 9,
+      direction: { x: 1, y: 0 },
+      style: "slash" as const,
+    };
+    applyModelPose(knight, { ...slashCue, age: 0.06 }, 0, 1);
+    const slashWindup = knight?.weaponPivot.rotation.x ?? 0;
+    applyModelPose(knight, { ...slashCue, age: 0.3 }, 0, 1.24);
+    const slashRelease = knight?.weaponPivot.rotation.x ?? 0;
+    applyModelPose(knight, { ...slashCue, age: 0.45 }, 0, 1.45);
+    expect(slashWindup).toBeLessThan(0);
+    expect(slashRelease).toBeGreaterThan(0);
+    expect(knight?.weaponPivot.rotation.x).toBeCloseTo(0);
+
+    const magePoseRoot = new THREE.Group();
+    const mageModel = await loadModel("winding-fixed-v1/player_wizard.glb");
+    magePoseRoot.add(mageModel);
+    const mage = bindModelPose(mageModel, magePoseRoot, "player-wizard");
+    const fireballCue = {
+      actorId: "player",
+      sequence: 10,
+      direction: { x: 1, y: 0 },
+      style: "magic" as const,
+    };
+    applyModelPose(mage, { ...fireballCue, age: 0.1 }, 0, 2);
+    const castWindup = mage?.weaponPivot.rotation.x ?? 0;
+    applyModelPose(mage, { ...fireballCue, age: 0.27 }, 0, 2.17);
+    const castRelease = mage?.weaponPivot.rotation.x ?? 0;
+    applyModelPose(mage, { ...fireballCue, age: 0.45 }, 0, 2.45);
+    expect(castWindup).toBeLessThan(0);
+    expect(castRelease).toBeGreaterThan(0);
+    expect(mage?.weaponPivot.rotation.x).toBeCloseTo(0);
+    expect(mage?.aimPivot.rotation.x).toBeCloseTo(0);
+  });
+
   it("uses retained travel only while moving and restores every rigid part neutrally", async () => {
     const poseRoot = new THREE.Group();
     const model = await loadModel("actor-geometry-v2/player_archer.glb");

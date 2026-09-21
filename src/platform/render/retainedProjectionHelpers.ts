@@ -3,6 +3,11 @@ import { gameplayTuning, resourceDefinitions } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import type { ChunkObstacle, Vector2 } from "../../domain/types";
 import {
+  knightSlashAnimationFor,
+  mageExplosionAnimationFor,
+  mageFireballAnimationFor,
+} from "./combatAnimationHelpers";
+import {
   buildingColors,
   enemyPresentation,
   projectilePresentationFor,
@@ -11,6 +16,14 @@ import {
 
 type MarkerMap = Map<string, THREE.Mesh>;
 type ObstacleMap = Map<string, THREE.Object3D>;
+
+interface MageExplosion {
+  readonly core: THREE.Mesh;
+  readonly embers: readonly THREE.Mesh[];
+  readonly ring: THREE.Mesh;
+  readonly root: THREE.Group;
+  readonly startedAt: number;
+}
 
 /** CPU-testable retained visual owner; never holds or commands gameplay state. */
 export class RetainedProjection {
@@ -23,10 +36,15 @@ export class RetainedProjection {
   private readonly enemies: MarkerMap = new Map();
   private readonly projectiles: MarkerMap = new Map();
   private readonly crescents: MarkerMap = new Map();
+  private readonly fireballTrails: MarkerMap = new Map();
+  private readonly mageExplosions = new Map<string, MageExplosion>();
+  private readonly lastMagicProjectiles = new Map<string, Vector2>();
   private readonly drops: MarkerMap = new Map();
   private readonly relicDrops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
   private destination: THREE.Mesh | undefined;
+  private lastPresentationElapsed: number | undefined;
+  private lastPresentationResetId: number | undefined;
   private meshesRemoved = 0;
   private disposed = false;
 
@@ -141,6 +159,8 @@ export class RetainedProjection {
     }
     this.removeMissing(this.enemies, enemies);
     const projectiles = new Set<string>();
+    const retainedFireballTrails = new Set<string>();
+    const magicProjectiles = new Map<string, Vector2>();
     for (const projectile of snapshot.projectiles) {
       projectiles.add(projectile.id);
       const presentation = projectilePresentationFor(
@@ -157,7 +177,14 @@ export class RetainedProjection {
           (projectile.targetPosition.y - projectile.origin.y) *
             projectile.progress,
       };
-      this.marker(
+      const fireball =
+        projectile.style === "magic"
+          ? mageFireballAnimationFor(
+              projectile.progress,
+              snapshot.presentationElapsed,
+            )
+          : undefined;
+      const mesh = this.marker(
         this.projectiles,
         projectile.id,
         position,
@@ -167,23 +194,69 @@ export class RetainedProjection {
           0.35,
           presentation.emissive,
         ),
-        0.72,
+        fireball?.height ?? 0.72,
       );
+      mesh.scale.setScalar(fireball?.scale ?? 1);
+      const trailId = `fireball-trail:${projectile.id}`;
+      retainedFireballTrails.add(trailId);
+      if (fireball === undefined) {
+        mesh.rotation.set(0, 0, 0);
+        const retainedTrail = this.fireballTrails.get(trailId);
+        if (retainedTrail !== undefined) retainedTrail.visible = false;
+        continue;
+      }
+
+      magicProjectiles.set(projectile.id, { ...projectile.targetPosition });
+      const direction = {
+        x: projectile.targetPosition.x - projectile.origin.x,
+        y: projectile.targetPosition.y - projectile.origin.y,
+      };
+      const distance = Math.hypot(direction.x, direction.y);
+      const normalized =
+        distance > 0.0001
+          ? { x: direction.x / distance, y: direction.y / distance }
+          : { x: 0, y: 1 };
+      const trail = this.marker(
+        this.fireballTrails,
+        trailId,
+        {
+          x: position.x - normalized.x * 0.28,
+          y: position.y - normalized.y * 0.28,
+        },
+        this.resources.sphere(0.18),
+        this.resources.material(0xffc56b, 0.2, 0xff5b00, 1.3),
+        fireball.height - 0.02,
+      );
+      trail.visible = true;
+      trail.rotation.set(0, Math.atan2(normalized.x, -normalized.y), 0);
+      trail.scale.set(0.62, 0.52, fireball.trailLength);
     }
     this.removeMissing(this.projectiles, projectiles);
+    this.removeMissing(this.fireballTrails, retainedFireballTrails);
+    this.reconcileMageExplosions(snapshot, magicProjectiles);
     const crescents = new Set<string>();
     for (const attack of snapshot.crescentAttacks) {
       crescents.add(attack.id);
+      const length = Math.hypot(attack.direction.x, attack.direction.y);
+      const direction =
+        length > 0.0001
+          ? { x: attack.direction.x / length, y: attack.direction.y / length }
+          : { x: 0, y: 1 };
+      const slash = knightSlashAnimationFor(attack.progress);
       const mesh = this.marker(
         this.crescents,
         attack.id,
-        attack.origin,
+        {
+          x: attack.origin.x + direction.x * attack.radius * slash.forward,
+          y: attack.origin.y + direction.y * attack.radius * slash.forward,
+        },
         this.resources.crescent(attack.radius, attack.arcCosine),
         this.resources.knightCrescentMaterial(),
-        0.08,
+        slash.height,
       );
       mesh.rotation.x = -Math.PI / 2;
-      mesh.rotation.z = Math.atan2(attack.direction.y, attack.direction.x);
+      mesh.rotation.z = Math.atan2(direction.y, direction.x) + slash.turn;
+      mesh.scale.setScalar(slash.scale);
     }
     this.removeMissing(this.crescents, crescents);
     const drops = new Set<string>();
@@ -240,6 +313,8 @@ export class RetainedProjection {
         enemies: this.enemies.size,
         projectiles: this.projectiles.size,
         crescents: this.crescents.size,
+        fireballTrails: this.fireballTrails.size,
+        mageExplosions: this.mageExplosions.size,
         drops: this.drops.size,
         relicDrops: this.relicDrops.size,
       }),
@@ -275,12 +350,17 @@ export class RetainedProjection {
       this.enemies,
       this.projectiles,
       this.crescents,
+      this.fireballTrails,
       this.drops,
       this.relicDrops,
     ]) {
       this.meshesRemoved += map.size;
       map.clear();
     }
+    for (const explosion of this.mageExplosions.values())
+      this.meshesRemoved += this.meshCount(explosion.root);
+    this.mageExplosions.clear();
+    this.lastMagicProjectiles.clear();
     for (const obstacle of this.obstacles.values())
       this.meshesRemoved += this.meshCount(obstacle);
     this.obstacles.clear();
@@ -327,6 +407,99 @@ export class RetainedProjection {
       mesh.position.z !== -position.y
     )
       mesh.position.set(position.x, height, -position.y);
+  }
+  private reconcileMageExplosions(
+    snapshot: GameRendererSnapshot,
+    currentMagicProjectiles: ReadonlyMap<string, Vector2>,
+  ): void {
+    const reset =
+      this.lastPresentationResetId !== undefined &&
+      snapshot.presentationResetId !== this.lastPresentationResetId;
+    const rewound =
+      this.lastPresentationElapsed !== undefined &&
+      snapshot.presentationElapsed < this.lastPresentationElapsed;
+    if (reset || rewound) {
+      for (const [id, explosion] of this.mageExplosions)
+        this.removeMageExplosion(id, explosion);
+      this.lastMagicProjectiles.clear();
+    }
+    const advanced =
+      !reset &&
+      !rewound &&
+      this.lastPresentationElapsed !== undefined &&
+      snapshot.presentationElapsed > this.lastPresentationElapsed;
+    if (advanced)
+      for (const [id, targetPosition] of this.lastMagicProjectiles)
+        if (!currentMagicProjectiles.has(id))
+          this.createMageExplosion(
+            id,
+            targetPosition,
+            snapshot.presentationElapsed,
+          );
+
+    this.lastMagicProjectiles.clear();
+    for (const [id, targetPosition] of currentMagicProjectiles)
+      this.lastMagicProjectiles.set(id, { ...targetPosition });
+    this.lastPresentationElapsed = snapshot.presentationElapsed;
+    this.lastPresentationResetId = snapshot.presentationResetId;
+    for (const [id, explosion] of this.mageExplosions) {
+      const animation = mageExplosionAnimationFor(
+        snapshot.presentationElapsed - explosion.startedAt,
+      );
+      if (animation.complete) {
+        this.removeMageExplosion(id, explosion);
+        continue;
+      }
+      explosion.ring.scale.setScalar(animation.ringScale);
+      explosion.ring.position.y = 0.01;
+      explosion.core.scale.setScalar(animation.coreScale);
+      explosion.core.position.y = 0.16 + animation.emberHeight * 0.25;
+      for (const [index, ember] of explosion.embers.entries()) {
+        const angle = (index / explosion.embers.length) * Math.PI * 2 + 0.35;
+        ember.position.set(
+          Math.cos(angle) * animation.emberDistance,
+          animation.emberHeight + (index % 2) * 0.045,
+          Math.sin(angle) * animation.emberDistance,
+        );
+        ember.scale.setScalar(Math.max(0.18, animation.coreScale));
+      }
+    }
+  }
+  private createMageExplosion(
+    id: string,
+    targetPosition: Vector2,
+    startedAt: number,
+  ): void {
+    const root = new THREE.Group();
+    root.name = `mage-explosion:${id}`;
+    this.position(root, targetPosition, 0.14);
+    const ring = this.resources.mesh(
+      this.resources.ring(0.32),
+      this.resources.material(0xffd180, 0.2, 0xff6d00, 1.5),
+    );
+    ring.name = `${root.name}:ring`;
+    ring.rotation.x = -Math.PI / 2;
+    const core = this.resources.mesh(
+      this.resources.sphere(0.24),
+      this.resources.material(0xff8a3d, 0.2, 0xff3d00, 1.7),
+    );
+    core.name = `${root.name}:core`;
+    const embers = Array.from({ length: 6 }, (_, index) => {
+      const ember = this.resources.mesh(
+        this.resources.sphere(0.07),
+        this.resources.material(0xffe0a3, 0.25, 0xff6d00, 1.4),
+      );
+      ember.name = `${root.name}:ember:${index}`;
+      return ember;
+    });
+    root.add(ring, core, ...embers);
+    this.group.add(root);
+    this.mageExplosions.set(id, { root, ring, core, embers, startedAt });
+  }
+  private removeMageExplosion(id: string, explosion: MageExplosion): void {
+    explosion.root.removeFromParent();
+    this.mageExplosions.delete(id);
+    this.meshesRemoved += this.meshCount(explosion.root);
   }
   private obstacle(obstacle: ChunkObstacle): void {
     const existing = this.obstacles.get(obstacle.id);

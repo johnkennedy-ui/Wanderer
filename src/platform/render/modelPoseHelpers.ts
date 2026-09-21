@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { AttackPresentationCue } from "../../domain/notices";
+import { knightSlashAnimationFor } from "./combatAnimationHelpers";
 import { calibratedYawFor, wrapYaw } from "./modelFacingHelpers";
 
 interface NeutralPartTransform {
@@ -162,12 +163,22 @@ export const applyModelPose = (
     binding.poseRoot.rotation.x = -recoil * 0.08;
     return;
   }
-  binding.weaponPivot.rotation.x =
-    cue.style === "slash" ? -recoil * 1.1 : recoil * 0.28;
-  binding.weaponPivot.rotation.z =
-    cue.style === "arrow"
-      ? recoil * 0.18
-      : cue.style === "magic"
-        ? -recoil * 0.12
-        : 0;
+  if (cue.style === "slash") {
+    const slash = knightSlashAnimationFor(release);
+    binding.poseRoot.rotation.z = slash.turn * 0.1;
+    binding.weaponPivot.rotation.x = slash.turn * 1.28;
+    binding.weaponPivot.rotation.z = -slash.turn * 0.34;
+    return;
+  }
+  if (cue.style === "magic") {
+    const charge = Math.sin(release * Math.PI);
+    const releasePush = Math.sin(Math.max(0, release - 0.2) * Math.PI * 1.25);
+    binding.poseRoot.rotation.x = -charge * 0.055;
+    binding.weaponPivot.rotation.x = -charge * 0.24 + releasePush * 0.48;
+    binding.weaponPivot.rotation.z = -charge * 0.3;
+    binding.aimPivot.rotation.x = -charge * 0.1;
+    return;
+  }
+  binding.weaponPivot.rotation.x = recoil * 0.28;
+  binding.weaponPivot.rotation.z = cue.style === "arrow" ? recoil * 0.18 : 0;
 };
