@@ -350,7 +350,7 @@ export class ModelProjection {
           y:
             projectile.origin.y +
             (projectile.targetPosition.y - projectile.origin.y) *
-            projectile.progress,
+              projectile.progress,
         };
         const direction = {
           x: projectile.targetPosition.x - projectile.origin.x,

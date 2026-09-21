@@ -198,10 +198,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       setDataset("homingProjectileCount", String(homingProjectileCount));
       setDataset("projectileCount", String(snapshot.projectiles.length));
       setDataset("mageFireballCount", String(mageFireballCount));
-      setDataset(
-        "mageExplosionCount",
-        String(projection.mageExplosionCount()),
-      );
+      setDataset("mageExplosionCount", String(projection.mageExplosionCount()));
       setDataset(
         "crescentAttackCount",
         String(snapshot.crescentAttacks.length),
