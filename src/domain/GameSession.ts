@@ -101,6 +101,7 @@ import {
   isWallKind,
   nearestWallSafePosition,
   snapBuildingPosition,
+  shortestWallRoute,
   sweepWallMovement,
   wallBlocksSegment,
 } from "./session/buildingGeometry";
@@ -878,20 +879,31 @@ export class GameSession {
             ),
         );
       },
-      constrainEnemyPosition: (from, desired, enemy) =>
-        this.enemyNavigation.route({
+      constrainEnemyPosition: (from, desired, enemy) => {
+        const clearance = enemyTerrainClearanceFor(enemy.kind);
+        return this.enemyNavigation.route({
           from,
           desired,
           target: this.player.position,
           enemyId: enemy.id,
+          shortestWallRoute: () =>
+            wallBlocksSegment(from, desired, buildings, clearance)
+              ? shortestWallRoute(
+                  from,
+                  this.player.position,
+                  buildings,
+                  clearance,
+                )
+              : null,
           constrain: (routeFrom, routeDesired) =>
             this.solidMovementFor(
               routeFrom,
               routeDesired,
-              enemyTerrainClearanceFor(enemy.kind),
+              clearance,
               buildings,
             ),
-        }),
+        });
+      },
     });
     this.player = result.player;
     this.resources = result.resources;

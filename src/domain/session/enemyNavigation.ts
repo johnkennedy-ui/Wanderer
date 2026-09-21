@@ -8,9 +8,16 @@ export interface EnemyNavigationInput {
   readonly enemyId: string;
   /** The existing terrain resolver is the sole collision authority. */
   readonly constrain: (from: Vector2, desired: Vector2) => Vector2;
+  /**
+   * Optional wall-only visibility route, evaluated only after the direct
+   * collision sweep is blocked. The normal planner remains the terrain
+   * fallback when that route cannot make progress.
+   */
+  readonly shortestWallRoute?: () => readonly Vector2[] | null;
 }
 
 interface PlannedRoute {
+  readonly kind: "generic" | "wall";
   readonly target: Vector2;
   readonly waypoints: Vector2[];
 }
@@ -56,6 +63,27 @@ const closeEnough = (
 const routeScore = (position: Vector2, target: Vector2, depth: number) =>
   distanceSquared(position, target) + depth * 0.01;
 
+const nextRouteStep = (
+  input: EnemyNavigationInput,
+  waypoint: Vector2,
+  attemptedDistance: number,
+): Vector2 => {
+  const delta = {
+    x: waypoint.x - input.from.x,
+    y: waypoint.y - input.from.y,
+  };
+  const length = magnitude(delta);
+  if (length <= WAYPOINT_EPSILON) return input.from;
+  const step = Math.min(
+    attemptedDistance - Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
+    length,
+  );
+  return input.constrain(input.from, {
+    x: input.from.x + (delta.x / length) * step,
+    y: input.from.y + (delta.y / length) * step,
+  });
+};
+
 /**
  * Session-owned, finite enemy routes. Planning only occurs after a blocked
  * direct sweep; every generated edge is accepted only when the existing sweep
@@ -72,6 +100,13 @@ export class EnemyNavigationCache {
   }
 
   route(input: EnemyNavigationInput): Vector2 {
+    return this.routeInternal(input, true);
+  }
+
+  private routeInternal(
+    input: EnemyNavigationInput,
+    allowWallRoute: boolean,
+  ): Vector2 {
     const attemptedDistance = magnitude({
       x: input.desired.x - input.from.x,
       y: input.desired.y - input.from.y,
@@ -100,26 +135,11 @@ export class EnemyNavigationCache {
           cached.waypoints.shift();
         const waypoint = cached.waypoints[0];
         if (waypoint !== undefined) {
-          const delta = {
-            x: waypoint.x - input.from.x,
-            y: waypoint.y - input.from.y,
-          };
-          const length = magnitude(delta);
-          if (length <= WAYPOINT_EPSILON) {
-            cached.waypoints.shift();
-            return this.route(input);
-          }
-          const step = Math.min(
-            attemptedDistance -
-              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
-            length,
-          );
-          const next = input.constrain(input.from, {
-            x: input.from.x + (delta.x / length) * step,
-            y: input.from.y + (delta.y / length) * step,
-          });
+          const next = nextRouteStep(input, waypoint, attemptedDistance);
           if (distanceSquared(input.from, next) > ROUTE_EPSILON_SQUARED)
             return next;
+          this.routes.delete(input.enemyId);
+          if (cached.kind === "wall") return this.routeInternal(input, false);
         }
         this.routes.delete(input.enemyId);
       }
@@ -127,6 +147,31 @@ export class EnemyNavigationCache {
 
     const direct = input.constrain(input.from, input.desired);
     if (closeEnough(direct, input.desired, ROUTE_EPSILON)) return direct;
+
+    if (allowWallRoute) {
+      const waypoints = input.shortestWallRoute?.();
+      if (
+        waypoints !== null &&
+        waypoints !== undefined &&
+        waypoints.length > 0
+      ) {
+        if (this.routes.size >= MAX_CACHED_ROUTES)
+          this.routes.delete(this.routes.keys().next().value!);
+        const route: PlannedRoute = {
+          kind: "wall",
+          target: input.target,
+          waypoints: [...waypoints],
+        };
+        this.routes.set(input.enemyId, route);
+        const waypoint = route.waypoints[0];
+        if (waypoint !== undefined) {
+          const next = nextRouteStep(input, waypoint, attemptedDistance);
+          if (distanceSquared(input.from, next) > ROUTE_EPSILON_SQUARED)
+            return next;
+        }
+        this.routes.delete(input.enemyId);
+      }
+    }
 
     const route = this.plan(input, attemptedDistance);
     if (route === null) {
@@ -142,31 +187,9 @@ export class EnemyNavigationCache {
       this.routes.delete(this.routes.keys().next().value!);
     this.routes.set(input.enemyId, route);
     const waypoint = route.waypoints[0];
-    if (waypoint === undefined) return direct;
-    const delta = {
-      x: waypoint.x - input.from.x,
-      y: waypoint.y - input.from.y,
-    };
-    const length = magnitude(delta);
-    if (length <= WAYPOINT_EPSILON) return direct;
-    return input.constrain(input.from, {
-      x:
-        input.from.x +
-        (delta.x / length) *
-          Math.min(
-            attemptedDistance -
-              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
-            length,
-          ),
-      y:
-        input.from.y +
-        (delta.y / length) *
-          Math.min(
-            attemptedDistance -
-              Math.min(ROUNDED_STEP_MARGIN, attemptedDistance * 0.1),
-            length,
-          ),
-    });
+    if (waypoint === undefined || closeEnough(input.from, waypoint))
+      return direct;
+    return nextRouteStep(input, waypoint, attemptedDistance);
   }
 
   private plan(
@@ -190,7 +213,11 @@ export class EnemyNavigationCache {
           y: input.target.y - node.position.y,
         });
         if (direction.x === 0 && direction.y === 0)
-          return { target: input.target, waypoints: [...node.waypoints] };
+          return {
+            kind: "generic",
+            target: input.target,
+            waypoints: [...node.waypoints],
+          };
         for (const angle of SEARCH_ANGLES) {
           if (sweeps >= MAX_SEARCH_SWEEPS) break;
           const cosine = Math.cos(angle);
@@ -231,6 +258,7 @@ export class EnemyNavigationCache {
             sweeps += 1;
             if (closeEnough(toTarget, input.target))
               return {
+                kind: "generic",
                 target: input.target,
                 waypoints: [...waypoints, input.target],
               };
@@ -249,7 +277,11 @@ export class EnemyNavigationCache {
     }
     return best === null
       ? null
-      : { target: input.target, waypoints: [...best.waypoints] };
+      : {
+          kind: "generic",
+          target: input.target,
+          waypoints: [...best.waypoints],
+        };
   }
 }
 

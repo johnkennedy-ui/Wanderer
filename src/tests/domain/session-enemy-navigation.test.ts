@@ -5,7 +5,9 @@ import {
   enemyTerrainClearanceFor,
   terrainBlocksPosition,
 } from "../../domain/world/terrainCollision";
+import { wallBlocksPosition } from "../../domain/session/buildingGeometry";
 import type {
+  BuildingState,
   ChunkObstacle,
   ChunkRecipe,
   EnemyKind,
@@ -66,6 +68,13 @@ const source = fixtureSource([
     position: { x: 0, y: 0 },
   },
 ]);
+
+const wall = (position: { x: number; y: number }): BuildingState => ({
+  id: `wall:${position.x}:${position.y}`,
+  kind: "WoodWall",
+  position,
+  level: 1,
+});
 
 const enemyAfterTicks = (
   delta: number,
@@ -189,6 +198,46 @@ describe("GameSession enemy navigation consumer", () => {
         enemyTerrainClearanceFor("scout"),
       ),
     ).toBe(false);
+  });
+
+  it("takes the nearest usable gap through a long wall instead of stopping at it", () => {
+    const gapY = 10;
+    const walls = Array.from({ length: 33 }, (_, index) => index - 16)
+      .filter((y) => y !== gapY)
+      .map((y) => wall({ x: 0, y }));
+    const saved = savedAtHome();
+    const session = new GameSession({
+      saved: {
+        ...saved,
+        world,
+        player: {
+          ...saved.player,
+          hp: 999,
+          maxHp: 999,
+          position: { x: 4, y: 0 },
+        },
+        buildings: walls,
+      },
+      chunkRecipeSource: fixtureSource([], "scout", { x: -4, y: 0 }),
+    });
+    const positions = tickPositions(session, 0.1, 180);
+    const crossedBarrier = positions.filter(
+      (position) => Math.abs(position.x) <= 0.35,
+    );
+
+    expect(crossedBarrier.length).toBeGreaterThan(0);
+    expect(
+      Math.min(
+        ...crossedBarrier.map((position) => Math.abs(position.y - gapY)),
+      ),
+    ).toBeLessThanOrEqual(0.25);
+    expect(
+      Math.hypot(enemyPosition(session).x - 4, enemyPosition(session).y),
+    ).toBeLessThanOrEqual(1.81);
+    for (const position of positions)
+      expect(
+        wallBlocksPosition(position, walls, enemyTerrainClearanceFor("scout")),
+      ).toBe(false);
   });
 
   it.each([0.004, 0.008, 1 / 120, 0.016, 1 / 60, 0.05, 0.1])(

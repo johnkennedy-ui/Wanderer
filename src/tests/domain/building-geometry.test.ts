@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildingFootprintsOverlap,
   snapBuildingPosition,
+  shortestWallRoute,
   sweepWallMovement,
   wallBlocksPosition,
   wallBlocksSegment,
@@ -42,6 +43,31 @@ describe("building geometry", () => {
     expect(
       wallBlocksSegment({ x: -2, y: 0.501 }, { x: 3, y: 0.501 }, buildings),
     ).toBe(false);
+  });
+
+  it("selects deterministic clearance-safe corners through the shortest wall gap", () => {
+    const nearestGapY = 3;
+    const fartherGapY = 10;
+    const buildings = Array.from({ length: 33 }, (_, index) => index - 16)
+      .filter((y) => y !== nearestGapY && y !== fartherGapY)
+      .map((y) => wall({ x: 0, y }));
+    const from = { x: -4, y: 0 };
+    const target = { x: 4, y: 0 };
+    const route = shortestWallRoute(from, target, buildings, 0.28);
+
+    expect(route).not.toBeNull();
+    expect(route).toEqual(shortestWallRoute(from, target, buildings, 0.28));
+    expect(route?.some((point) => Math.abs(point.y - nearestGapY) <= 0.9)).toBe(
+      true,
+    );
+    const points = [from, ...(route ?? []), target];
+    for (let index = 0; index < points.length; index += 1) {
+      expect(wallBlocksPosition(points[index], buildings, 0.28)).toBe(false);
+      if (index > 0)
+        expect(
+          wallBlocksSegment(points[index - 1], points[index], buildings, 0.28),
+        ).toBe(false);
+    }
   });
 
   it("stops outside the wall after GameSession rounding across frames and seams", () => {
