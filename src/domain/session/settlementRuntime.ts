@@ -1,5 +1,5 @@
 import { buildingDefinitions, gameplayTuning } from "../../data/definitions";
-import { distance, roundVector } from "../math";
+import { distance } from "../math";
 import type {
   BuildingKind,
   BuildingState,
@@ -31,11 +31,21 @@ import {
   findNearbyCampfire,
   settlementBuildRadius,
 } from "./settlementPolicy";
+import {
+  buildingFootprintsOverlap,
+  isWallKind,
+  snapBuildingPosition,
+  wallBlocksPosition,
+} from "./buildingGeometry";
 
 export interface SettlementInputs {
   readonly position: Vector2;
   readonly campfires: readonly SettlementCampfire[];
   readonly terrainBlocked: boolean;
+  readonly occupiedActors?: readonly {
+    readonly position: Vector2;
+    readonly clearance: number;
+  }[];
 }
 
 export interface SettlementPassiveResult {
@@ -132,7 +142,8 @@ export class SettlementRuntime {
   ): SettlementCommandOutcome {
     if (kind === "Storage")
       return this.rejected({ kind: "unknown-building" }, resources);
-    const rejection = this.validate(kind, position, input);
+    const snappedPosition = snapBuildingPosition(position);
+    const rejection = this.validate(kind, snappedPosition, input);
     if (rejection) return this.rejected(rejection, resources);
     const cost = resourcesForLevel(buildingDefinitions[kind].baseCost, 1);
     if (!canAffordResources(resources, cost))
@@ -140,7 +151,7 @@ export class SettlementRuntime {
     const building: BuildingState = {
       id: `building:${hashText(seed).toString(16)}:${this.nextBuildingSerial.toString().padStart(4, "0")}`,
       kind,
-      position: roundVector(position),
+      position: snappedPosition,
       level: 1,
     };
     this.nextBuildingSerial += 1;
@@ -162,9 +173,10 @@ export class SettlementRuntime {
       return this.rejected({ kind: "unknown-building" }, resources);
     if (building.kind === "Storage")
       return this.rejected({ kind: "unknown-building" }, resources);
-    const rejection = this.validate(building.kind, position, input, id);
+    const snappedPosition = snapBuildingPosition(position);
+    const rejection = this.validate(building.kind, snappedPosition, input, id);
     if (rejection) return this.rejected(rejection, resources);
-    const moved = { ...building, position: roundVector(position) };
+    const moved = { ...building, position: snappedPosition };
     this.buildings = this.buildings.map((candidate) =>
       candidate.id === id ? moved : candidate,
     );
@@ -180,6 +192,8 @@ export class SettlementRuntime {
       return this.rejected({ kind: "unknown-building" }, resources);
     if (building.kind === "Storage")
       return this.rejected({ kind: "unknown-building" }, resources);
+    if (isWallKind(building.kind))
+      return this.rejected({ kind: "building-not-upgradeable" }, resources);
     if (building.level === 3)
       return this.rejected({ kind: "already-level-3" }, resources);
     const nextLevel = (building.level + 1) as 2 | 3;
@@ -279,11 +293,27 @@ export class SettlementRuntime {
       gameplayTuning.campfireBuildRadiusByLevel,
     );
   }
-  inputsFor(world: WorldIdentity, position: Vector2): SettlementInputs {
+  inputsFor(
+    world: WorldIdentity,
+    position: Vector2,
+    occupiedActors: SettlementInputs["occupiedActors"] = [],
+  ): SettlementInputs {
+    const snappedPosition = snapBuildingPosition(position);
+    if (
+      !Number.isFinite(snappedPosition.x) ||
+      !Number.isFinite(snappedPosition.y)
+    )
+      return {
+        position: snappedPosition,
+        campfires: [],
+        terrainBlocked: false,
+        occupiedActors,
+      };
     return {
-      position,
-      campfires: this.campfiresAround(world, position),
-      terrainBlocked: this.isTerrainBlocked(world, position),
+      position: snappedPosition,
+      campfires: this.campfiresAround(world, snappedPosition),
+      terrainBlocked: this.isTerrainBlocked(world, snappedPosition),
+      occupiedActors,
     };
   }
   private campfiresAround(
@@ -324,7 +354,7 @@ export class SettlementRuntime {
       this.buildings.some(
         (building) =>
           building.id !== ignoredId &&
-          distance(building.position, position) < 1.25,
+          buildingFootprintsOverlap(building.position, position),
       )
     )
       return { kind: "overlaps-existing-building" };
@@ -343,6 +373,22 @@ export class SettlementRuntime {
           gameplayTuning.campfireBuildRadiusByLevel,
         ),
       };
+    if (
+      isWallKind(kind) &&
+      input.occupiedActors?.some(
+        (actor) =>
+          Number.isFinite(actor.position.x) &&
+          Number.isFinite(actor.position.y) &&
+          Number.isFinite(actor.clearance) &&
+          actor.clearance >= 0 &&
+          wallBlocksPosition(
+            actor.position,
+            [{ id: "prospective-wall", kind, position, level: 1 }],
+            actor.clearance,
+          ),
+      )
+    )
+      return { kind: "occupied-by-actor" };
     return null;
   }
   private outcome(

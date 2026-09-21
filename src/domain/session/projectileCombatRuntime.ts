@@ -1,7 +1,12 @@
 import { enemyDefinitions } from "../../data/definitions";
 import { distance } from "../math";
 import type { GameNotice } from "../notices";
-import type { FloorDropState, UpgradeId, WeaponRelicDropState } from "../types";
+import type {
+  FloorDropState,
+  UpgradeId,
+  Vector2,
+  WeaponRelicDropState,
+} from "../types";
 import { resourceKinds } from "../types";
 import { selectBossUpgradeChoices } from "./bossUpgradeChoices";
 import { advanceProjectileFlight } from "./combatPolicy";
@@ -13,6 +18,18 @@ import { scaleResourceBag } from "./economy";
 import type { RuntimeEnemy, RuntimeProjectile } from "./sessionState";
 import { copyVector } from "./sessionState";
 import { weaponRelicDropForWaveBoss } from "./weaponRelicPolicy";
+
+const projectilePositionAt = (
+  projectile: RuntimeProjectile,
+  progress: number,
+) => ({
+  x:
+    projectile.origin.x +
+    (projectile.targetPosition.x - projectile.origin.x) * progress,
+  y:
+    projectile.origin.y +
+    (projectile.targetPosition.y - projectile.origin.y) * progress,
+});
 
 const copyEnemy = (enemy: RuntimeEnemy): RuntimeEnemy => ({
   ...enemy,
@@ -182,6 +199,7 @@ export interface ProjectileCombatPhaseInput {
   readonly upgrades: ReadonlySet<UpgradeId>;
   readonly projectileTravelSeconds: number;
   readonly floorDropOffsetDistance: number;
+  readonly isFlightBlocked?: (from: Vector2, to: Vector2) => boolean;
 }
 
 export interface ProjectileCombatPhaseResult {
@@ -214,6 +232,7 @@ export const advanceProjectileCombatPhase = ({
   upgrades,
   projectileTravelSeconds,
   floorDropOffsetDistance,
+  isFlightBlocked,
 }: ProjectileCombatPhaseInput): ProjectileCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const projectiles: RuntimeProjectile[] = [];
@@ -229,6 +248,12 @@ export const advanceProjectileCombatPhase = ({
 
   for (const current of currentProjectiles) {
     const projectile = copyProjectile(current);
+    // Homing changes the renderer's interpolation segment; sweep from the
+    // point actually rendered before retargeting, not its relocated image.
+    const previousPosition = projectilePositionAt(
+      current,
+      Math.min(1, current.elapsed / projectileTravelSeconds),
+    );
     retargetHomingProjectile(projectile, enemies);
     const flight = advanceProjectileFlight({
       elapsed: projectile.elapsed,
@@ -236,10 +261,22 @@ export const advanceProjectileCombatPhase = ({
       travelSeconds: projectileTravelSeconds,
     });
     projectile.elapsed = flight.elapsed;
+    const nextPosition = projectilePositionAt(
+      projectile,
+      Math.min(1, flight.elapsed / projectileTravelSeconds),
+    );
+    if (isFlightBlocked?.(previousPosition, nextPosition) === true) continue;
     (flight.completed ? completed : projectiles).push(projectile);
   }
 
   for (const projectile of completed) {
+    const primaryTarget = enemies.get(projectile.targetId);
+    if (
+      primaryTarget !== undefined &&
+      isFlightBlocked?.(projectile.targetPosition, primaryTarget.position) ===
+        true
+    )
+      continue;
     const resolution = projectileImpactResolutionFor({
       targets: enemies,
       primaryTargetId: projectile.targetId,
@@ -250,9 +287,19 @@ export const advanceProjectileCombatPhase = ({
       ),
       chainDamage: projectile.chainDamage,
     });
+    let landedHitCount = 0;
     for (const impact of resolution.impacts) {
       const enemy = enemies.get(impact.targetId);
       if (enemy === undefined || enemy.defeated) continue;
+      if (
+        impact.targetId !== projectile.targetId &&
+        isFlightBlocked?.(
+          primaryTarget?.position ?? projectile.targetPosition,
+          enemy.position,
+        ) === true
+      )
+        continue;
+      landedHitCount += 1;
       enemy.hp = impact.nextHp;
       if (!impact.lethal) continue;
       const defeat = defeatEnemy({
@@ -275,10 +322,10 @@ export const advanceProjectileCombatPhase = ({
       notice = defeat.notice;
       experienceEarned += defeat.experienceEarned;
     }
-    if (resolution.landedHitCount > 0 && projectile.hitHeal > 0)
+    if (landedHitCount > 0 && projectile.hitHeal > 0)
       nextPlayerHp = Math.min(
         playerMaxHp,
-        nextPlayerHp + resolution.landedHitCount * projectile.hitHeal,
+        nextPlayerHp + landedHitCount * projectile.hitHeal,
       );
   }
 

@@ -80,6 +80,76 @@ const validSave = (): SaveDocument => {
 };
 
 describe("schema-2 persistence boundary", () => {
+  it("round-trips current wall content while rejecting an explicit V2 projection", () => {
+    const current = {
+      ...validSave(),
+      buildings: [
+        {
+          id: "building:wall:0001",
+          kind: "WoodWall" as const,
+          level: 1 as const,
+          position: { x: -1, y: 2 },
+        },
+        {
+          id: "building:wall:0002",
+          kind: "StoneWall" as const,
+          level: 1 as const,
+          position: { x: 0, y: 2 },
+        },
+        {
+          id: "building:legacy:0003",
+          kind: "Farm" as const,
+          level: 1 as const,
+          position: { x: 1.25, y: -2.75 },
+        },
+      ],
+    };
+    const serialized = toCurrentSaveStorageDocument(current);
+    expect(isSaveDocument(serialized)).toBe(true);
+    expect(decodeSave(JSON.stringify(serialized))).toMatchObject({
+      ok: true,
+      document: { buildings: current.buildings },
+    });
+    expect(() => toSaveV2Document(current)).toThrow("cannot be projected");
+  });
+
+  it("copies only whitelisted V4 fields and rejects malformed current common fields", () => {
+    const current = {
+      ...validSave(),
+      buildings: [
+        {
+          id: "building:wall:0001",
+          kind: "WoodWall" as const,
+          level: 1 as const,
+          position: { x: -1, y: 2 },
+          runtimeOnly: "do-not-persist",
+        },
+      ],
+      world: { ...validSave().world, runtimeOnly: true },
+      player: {
+        ...validSave().player,
+        position: { ...validSave().player.position, runtimeOnly: true },
+      },
+      resources: { ...validSave().resources, runtimeOnly: 1 },
+    } as unknown as SaveDocument;
+    const projected = toCurrentSaveStorageDocument(current);
+    expect(projected).not.toHaveProperty("world.runtimeOnly");
+    expect(projected).not.toHaveProperty("player.position.runtimeOnly");
+    expect(projected).not.toHaveProperty("resources.runtimeOnly");
+    expect(projected).not.toHaveProperty("buildings.0.runtimeOnly");
+
+    expect(isSaveDocument({ ...projected, resources: {} })).toBe(false);
+    expect(
+      isSaveDocument({
+        ...projected,
+        buildings: [projected.buildings[0], projected.buildings[0]],
+      }),
+    ).toBe(false);
+    expect(
+      isSaveDocument({ ...projected, player: { ...projected.player, hp: -1 } }),
+    ).toBe(false);
+  });
+
   it.each(fixtureNames)(
     "decodes, migrates, hydrates, and reprojects the static %s fixture",
     (name) => {

@@ -137,6 +137,7 @@ const authoredResourceDefinitions = {
 export const resourceDefinitions = deepFreeze(authoredResourceDefinitions);
 
 const authoredGameplayTuning = {
+  buildingTileSize: 1,
   deathResourceLossRate: 0.25,
   campfireBuildRadiusByLevel: [6, 9, 12] as const,
   workshopDamageBonusByLevel: [4, 9, 15] as const,
@@ -292,6 +293,28 @@ const authoredBuildingDefinitions = {
       "L1: 3m aura, +1 health/s while stationary inside it.",
       "L2: 4m aura, +3 health/s while stationary inside it.",
       "L3: 5m aura, +6 health/s while stationary inside it.",
+    ],
+  },
+  WoodWall: {
+    label: "Wood Wall",
+    baseCost: { wood: 6, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+    description:
+      "A solid wooden tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
+    levelEffects: [
+      "L1: solid one-tile wooden wall.",
+      "L2: solid one-tile wooden wall.",
+      "L3: solid one-tile wooden wall.",
+    ],
+  },
+  StoneWall: {
+    label: "Stone Wall",
+    baseCost: { wood: 0, stone: 8, scrap: 0, essence: 0, bossCore: 0 },
+    description:
+      "A solid stone tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
+    levelEffects: [
+      "L1: solid one-tile stone wall.",
+      "L2: solid one-tile stone wall.",
+      "L3: solid one-tile stone wall.",
     ],
   },
 } satisfies Record<BuildingKind, BuildingDefinition>;

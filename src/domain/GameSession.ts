@@ -8,6 +8,7 @@ import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
+  BuildingState,
   AllocatablePlayerStatKind,
   ClassSkillId,
   DestinationCommand,
@@ -93,8 +94,17 @@ import {
   enemyTerrainClearanceFor,
   nearestTerrainSafePosition,
   sweepTerrainMovement,
+  terrainBlocksPosition,
 } from "./world/terrainCollision";
 import { EnemyNavigationCache } from "./session/enemyNavigation";
+import {
+  isWallKind,
+  nearestWallSafePosition,
+  snapBuildingPosition,
+  sweepWallMovement,
+  wallBlocksSegment,
+} from "./session/buildingGeometry";
+import { terrainBlocksProjectileSegment } from "./world/projectileCollision";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -225,14 +235,12 @@ export class GameSession {
     if (moving) {
       if (!destinationMoving)
         this.player.position = roundVector(
-          sweepTerrainMovement(
-            this.world,
+          this.solidMovementFor(
             this.player.position,
             add(
               this.player.position,
               scale(this.input.intent, movementDistance),
             ),
-            this.chunkRecipes.get,
           ),
         );
       const attackSpeedMultiplier = movingAttackSpeedMultiplierFor(
@@ -262,23 +270,25 @@ export class GameSession {
   }
 
   placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
+    const snapped = snapBuildingPosition(position);
     return this.applySettlementOutcome(
       this.settlement.place(
         kind,
-        position,
+        snapped,
         this.resources,
         this.world.seed,
-        this.settlement.inputsFor(this.world, position),
+        this.placementInputsFor(snapped),
       ),
     );
   }
   relocateBuilding(id: string, position: Vector2): PlacementResult {
+    const snapped = snapBuildingPosition(position);
     return this.applySettlementOutcome(
       this.settlement.relocate(
         id,
-        position,
+        snapped,
         this.resources,
-        this.settlement.inputsFor(this.world, position),
+        this.placementInputsFor(snapped),
       ),
     );
   }
@@ -535,7 +545,33 @@ export class GameSession {
       defeatedBossIds: this.defeatedBossIds,
       enemyHealthContext: this.enemyHealthContext(),
     });
-    for (const draft of drafts) this.enemies.set(draft.id, draft);
+    const buildings = this.settlement.buildingState;
+    for (const draft of drafts) {
+      const clearance = enemyTerrainClearanceFor(draft.kind);
+      const position = nearestWallSafePosition(
+        draft.position,
+        buildings,
+        clearance,
+        (candidate) =>
+          terrainBlocksPosition(
+            this.world,
+            candidate,
+            this.chunkRecipes.get,
+            clearance,
+          ),
+      );
+      if (position === null) continue;
+      this.enemies.set(
+        draft.id,
+        position === draft.position
+          ? draft
+          : {
+              ...draft,
+              position: copyVector(position),
+              spawnPosition: copyVector(position),
+            },
+      );
+    }
   }
   /** Owns the transient timed encounter lifecycle; it is never serialized. */
   private updateWaveLifecycle(): void {
@@ -561,15 +597,34 @@ export class GameSession {
         center: this.player.position,
         enemyHealthContext: this.enemyHealthContext(),
       });
-      const safeDrafts = drafts.map((enemy) => ({
-        enemy,
-        position: nearestTerrainSafePosition(
+      const buildings = this.settlement.buildingState;
+      const safeDrafts = drafts.map((enemy) => {
+        const clearance = enemyTerrainClearanceFor(enemy.kind);
+        const terrainPosition = nearestTerrainSafePosition(
           this.world,
           enemy.position,
           this.chunkRecipes.get,
-          enemyTerrainClearanceFor(enemy.kind),
-        ),
-      }));
+          clearance,
+        );
+        return {
+          enemy,
+          position:
+            terrainPosition === null
+              ? null
+              : nearestWallSafePosition(
+                  terrainPosition,
+                  buildings,
+                  clearance,
+                  (candidate) =>
+                    terrainBlocksPosition(
+                      this.world,
+                      candidate,
+                      this.chunkRecipes.get,
+                      clearance,
+                    ),
+                ),
+        };
+      });
       // Do not partially materialize a required wave. A bounded V3 search can
       // exhaust while terrain blocks every draft, so retain the complete wave
       // for a later retry rather than treating that failure as progression.
@@ -622,12 +677,14 @@ export class GameSession {
     };
   }
   private updateAutoCombat(delta: number, attackSpeedMultiplier = 1): void {
+    const buildings = this.settlement.buildingState;
     const result = advanceAutoCombatPhase({
       delta,
       attackSpeedMultiplier,
       playerPosition: this.player.position,
       enemies: this.enemies,
-      buildings: this.settlement.buildingState,
+      buildings,
+      isAttackBlocked: (from, to) => wallBlocksSegment(from, to, buildings),
       upgrades: this.upgrades,
       classProgression: this.classProgression,
       projectiles: this.projectiles,
@@ -677,6 +734,7 @@ export class GameSession {
     if (result.notice !== null) this.notice = result.notice;
   }
   private updateProjectiles(delta: number): void {
+    const buildings = this.settlement.buildingState;
     const result = advanceProjectileCombatPhase({
       delta,
       elapsed: this.elapsed,
@@ -693,6 +751,14 @@ export class GameSession {
       upgrades: this.upgrades,
       projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
       floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
+      isFlightBlocked: (from, to) =>
+        wallBlocksSegment(from, to, buildings) ||
+        terrainBlocksProjectileSegment(
+          this.world,
+          from,
+          to,
+          this.chunkRecipes.get,
+        ),
     });
     this.player.hp = result.playerHp;
     this.enemies = result.enemies;
@@ -732,12 +798,7 @@ export class GameSession {
       maximumTravel >= remainingDistance
     ) {
       this.player.position = roundVector(
-        sweepTerrainMovement(
-          this.world,
-          this.player.position,
-          this.destination,
-          this.chunkRecipes.get,
-        ),
+        this.solidMovementFor(this.player.position, this.destination),
       );
       this.destination = null;
       this.input = {
@@ -751,12 +812,7 @@ export class GameSession {
       this.player.position,
       scale(normalize(offset), maximumTravel),
     );
-    const swept = sweepTerrainMovement(
-      this.world,
-      this.player.position,
-      desired,
-      this.chunkRecipes.get,
-    );
+    const swept = this.solidMovementFor(this.player.position, desired);
     const next = roundVector(swept);
     if (
       next.x === this.player.position.x &&
@@ -783,6 +839,7 @@ export class GameSession {
     return true;
   }
   private updateEnemyCombat(delta: number): void {
+    const buildings = this.settlement.buildingState;
     const combatStats = combatStatsFor(
       this.settlement.buildingState,
       this.upgrades,
@@ -805,6 +862,22 @@ export class GameSession {
       playerPhysicalDefense: combatStats.physicalDefense,
       playerDodgeChance: combatStats.dodgeChance,
       worldSeed: this.world.seed,
+      isAttackBlocked: (from, to) => wallBlocksSegment(from, to, buildings),
+      resolveEnemyRespawnPosition: (position, enemy) => {
+        const clearance = enemyTerrainClearanceFor(enemy.kind);
+        return nearestWallSafePosition(
+          position,
+          buildings,
+          clearance,
+          (candidate) =>
+            terrainBlocksPosition(
+              this.world,
+              candidate,
+              this.chunkRecipes.get,
+              clearance,
+            ),
+        );
+      },
       constrainEnemyPosition: (from, desired, enemy) =>
         this.enemyNavigation.route({
           from,
@@ -812,12 +885,11 @@ export class GameSession {
           target: this.player.position,
           enemyId: enemy.id,
           constrain: (routeFrom, routeDesired) =>
-            sweepTerrainMovement(
-              this.world,
+            this.solidMovementFor(
               routeFrom,
               routeDesired,
-              this.chunkRecipes.get,
               enemyTerrainClearanceFor(enemy.kind),
+              buildings,
             ),
         }),
     });
@@ -894,7 +966,51 @@ export class GameSession {
   ): PlacementResult {
     this.resources = outcome.resources;
     this.notice = outcome.noticeDraft;
+    if (outcome.result.ok && isWallKind(outcome.result.building.kind))
+      this.enemyNavigation.clear();
     return outcome.result;
+  }
+  private placementInputsFor(position: Vector2) {
+    const inputs = this.settlement.inputsFor(this.world, position);
+    return {
+      ...inputs,
+      occupiedActors: [
+        { position: this.player.position, clearance: 0.28 },
+        { position: this.committedSavePoint.position, clearance: 0.28 },
+        // A later explicit save may select any nearby campfire. Keep those
+        // return positions clear too, without moving or committing the player.
+        ...inputs.campfires.map((campfire) => ({
+          position: campfire.position,
+          clearance: 0.28,
+        })),
+        ...[...this.enemies.values()]
+          .filter((enemy) => !enemy.defeated)
+          .map((enemy) => ({
+            position: enemy.position,
+            clearance: enemyTerrainClearanceFor(enemy.kind),
+          })),
+      ],
+    };
+  }
+  /** Both resolvers shorten the same segment, so neither can undo a contact. */
+  private solidMovementFor(
+    from: Vector2,
+    desired: Vector2,
+    clearance = 0.28,
+    buildings: readonly BuildingState[] = this.settlement.buildingState,
+  ): Vector2 {
+    return sweepWallMovement(
+      from,
+      sweepTerrainMovement(
+        this.world,
+        from,
+        desired,
+        this.chunkRecipes.get,
+        clearance,
+      ),
+      buildings,
+      clearance,
+    );
   }
   /** Applies XP and the identical next-level base-stat grant exactly once. */
   private grantExperience(amount: number): void {

@@ -83,13 +83,19 @@ export class RetainedBuildingRows {
         row.aura.remove();
         row.aura = null;
       }
-      const upgradeDisabled = legacyStorage || building.level === 3;
+      const wall =
+        building.kind === "WoodWall" || building.kind === "StoneWall";
+      const upgradeDisabled = legacyStorage || wall || building.level === 3;
       if (row.upgrade.disabled !== upgradeDisabled)
         row.upgrade.disabled = upgradeDisabled;
       setAttribute(
         row.upgrade,
         "title",
-        legacyStorage ? "Legacy Storage cannot be upgraded." : "",
+        legacyStorage
+          ? "Legacy Storage cannot be upgraded."
+          : wall
+            ? "Walls are single-tier and cannot be upgraded."
+            : "",
       );
       if (row.move.disabled !== legacyStorage)
         row.move.disabled = legacyStorage;

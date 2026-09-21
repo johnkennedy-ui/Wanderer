@@ -107,6 +107,8 @@ export const buildingKinds = Object.freeze([
   "Farm",
   "Storage",
   "Healer",
+  "WoodWall",
+  "StoneWall",
 ] as const);
 
 export type BuildingKind = (typeof buildingKinds)[number];

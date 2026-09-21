@@ -7,7 +7,7 @@ import type {
 import { isSupportedWorldGeneratorVersion } from "../world";
 import { isClassProgressionV4, isSaveV4Document } from "./saveV4";
 import type { SaveV4Document } from "./saveV4";
-import type { SaveV2Document } from "./saveV2";
+import { saveV2BuildingKinds, type SaveV2Document } from "./saveV2";
 
 /**
  * The canonical in-memory save/hydration representation may evolve with the
@@ -66,8 +66,56 @@ export const isLegacyClassProgression = (
 };
 
 /** Retains an exact frozen V2 projection for historical fixture comparisons. */
-export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
-  schemaVersion: 2,
+export const toSaveV2Document = (save: CurrentSave): SaveV2Document => {
+  if (
+    save.buildings.some(
+      (building) => !saveV2BuildingKinds.includes(building.kind as never),
+    )
+  )
+    throw new Error(
+      "Current wall content cannot be projected to schema version 2.",
+    );
+  return {
+    schemaVersion: 2,
+    world: {
+      seed: save.world.seed,
+      generatorVersion: save.world.generatorVersion,
+    },
+    player: {
+      position: { x: save.player.position.x, y: save.player.position.y },
+      hp: save.player.hp,
+      maxHp: save.player.maxHp,
+    },
+    resources: {
+      wood: save.resources.wood,
+      stone: save.resources.stone,
+      scrap: save.resources.scrap,
+      essence: save.resources.essence,
+      bossCore: save.resources.bossCore,
+    },
+    buildings: save.buildings.map((building) => ({
+      id: building.id,
+      kind: building.kind as (typeof saveV2BuildingKinds)[number],
+      position: { x: building.position.x, y: building.position.y },
+      level: building.level,
+    })),
+    defeatedBossIds: [...save.defeatedBossIds],
+    upgrades: [...save.upgrades],
+    nextBuildingSerial: save.nextBuildingSerial,
+    committedAt: save.committedAt,
+    savePointId: save.savePointId,
+    savePointPosition: {
+      x: save.savePointPosition.x,
+      y: save.savePointPosition.y,
+    },
+  };
+};
+
+/** Copies the active V4 wire document without retaining runtime aliases. */
+export const toCurrentSaveStorageDocument = (
+  save: CurrentSave,
+): SaveV4Document => ({
+  schemaVersion: 4,
   world: {
     seed: save.world.seed,
     generatorVersion: save.world.generatorVersion,
@@ -99,14 +147,6 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => ({
     x: save.savePointPosition.x,
     y: save.savePointPosition.y,
   },
-});
-
-/** Copies the active V4 wire document without retaining runtime aliases. */
-export const toCurrentSaveStorageDocument = (
-  save: CurrentSave,
-): SaveV4Document => ({
-  ...toSaveV2Document(save),
-  schemaVersion: 4,
   classProgression: {
     experience: save.classProgression.experience,
     level: save.classProgression.level,

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { gameplayTuning } from "../../data/definitions";
 import type { AttackStyle, BuildingKind, EnemyKind } from "../../domain/types";
 
 export const buildingColors = Object.freeze({
@@ -7,6 +8,8 @@ export const buildingColors = Object.freeze({
   Farm: 0x4caf50,
   Storage: 0x607d8b,
   Healer: 0x9c6ade,
+  WoodWall: 0x8b5a2b,
+  StoneWall: 0x78828a,
 } satisfies Record<BuildingKind, number>);
 
 export const enemyPresentation = Object.freeze({
@@ -55,6 +58,7 @@ export const projectilePresentationFor = (
 export class ProjectionResources {
   private readonly geometries = new Map<string, THREE.BufferGeometry>();
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
+  private readonly wallTextures = new Map<string, THREE.DataTexture>();
   private auraMaterial: THREE.MeshBasicMaterial | undefined;
   private crescentMaterial: THREE.MeshBasicMaterial | undefined;
   private destinationMarkerStyle: THREE.MeshBasicMaterial | undefined;
@@ -70,6 +74,47 @@ export class ProjectionResources {
       `cylinder:${radius}:${height}`,
       () => new THREE.CylinderGeometry(radius, radius, height, 10),
     );
+  }
+  wall(): THREE.BufferGeometry {
+    const size = gameplayTuning.buildingTileSize;
+    return this.geometry(
+      `wall:${size}:1:${size}`,
+      () => new THREE.BoxGeometry(size, 1, size),
+    );
+  }
+  wallMaterial(kind: BuildingKind): THREE.MeshStandardMaterial {
+    if (kind !== "WoodWall" && kind !== "StoneWall")
+      return this.material(buildingColors[kind]);
+    this.assertLive();
+    const key = `wall:${kind}`;
+    const retained = this.materials.get(key);
+    if (retained !== undefined) return retained;
+    const size = 32;
+    const pixels = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y += 1)
+      for (let x = 0; x < size; x += 1) {
+        const seam =
+          kind === "WoodWall"
+            ? x % 8 === 0
+            : y % 8 === 0 || (x + (Math.floor(y / 8) % 2) * 8) % 16 === 0;
+        const shade = seam ? 90 : 205 + ((x * 3 + y * 2) % 5) * 7;
+        const index = (y * size + x) * 4;
+        pixels[index] = pixels[index + 1] = pixels[index + 2] = shade;
+        pixels[index + 3] = 255;
+      }
+    const texture = new THREE.DataTexture(pixels, size, size);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.magFilter = THREE.NearestFilter;
+    texture.needsUpdate = true;
+    const material = new THREE.MeshStandardMaterial({
+      color: buildingColors[kind],
+      roughness: 0.9,
+      map: texture,
+    });
+    this.wallTextures.set(key, texture);
+    this.materials.set(key, material);
+    this.materialsCreated += 1;
+    return material;
   }
   cone(radius: number, height: number): THREE.BufferGeometry {
     return this.geometry(
@@ -242,6 +287,8 @@ export class ProjectionResources {
       this.materialsDisposed += 1;
       this.destinationMarkerStyle = undefined;
     }
+    for (const texture of this.wallTextures.values()) texture.dispose();
+    this.wallTextures.clear();
     this.geometries.clear();
     this.materials.clear();
   }

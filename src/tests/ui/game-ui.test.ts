@@ -234,6 +234,30 @@ describe("retained UI list operations", () => {
     rows.dispose();
   });
 
+  it("keeps wall relocation and demolition available but disables their single-tier upgrade", () => {
+    installDom();
+    const host = new ElementDouble();
+    const intents = {
+      startRelocation: vi.fn(),
+      upgradeBuilding: vi.fn(),
+      demolish: vi.fn(),
+    };
+    const rows = new RetainedBuildingRows(asElement(host), intents);
+    rows.render([{ ...building("wall"), kind: "WoodWall" }]);
+    const [row] = host.children;
+    const [, upgrade, move, demolish] = row.children;
+    expect(upgrade.disabled).toBe(true);
+    expect(upgrade.getAttribute("title")).toBe(
+      "Walls are single-tier and cannot be upgraded.",
+    );
+    expect(move.disabled).toBe(false);
+    move.click();
+    demolish.click();
+    expect(intents.startRelocation).toHaveBeenCalledWith("wall", "WoodWall");
+    expect(intents.demolish).toHaveBeenCalledWith("wall");
+    rows.dispose();
+  });
+
   it("uses an unambiguous effects value signature and suppresses identical text writes", () => {
     installDom();
     const host = new ElementDouble();
@@ -576,10 +600,18 @@ describe("current HUD placement port", () => {
       "Boss Core: 1",
     ]);
     expect(get("resources").children[4].textContent).toBe("◉ 1");
-    expect(get("build-buttons").children).toHaveLength(4);
-    expect(get("build-buttons").children[3].textContent).toBe("✚");
+    expect(get("build-buttons").children).toHaveLength(6);
+    expect(get("build-buttons").children[3].textContent).toBe("✚ Healing Hut");
     expect(get("build-buttons").children[3].getAttribute("aria-label")).toBe(
       "Place Healing Hut",
+    );
+    expect(get("build-buttons").children[4].textContent).toBe("🪵 Wood Wall");
+    expect(get("build-buttons").children[4].getAttribute("aria-label")).toBe(
+      "Place Wood Wall",
+    );
+    expect(get("build-buttons").children[5].textContent).toBe("🪨 Stone Wall");
+    expect(get("build-radius").textContent).toContain(
+      "snap to 1m tile centres",
     );
     const save = get("save-button"),
       writes = save.writes;

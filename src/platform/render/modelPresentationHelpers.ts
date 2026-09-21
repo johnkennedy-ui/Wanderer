@@ -18,6 +18,12 @@ import type {
   Vector2,
 } from "../../domain/types";
 
+type ModelBackedBuildingKind = Exclude<BuildingKind, "WoodWall" | "StoneWall">;
+const isModelBackedBuildingKind = (
+  kind: BuildingKind,
+): kind is ModelBackedBuildingKind =>
+  kind !== "WoodWall" && kind !== "StoneWall";
+
 export const modelAssets = Object.freeze({
   players: Object.freeze({
     knight: "winding-fixed-v1/player_knight.glb",
@@ -42,7 +48,7 @@ export const modelAssets = Object.freeze({
     Farm: "winding-fixed-v1/building_farm.glb",
     Storage: "winding-fixed-v1/building_storage.glb",
     Healer: "winding-fixed-v1/building_healing_hut.glb",
-  } satisfies Record<BuildingKind, string>),
+  } satisfies Record<ModelBackedBuildingKind, string>),
 });
 
 export type ModelAssetKey =
@@ -75,7 +81,7 @@ export const modelFilenameFor = (key: ModelAssetKey): string => {
     return modelAssets.projectiles[
       kind as keyof typeof modelAssets.projectiles
     ];
-  return modelAssets.buildings[kind as BuildingKind];
+  return modelAssets.buildings[kind as ModelBackedBuildingKind];
 };
 
 /** Vite's base path is part of the public asset contract. */
@@ -310,14 +316,16 @@ export class ModelProjection {
           rotation: 0,
         })),
       ),
-      ...snapshot.visibleBuildings.map((building) => ({
-        id: building.id,
-        asset: `building-${building.kind}` as ModelAssetKey,
-        position: building.position,
-        height: 0,
-        scale: 0.76 + building.level * 0.06,
-        rotation: 0,
-      })),
+      ...snapshot.visibleBuildings
+        .filter((building) => isModelBackedBuildingKind(building.kind))
+        .map((building) => ({
+          id: building.id,
+          asset: `building-${building.kind}` as ModelAssetKey,
+          position: building.position,
+          height: 0,
+          scale: 0.76 + building.level * 0.06,
+          rotation: 0,
+        })),
       ...snapshot.enemies.map((enemy) => ({
         id: enemy.id,
         asset:

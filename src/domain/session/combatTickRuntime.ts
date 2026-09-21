@@ -90,6 +90,8 @@ export interface AutoCombatPhaseInput {
   /** Runtime-only serial: one value per authored player attack event. */
   readonly nextAttackEventSerial?: number;
   readonly worldSeed?: string;
+  /** Optional wall policy; omitted preserves historical target selection. */
+  readonly isAttackBlocked?: (from: Vector2, to: Vector2) => boolean;
 }
 
 export interface AutoCombatPhaseResult {
@@ -120,6 +122,7 @@ export const advanceAutoCombatPhase = ({
   nextCrescentSerial = 1,
   nextAttackEventSerial = 1,
   worldSeed = "combat-default-seed",
+  isAttackBlocked,
 }: AutoCombatPhaseInput): AutoCombatPhaseResult => {
   const projectiles = currentProjectiles.map(copyProjectile);
   const crescentAttacks = currentCrescentAttacks
@@ -133,7 +136,11 @@ export const advanceAutoCombatPhase = ({
     playerPosition,
     targets: enemies.values(),
     range: stats.attackRange,
-  });
+  }).filter(
+    (target) =>
+      stats.attackStyle !== "slash" ||
+      isAttackBlocked?.(playerPosition, target.position) !== true,
+  );
   const decision = projectileLaunchDecision({
     targets,
     attackElapsed,
@@ -327,6 +334,13 @@ export interface EnemyCombatPhaseInput {
     desired: Vector2,
     enemy: Readonly<RuntimeEnemy>,
   ) => Vector2;
+  /** Optional wall policy; omitted preserves historical enemy attack timing. */
+  readonly isAttackBlocked?: (from: Vector2, to: Vector2) => boolean;
+  /** Null keeps a ready enemy defeated so its ordinary respawn can retry. */
+  readonly resolveEnemyRespawnPosition?: (
+    position: Vector2,
+    enemy: Readonly<RuntimeEnemy>,
+  ) => Vector2 | null;
 }
 
 export interface EnemyCombatPhaseResult {
@@ -361,6 +375,8 @@ export const advanceEnemyCombatPhase = ({
   playerDodgeChance = 0,
   worldSeed = "combat-default-seed",
   constrainEnemyPosition,
+  isAttackBlocked,
+  resolveEnemyRespawnPosition,
 }: EnemyCombatPhaseInput): EnemyCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const player = {
@@ -398,9 +414,14 @@ export const advanceEnemyCombatPhase = ({
       spawnPosition: enemy.spawnPosition,
     });
     if (resolution.kind !== "ready") continue;
+    const position =
+      resolveEnemyRespawnPosition === undefined
+        ? resolution.position
+        : resolveEnemyRespawnPosition(resolution.position, enemy);
+    if (position === null) continue;
     enemy.defeated = resolution.defeated;
     enemy.hp = resolution.hp;
-    enemy.position = resolution.position;
+    enemy.position = copyVector(position);
     enemy.respawnAt = resolution.respawnAt;
     enemy.attackElapsed = resolution.attackElapsed;
   }
@@ -408,7 +429,8 @@ export const advanceEnemyCombatPhase = ({
     const resolution = enemyAttackResolutionFor({
       defeated: enemy.defeated,
       inAttackRange:
-        distance(player.position, enemy.position) <= enemyAttackStandoff,
+        distance(player.position, enemy.position) <= enemyAttackStandoff &&
+        isAttackBlocked?.(enemy.position, player.position) !== true,
       attackElapsed: enemy.attackElapsed,
       attackEverySeconds: enemy.attackEverySeconds,
       damage: Math.max(1, enemy.damage - Math.max(0, playerPhysicalDefense)),
