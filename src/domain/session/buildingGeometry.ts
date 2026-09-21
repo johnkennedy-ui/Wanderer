@@ -251,6 +251,106 @@ export const wallBlocksSegment = (
   );
 };
 
+const WALL_ROUTE_MARGIN = ROUNDING_CLEARANCE + 0.0001;
+const MAX_WALL_ROUTE_CORNERS = 256;
+const ROUTE_DISTANCE_EPSILON = 1e-9;
+
+const wallRouteCorners = (
+  buildings: readonly BuildingState[],
+  clearance: number,
+): readonly Vector2[] => {
+  const offset = tileSize() / 2 + clearance + WALL_ROUTE_MARGIN;
+  const candidates = new Map<string, Vector2>();
+  for (const wall of walls(buildings)) {
+    if (!isFinitePosition(wall.position)) continue;
+    for (const x of [wall.position.x - offset, wall.position.x + offset])
+      for (const y of [wall.position.y - offset, wall.position.y + offset]) {
+        const corner = { x, y };
+        if (wallBlocksPosition(corner, buildings, clearance)) continue;
+        candidates.set(`${x}:${y}`, corner);
+      }
+  }
+  return [...candidates.values()];
+};
+
+/**
+ * Finds a deterministic shortest visibility path around the current wall
+ * tiles. Waypoints deliberately stay outside the rounded actor clearance;
+ * callers retain terrain as a separate movement authority.
+ */
+export const shortestWallRoute = (
+  from: Vector2,
+  target: Vector2,
+  buildings: readonly BuildingState[],
+  clearance = 0,
+): readonly Vector2[] | null => {
+  if (!isFinitePosition(from) || !isFinitePosition(target)) return null;
+  const expandedBy = finiteClearance(clearance);
+  if (
+    wallBlocksPosition(from, buildings, expandedBy) ||
+    wallBlocksPosition(target, buildings, expandedBy)
+  )
+    return null;
+  if (!wallBlocksSegment(from, target, buildings, expandedBy)) return [];
+
+  const corners = wallRouteCorners(buildings, expandedBy);
+  if (corners.length > MAX_WALL_ROUTE_CORNERS) return null;
+  const nodes = [from, ...corners, target];
+  const targetIndex = nodes.length - 1;
+  const distances = new Array<number>(nodes.length).fill(
+    Number.POSITIVE_INFINITY,
+  );
+  const previous = new Array<number>(nodes.length).fill(-1);
+  const remaining = new Set(nodes.map((_, index) => index));
+  distances[0] = 0;
+
+  while (remaining.size > 0) {
+    let current = -1;
+    for (const candidate of remaining)
+      if (
+        current === -1 ||
+        distances[candidate] < distances[current] - ROUTE_DISTANCE_EPSILON ||
+        (Math.abs(distances[candidate] - distances[current]) <=
+          ROUTE_DISTANCE_EPSILON &&
+          candidate < current)
+      )
+        current = candidate;
+    if (current === -1 || !Number.isFinite(distances[current])) break;
+    remaining.delete(current);
+    if (current === targetIndex) break;
+
+    for (const neighbor of remaining) {
+      if (
+        wallBlocksSegment(
+          nodes[current],
+          nodes[neighbor],
+          buildings,
+          expandedBy,
+        )
+      )
+        continue;
+      const edge = Math.hypot(
+        nodes[neighbor].x - nodes[current].x,
+        nodes[neighbor].y - nodes[current].y,
+      );
+      const candidate = distances[current] + edge;
+      if (candidate < distances[neighbor] - ROUTE_DISTANCE_EPSILON) {
+        distances[neighbor] = candidate;
+        previous[neighbor] = current;
+      }
+    }
+  }
+
+  if (!Number.isFinite(distances[targetIndex])) return null;
+  const route: number[] = [];
+  for (let cursor = targetIndex; cursor !== 0; cursor = previous[cursor]) {
+    if (cursor === -1) return null;
+    route.push(cursor);
+  }
+  route.reverse();
+  return route.slice(0, -1).map((index) => nodes[index]);
+};
+
 /**
  * Sweeps a circular actor centre against solid wall tiles. A start inside a
  * wall may move outward, but never through a second wall or deeper into it.
