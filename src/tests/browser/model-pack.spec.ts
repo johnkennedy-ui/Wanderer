@@ -63,12 +63,12 @@ for (const playerClass of ["knight", "wizard", "archer"] as const) {
   }) => {
     const faults = captureBrowserFaults(page);
     const responses: { path: string; status: number; type: string }[] = [];
-    page.on("response", async (response) => {
+    page.on("response", (response) => {
       if (!response.url().toLowerCase().includes(".glb")) return;
       responses.push({
         path: new URL(response.url()).pathname,
         status: response.status(),
-        type: (await response.headerValue("content-type")) ?? "",
+        type: response.headers()["content-type"] ?? "",
       });
     });
     await primeModelWorld(page, playerClass);
