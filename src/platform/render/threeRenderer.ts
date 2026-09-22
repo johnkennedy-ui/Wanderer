@@ -29,7 +29,7 @@ export const defaultThreeCameraTuning = Object.freeze({
 });
 
 /** Keep CSS geometry and raycasts crisp while bounding the software-rendered backing buffer. */
-export const maximumThreeRenderPixelRatio = 0.75;
+export const maximumThreeRenderPixelRatio = 0.5;
 
 /** Disposable Three.js projection. It cannot command the session. */
 export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {

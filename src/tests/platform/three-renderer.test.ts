@@ -1097,6 +1097,7 @@ describe("Three browser adapter ownership", () => {
   it("caps the backing render resolution without changing logical canvas layout", () => {
     const dom = rendererDom();
     const renderer = createThreeRenderer(dom.host);
+    expect(maximumThreeRenderPixelRatio).toBe(0.5);
     expect(gpu.setPixelRatio).toHaveBeenCalledWith(
       maximumThreeRenderPixelRatio,
     );
