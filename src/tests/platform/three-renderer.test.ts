@@ -5,10 +5,15 @@ import type { GameRendererSnapshot } from "../../domain/notices";
 import { buildingKinds, enemyKinds, resourceKinds } from "../../domain/types";
 import type { AttackStyle } from "../../domain/types";
 import { knightSlashAnimationFor } from "../../platform/render/combatAnimationHelpers";
-import { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
+import {
+  RetainedProjection,
+  retainedBuildingInputKeyFor,
+  retainedTerrainInputKeyFor,
+} from "../../platform/render/retainedProjectionHelpers";
 import {
   createThreeRenderer,
   enemyPresentation,
+  maximumThreeRenderPixelRatio,
 } from "../../platform/render/threeRenderer";
 import {
   meshFor,
@@ -241,6 +246,64 @@ describe("retained Three CPU projection", () => {
     expect(disposed.visibleMeshes).toBe(0);
     projection.dispose();
     expect(projection.diagnostics()).toEqual(disposed);
+  });
+
+  it("keys static terrain and buildings structurally while preserving dynamic frames", () => {
+    const frame = rendererSnapshot();
+    const terrainInputKey = retainedTerrainInputKeyFor(frame);
+    const buildingInputKey = retainedBuildingInputKeyFor(frame);
+    const visibleChunk = frame.visibleChunks[0]!;
+    const obstacle = visibleChunk.obstacles[0]!;
+    const building = frame.visibleBuildings[0]!;
+
+    expect(retainedTerrainInputKeyFor(structuredClone(frame))).toBe(
+      terrainInputKey,
+    );
+    expect(
+      retainedTerrainInputKeyFor({
+        ...frame,
+        player: { ...frame.player, position: { x: 9, y: -6 } },
+      }),
+    ).toBe(terrainInputKey);
+    expect(
+      retainedTerrainInputKeyFor({
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            obstacles: [
+              {
+                ...obstacle,
+                position: {
+                  x: obstacle.position.x + 1,
+                  y: obstacle.position.y,
+                },
+              },
+              ...visibleChunk.obstacles.slice(1),
+            ],
+          },
+          ...frame.visibleChunks.slice(1),
+        ],
+      }),
+    ).not.toBe(terrainInputKey);
+
+    expect(
+      retainedBuildingInputKeyFor({
+        ...frame,
+        player: { ...frame.player, position: { x: 9, y: -6 } },
+      }),
+    ).toBe(buildingInputKey);
+    expect(
+      retainedBuildingInputKeyFor({
+        ...frame,
+        visibleBuildings: [
+          {
+            ...building,
+            position: { x: building.position.x + 1, y: building.position.y },
+          },
+        ],
+      }),
+    ).not.toBe(buildingInputKey);
   });
 
   it("characterizes actual legacy marker heights and equivalent shapes/materials", () => {
@@ -1031,6 +1094,15 @@ describe("retained Three CPU projection", () => {
 });
 
 describe("Three browser adapter ownership", () => {
+  it("caps the backing render resolution without changing logical canvas layout", () => {
+    const dom = rendererDom();
+    const renderer = createThreeRenderer(dom.host);
+    expect(gpu.setPixelRatio).toHaveBeenCalledWith(
+      maximumThreeRenderPixelRatio,
+    );
+    renderer.dispose();
+  });
+
   it("retains accessible enemy health bars from snapshots and prunes departed enemies", () => {
     const dom = rendererDom();
     const renderer = createThreeRenderer(dom.host);

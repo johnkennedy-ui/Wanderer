@@ -28,6 +28,9 @@ export const defaultThreeCameraTuning = Object.freeze({
   playerOffset: { x: 11, y: 17, z: 14 },
 });
 
+/** Keep CSS geometry and raycasts crisp while bounding the software-rendered backing buffer. */
+export const maximumThreeRenderPixelRatio = 0.75;
+
 /** Disposable Three.js projection. It cannot command the session. */
 export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const canvas = document.createElement("canvas");
@@ -39,7 +42,9 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     antialias: true,
     alpha: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio || 1, maximumThreeRenderPixelRatio),
+  );
   renderer.setClearColor(0x101820);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(

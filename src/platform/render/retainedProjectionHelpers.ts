@@ -25,6 +25,48 @@ interface MageExplosion {
   readonly startedAt: number;
 }
 
+/** Fresh presentation snapshots clone chunk arrays, so cache from their visible facts. */
+export const retainedTerrainInputKeyFor = (
+  snapshot: GameRendererSnapshot,
+): string =>
+  JSON.stringify([
+    snapshot.presentationResetId,
+    snapshot.visibleChunks.map((chunk) => [
+      chunk.coordinate.x,
+      chunk.coordinate.y,
+      chunk.key,
+      chunk.obstacles.map((obstacle) => [
+        obstacle.id,
+        obstacle.kind ?? null,
+        obstacle.waterKind ?? null,
+        obstacle.radius ?? null,
+        obstacle.position.x,
+        obstacle.position.y,
+      ]),
+      chunk.campfires.map((campfire) => [
+        campfire.id,
+        campfire.kind,
+        campfire.position.x,
+        campfire.position.y,
+      ]),
+    ]),
+  ]);
+
+/** Building roots and auras are static until a placement, relocation, or upgrade changes them. */
+export const retainedBuildingInputKeyFor = (
+  snapshot: GameRendererSnapshot,
+): string =>
+  JSON.stringify([
+    snapshot.presentationResetId,
+    snapshot.visibleBuildings.map((building) => [
+      building.id,
+      building.kind,
+      building.level,
+      building.position.x,
+      building.position.y,
+    ]),
+  ]);
+
 /** CPU-testable retained visual owner; never holds or commands gameplay state. */
 export class RetainedProjection {
   readonly group = new THREE.Group();
@@ -43,6 +85,8 @@ export class RetainedProjection {
   private readonly relicDrops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
   private destination: THREE.Mesh | undefined;
+  private terrainInputKey: string | undefined;
+  private buildingInputKey: string | undefined;
   private lastPresentationElapsed: number | undefined;
   private lastPresentationResetId: number | undefined;
   private meshesRemoved = 0;
@@ -59,26 +103,30 @@ export class RetainedProjection {
 
   render(snapshot: GameRendererSnapshot): void {
     if (this.disposed) return;
-    const obstacles = new Set<string>();
-    const campfires = new Set<string>();
-    for (const chunk of snapshot.visibleChunks) {
-      for (const obstacle of chunk.obstacles) {
-        obstacles.add(obstacle.id);
-        this.obstacle(obstacle);
+    const terrainInputKey = retainedTerrainInputKeyFor(snapshot);
+    if (terrainInputKey !== this.terrainInputKey) {
+      const obstacles = new Set<string>();
+      const campfires = new Set<string>();
+      for (const chunk of snapshot.visibleChunks) {
+        for (const obstacle of chunk.obstacles) {
+          obstacles.add(obstacle.id);
+          this.obstacle(obstacle);
+        }
+        for (const campfire of chunk.campfires) {
+          campfires.add(campfire.id);
+          this.marker(
+            this.campfires,
+            campfire.id,
+            campfire.position,
+            this.resources.cylinder(0.35, 0.5),
+            this.resources.material(0xff8a3d),
+          );
+        }
       }
-      for (const campfire of chunk.campfires) {
-        campfires.add(campfire.id);
-        this.marker(
-          this.campfires,
-          campfire.id,
-          campfire.position,
-          this.resources.cylinder(0.35, 0.5),
-          this.resources.material(0xff8a3d),
-        );
-      }
+      this.removeMissing(this.obstacles, obstacles);
+      this.removeMissing(this.campfires, campfires);
+      this.terrainInputKey = terrainInputKey;
     }
-    this.removeMissing(this.obstacles, obstacles);
-    this.removeMissing(this.campfires, campfires);
     if (snapshot.destination === null) {
       if (this.destination !== undefined) {
         this.destination.removeFromParent();
@@ -97,45 +145,49 @@ export class RetainedProjection {
       }
       this.position(this.destination, snapshot.destination, 0.03);
     }
-    const buildings = new Set<string>();
-    const auras = new Set<string>();
-    for (const building of snapshot.visibleBuildings) {
-      buildings.add(building.id);
-      const wall =
-        building.kind === "WoodWall" || building.kind === "StoneWall";
-      if (building.kind === "Healer") {
-        auras.add(building.id);
-        const aura = this.marker(
-          this.auras,
+    const buildingInputKey = retainedBuildingInputKeyFor(snapshot);
+    if (buildingInputKey !== this.buildingInputKey) {
+      const buildings = new Set<string>();
+      const auras = new Set<string>();
+      for (const building of snapshot.visibleBuildings) {
+        buildings.add(building.id);
+        const wall =
+          building.kind === "WoodWall" || building.kind === "StoneWall";
+        if (building.kind === "Healer") {
+          auras.add(building.id);
+          const aura = this.marker(
+            this.auras,
+            building.id,
+            building.position,
+            this.resources.ring(
+              gameplayTuning.healingHutRadiusByLevel[building.level - 1],
+            ),
+            this.resources.healingHutMaterial(),
+            0.025,
+          );
+          aura.name = `aura:${building.id}`;
+          aura.rotation.x = -Math.PI / 2;
+        }
+        this.marker(
+          this.buildings,
           building.id,
           building.position,
-          this.resources.ring(
-            gameplayTuning.healingHutRadiusByLevel[building.level - 1],
-          ),
-          this.resources.healingHutMaterial(),
-          0.025,
+          wall
+            ? this.resources.wall()
+            : this.resources.cylinder(
+                0.48 + building.level * 0.07,
+                0.7 + building.level * 0.15,
+              ),
+          wall
+            ? this.resources.wallMaterial(building.kind)
+            : this.resources.material(buildingColors[building.kind]),
+          wall ? 0.5 : 0,
         );
-        aura.name = `aura:${building.id}`;
-        aura.rotation.x = -Math.PI / 2;
       }
-      this.marker(
-        this.buildings,
-        building.id,
-        building.position,
-        wall
-          ? this.resources.wall()
-          : this.resources.cylinder(
-              0.48 + building.level * 0.07,
-              0.7 + building.level * 0.15,
-            ),
-        wall
-          ? this.resources.wallMaterial(building.kind)
-          : this.resources.material(buildingColors[building.kind]),
-        wall ? 0.5 : 0,
-      );
+      this.removeMissing(this.buildings, buildings);
+      this.removeMissing(this.auras, auras);
+      this.buildingInputKey = buildingInputKey;
     }
-    this.removeMissing(this.buildings, buildings);
-    this.removeMissing(this.auras, auras);
     const enemies = new Set<string>();
     for (const enemy of snapshot.enemies) {
       enemies.add(enemy.id);
@@ -357,6 +409,8 @@ export class RetainedProjection {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.terrainInputKey = undefined;
+    this.buildingInputKey = undefined;
     for (const map of [
       this.campfires,
       this.buildings,

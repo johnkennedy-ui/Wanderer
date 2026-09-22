@@ -7,6 +7,7 @@ import { generateChunk, WANDERER_WEB_V3 } from "../../domain/world";
 import {
   EnvironmentProjection,
   environmentBaseRadiusFor,
+  environmentDescriptorInputKeyFor,
   fitEnvironmentModel,
   environmentDescriptorsFor,
   environmentFilenameFor,
@@ -225,6 +226,167 @@ describe("environment presentation", () => {
         snapshot([{ ...base, coordinate: { x: 0, y: 0 } }]),
       ).filter((item) => item.id.startsWith("environment:")),
     ).toEqual([]);
+  });
+
+  it("keys environment descriptors structurally across cloned frames and clearance changes", () => {
+    const frame = snapshot([chunk(1, 1)]);
+    const inputKey = environmentDescriptorInputKeyFor(frame);
+    const visibleChunk = frame.visibleChunks[0]!;
+    const home = generateChunk(
+      { seed: "environment-key-contract", generatorVersion: WANDERER_WEB_V3 },
+      { x: 0, y: 0 },
+    );
+
+    expect(environmentDescriptorInputKeyFor(structuredClone(frame))).toBe(
+      inputKey,
+    );
+    expect(
+      environmentDescriptorInputKeyFor({
+        ...frame,
+        player: {
+          ...frame.player,
+          position: {
+            x: frame.player.position.x + 1,
+            y: frame.player.position.y,
+          },
+        },
+      }),
+    ).toBe(inputKey);
+
+    const changedFrames = [
+      { ...frame, presentationResetId: frame.presentationResetId + 1 },
+      {
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            domainSeeds: {
+              ...visibleChunk.domainSeeds,
+              cosmetic: (visibleChunk.domainSeeds.cosmetic ?? 0) + 1,
+            },
+          },
+        ],
+      },
+      {
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            obstacles: visibleChunk.obstacles.map((obstacle, index) =>
+              index === 0
+                ? {
+                    ...obstacle,
+                    position: {
+                      x: obstacle.position.x + 1,
+                      y: obstacle.position.y,
+                    },
+                  }
+                : obstacle,
+            ),
+          },
+        ],
+      },
+      {
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            campfires: [
+              {
+                ...home.campfires[0]!,
+                position: { x: 2, y: 3 },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            spawns: [
+              {
+                ...home.spawns[0]!,
+                position: { x: 4, y: 5 },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        ...frame,
+        visibleBuildings: [
+          {
+            id: "building:environment:key",
+            kind: "Healer" as const,
+            level: 1 as const,
+            position: { x: 6, y: 7 },
+          },
+        ],
+      },
+    ];
+
+    for (const changed of changedFrames)
+      expect(environmentDescriptorInputKeyFor(changed)).not.toBe(inputKey);
+  });
+
+  it("refreshes environment descriptors when a same-identity building relocates", async () => {
+    const base = Array.from({ length: 160 }, (_, cosmetic) => ({
+      ...chunk(1, 1, cosmetic),
+      obstacles: [],
+    })).find((candidate) =>
+      environmentDescriptorsFor(snapshot([candidate])).some((item) =>
+        item.id.startsWith("environment:"),
+      ),
+    )!;
+    const unblocked = snapshot([base]);
+    const decoration = environmentDescriptorsFor(unblocked).find((item) =>
+      item.id.startsWith("environment:"),
+    )!;
+    const building = {
+      id: "building:environment:relocate",
+      kind: "Healer" as const,
+      level: 1 as const,
+      position: decoration.position,
+    };
+    const blocked = { ...unblocked, visibleBuildings: [building] };
+    const relocated = {
+      ...blocked,
+      visibleBuildings: [
+        {
+          ...building,
+          position: {
+            x: building.position.x + 100,
+            y: building.position.y + 100,
+          },
+        },
+      ],
+    };
+    const blockedDescriptors = environmentDescriptorsFor(blocked);
+    const relocatedDescriptors = environmentDescriptorsFor(relocated);
+    expect(blockedDescriptors.map((item) => item.id)).not.toContain(
+      decoration.id,
+    );
+    expect(relocatedDescriptors.map((item) => item.id)).toContain(
+      decoration.id,
+    );
+
+    const cache: EnvironmentAssetCache = {
+      acquire: vi.fn<EnvironmentAssetCache["acquire"]>(async () => undefined),
+    };
+    const projection = new EnvironmentProjection(cache);
+    projection.render(blocked, vi.fn());
+    await Promise.resolve();
+    expect(projection.diagnostics().instances).toBe(blockedDescriptors.length);
+
+    projection.render(relocated, vi.fn());
+    await Promise.resolve();
+    expect(projection.diagnostics().instances).toBe(
+      relocatedDescriptors.length,
+    );
+    expect(cache.acquire).toHaveBeenCalledTimes(relocatedDescriptors.length);
+    projection.dispose();
   });
 
   it("measures native vertex bounds when an injected model has no named bearing part", () => {
