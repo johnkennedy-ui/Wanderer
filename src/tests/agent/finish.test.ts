@@ -76,20 +76,28 @@ afterEach(() =>
 );
 
 describe("authoritative source-bound completion", () => {
-  it("records one source-stable completion with explicit unverified remote scopes", async () => {
-    const cwd = fixture();
-    const before = common.collectInputFingerprint({ cwd }).digest;
-    const result = await finish(cwd);
-    expect(result.status).toBe("LOCAL_PASS_REMOTE_NOT_VERIFIED");
-    expect(result.scopes).toEqual({
-      local: "passed",
-      remoteCi: "not-verified",
-      settings: "not-verified",
-      deployment: "not-performed",
+  describe("source-stable completion", () => {
+    let cwd: string;
+    let before: string;
+    // Keep fixture creation and its baseline fingerprint under their unchanged
+    // 5s hook bound. The complete finish assertion keeps its default 5s bound.
+    beforeEach(() => {
+      cwd = fixture();
+      before = common.collectInputFingerprint({ cwd }).digest;
+    }, 5_000);
+    it("records one source-stable completion with explicit unverified remote scopes", async () => {
+      const result = await finish(cwd);
+      expect(result.status).toBe("LOCAL_PASS_REMOTE_NOT_VERIFIED");
+      expect(result.scopes).toEqual({
+        local: "passed",
+        remoteCi: "not-verified",
+        settings: "not-verified",
+        deployment: "not-performed",
+      });
+      expect(result.fingerprint).toBe(before);
+      expect(common.collectInputFingerprint({ cwd }).digest).toBe(before);
+      expect(readdirSync(join(cwd, ".agent/completions"))).toHaveLength(2);
     });
-    expect(result.fingerprint).toBe(before);
-    expect(common.collectInputFingerprint({ cwd }).digest).toBe(before);
-    expect(readdirSync(join(cwd, ".agent/completions"))).toHaveLength(2);
   });
   describe("check-only completion reuse", () => {
     let cwd: string;
