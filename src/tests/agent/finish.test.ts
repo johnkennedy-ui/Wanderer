@@ -206,25 +206,32 @@ describe("authoritative source-bound completion", () => {
       ).status,
     ).toBe("invalidated");
   });
-  it("cannot bless source mutation or validator failure during completion", async () => {
-    const cwd = fixture();
-    await runCommand({ cwd, command });
-    await expect(
-      finish(cwd, {
-        checkOnly: true,
-        externalValidation: async () => {
-          throw new Error("scanner failed");
-        },
-      }),
-    ).rejects.toThrow("scanner failed");
-    await expect(
-      finish(cwd, {
-        checkOnly: true,
-        externalValidation: async () => {
-          writeFileSync(join(cwd, "source.txt"), "changed");
-        },
-      }),
-    ).rejects.toThrow("changed");
+  describe("completion validation integrity", () => {
+    let cwd: string;
+    // Keep the real validation setup under its own unchanged 5s bound. The
+    // completion assertions then retain their separate default 5s deadline.
+    beforeEach(async () => {
+      cwd = fixture();
+      await runCommand({ cwd, command });
+    }, 5_000);
+    it("cannot bless source mutation or validator failure during completion", async () => {
+      await expect(
+        finish(cwd, {
+          checkOnly: true,
+          externalValidation: async () => {
+            throw new Error("scanner failed");
+          },
+        }),
+      ).rejects.toThrow("scanner failed");
+      await expect(
+        finish(cwd, {
+          checkOnly: true,
+          externalValidation: async () => {
+            writeFileSync(join(cwd, "source.txt"), "changed");
+          },
+        }),
+      ).rejects.toThrow("changed");
+    });
   });
   it("upgrades historical metadata without restarting its mission or discarding evidence", () => {
     const cwd = fixture();
