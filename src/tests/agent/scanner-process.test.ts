@@ -723,8 +723,8 @@ assert set(opened) == {200,201}`;
 
   it("times out and reaps a SIGTERM-ignoring orphan holding inherited pipes", async () => {
     // This keeps the original 200 ms timeout and readiness assertion while
-    // avoiding two Node bootstrap phases. The child installs its SIGTERM
-    // handler before it writes the readiness mark and inherits stdio pipes.
+    // avoiding an additional interpreter bootstrap. The forked child installs
+    // its SIGTERM handler before it writes readiness and inherits stdio pipes.
     const { directory } = fixture("");
     const path = join(directory, "timeout-fixture.py");
     writeFileSync(
@@ -733,8 +733,13 @@ assert set(opened) == {200,201}`;
 mark=${JSON.stringify(join(directory, "timeout-mark"))}
 pid=${JSON.stringify(join(directory, "timeout-pid"))}
 ready=${JSON.stringify(join(directory, "timeout-ready"))}
-child=subprocess.Popen([sys.executable,"-c",${JSON.stringify("import os,signal,sys,time\nsignal.signal(signal.SIGTERM, lambda *_: None)\nmark=sys.argv[1]\nwhile True:\n open(mark,'w').write(str(time.time()))\n time.sleep(.02)")},mark])
-open(pid,'w').write(str(child.pid))
+child=os.fork()
+if child == 0:
+ signal.signal(signal.SIGTERM, lambda *_: None)
+ while True:
+  open(mark,'w').write(str(time.time()))
+  time.sleep(.02)
+open(pid,'w').write(str(child))
 while not os.path.exists(mark): time.sleep(.002)
 open(ready,'w').write('ready')`,
     );

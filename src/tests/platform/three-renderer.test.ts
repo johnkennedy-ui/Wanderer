@@ -4,10 +4,16 @@ import { gameplayTuning, resourceDefinitions } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
 import { buildingKinds, enemyKinds, resourceKinds } from "../../domain/types";
 import type { AttackStyle } from "../../domain/types";
-import { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
+import { knightSlashAnimationFor } from "../../platform/render/combatAnimationHelpers";
+import {
+  RetainedProjection,
+  retainedBuildingInputKeyFor,
+  retainedTerrainInputKeyFor,
+} from "../../platform/render/retainedProjectionHelpers";
 import {
   createThreeRenderer,
   enemyPresentation,
+  maximumThreeRenderPixelRatio,
 } from "../../platform/render/threeRenderer";
 import {
   meshFor,
@@ -240,6 +246,64 @@ describe("retained Three CPU projection", () => {
     expect(disposed.visibleMeshes).toBe(0);
     projection.dispose();
     expect(projection.diagnostics()).toEqual(disposed);
+  });
+
+  it("keys static terrain and buildings structurally while preserving dynamic frames", () => {
+    const frame = rendererSnapshot();
+    const terrainInputKey = retainedTerrainInputKeyFor(frame);
+    const buildingInputKey = retainedBuildingInputKeyFor(frame);
+    const visibleChunk = frame.visibleChunks[0]!;
+    const obstacle = visibleChunk.obstacles[0]!;
+    const building = frame.visibleBuildings[0]!;
+
+    expect(retainedTerrainInputKeyFor(structuredClone(frame))).toBe(
+      terrainInputKey,
+    );
+    expect(
+      retainedTerrainInputKeyFor({
+        ...frame,
+        player: { ...frame.player, position: { x: 9, y: -6 } },
+      }),
+    ).toBe(terrainInputKey);
+    expect(
+      retainedTerrainInputKeyFor({
+        ...frame,
+        visibleChunks: [
+          {
+            ...visibleChunk,
+            obstacles: [
+              {
+                ...obstacle,
+                position: {
+                  x: obstacle.position.x + 1,
+                  y: obstacle.position.y,
+                },
+              },
+              ...visibleChunk.obstacles.slice(1),
+            ],
+          },
+          ...frame.visibleChunks.slice(1),
+        ],
+      }),
+    ).not.toBe(terrainInputKey);
+
+    expect(
+      retainedBuildingInputKeyFor({
+        ...frame,
+        player: { ...frame.player, position: { x: 9, y: -6 } },
+      }),
+    ).toBe(buildingInputKey);
+    expect(
+      retainedBuildingInputKeyFor({
+        ...frame,
+        visibleBuildings: [
+          {
+            ...building,
+            position: { x: building.position.x + 1, y: building.position.y },
+          },
+        ],
+      }),
+    ).not.toBe(buildingInputKey);
   });
 
   it("characterizes actual legacy marker heights and equivalent shapes/materials", () => {
@@ -495,12 +559,21 @@ describe("retained Three CPU projection", () => {
       expect(material.emissive.getHex()).toBe(emissive);
       expect(material.roughness).toBe(0.35);
       expect(material.emissiveIntensity).toBe(1);
-      expect(mesh.position.toArray()).toEqual([2, 0.72, -1]);
+      expect(mesh.position.x).toBe(2);
+      expect(mesh.position.z).toBe(-1);
+      if (style === "magic") expect(mesh.position.y).toBeGreaterThan(0.72);
+      else expect(mesh.position.y).toBe(0.72);
       expect(mesh.geometry).toBe(meshFor(projection, `twin:${style}`).geometry);
       expect(mesh.material).toBe(meshFor(projection, `twin:${style}`).material);
     }
     const mesh = meshFor(projection, "shot:basic");
     const twin = meshFor(projection, "twin:basic");
+    projection.render({
+      ...snapshot,
+      projectiles: snapshot.projectiles.map((shot) =>
+        shot.id === "shot:basic" ? { ...shot, style: "magic" } : shot,
+      ),
+    });
     const before = projection.diagnostics();
     for (const style of [
       "slash",
@@ -524,7 +597,10 @@ describe("retained Three CPU projection", () => {
         ),
       });
       expect(meshFor(projection, "shot:basic")).toBe(mesh);
-      expect(mesh.position.toArray()).toEqual([-1, 0.72, -4]);
+      expect(mesh.position.x).toBe(-1);
+      expect(mesh.position.z).toBe(-4);
+      if (style === "magic") expect(mesh.position.y).toBeGreaterThan(0.72);
+      else expect(mesh.position.y).toBe(0.72);
       expect(mesh.material).toBe(
         meshFor(projection, `twin:${style === "unknown" ? "basic" : style}`)
           .material,
@@ -537,6 +613,64 @@ describe("retained Three CPU projection", () => {
     projection.dispose();
   });
 
+  it("renders a Mage fireball trail and a bounded explosion at its impact target", () => {
+    const projection = new RetainedProjection();
+    const snapshot = rendererSnapshot();
+    const fireball = {
+      ...snapshot.projectiles[0],
+      id: "fireball:1",
+      origin: { x: -1, y: 2 },
+      targetPosition: { x: 4, y: -3 },
+      progress: 0.7,
+      style: "magic" as const,
+    };
+    projection.render({
+      ...snapshot,
+      presentationElapsed: 1,
+      projectiles: [fireball],
+    });
+    const trail = meshFor(projection, "fireball-trail:fireball:1");
+    expect(trail.visible).toBe(true);
+    expect(trail.scale.z).toBeGreaterThan(1);
+    expect(projection.diagnostics().maps).toMatchObject({
+      fireballTrails: 1,
+      mageExplosions: 0,
+    });
+
+    projection.render({
+      ...snapshot,
+      presentationElapsed: 1.1,
+      projectiles: [],
+    });
+    const root = projection.group.getObjectByName("mage-explosion:fireball:1");
+    expect(root?.position.toArray()).toEqual([4, 0.14, 3]);
+    expect(root?.children).toHaveLength(8);
+    expect(projection.diagnostics().maps.mageExplosions).toBe(1);
+    expect(projection.mageExplosionCount()).toBe(1);
+
+    projection.render({
+      ...snapshot,
+      presentationElapsed: 1.25,
+      projectiles: [],
+    });
+    const ring = projection.group.getObjectByName(
+      "mage-explosion:fireball:1:ring",
+    );
+    expect(ring?.scale.x).toBeGreaterThan(1);
+
+    projection.render({
+      ...snapshot,
+      presentationElapsed: 1.6,
+      projectiles: [],
+    });
+    expect(
+      projection.group.getObjectByName("mage-explosion:fireball:1"),
+    ).toBeUndefined();
+    expect(projection.diagnostics().maps.mageExplosions).toBe(0);
+    expect(projection.mageExplosionCount()).toBe(0);
+    projection.dispose();
+  });
+
   it("retains Knight crescents with shape, orientation, height and material through motion and removal", () => {
     const projection = new RetainedProjection();
     const snapshot = visualVariantSnapshot();
@@ -545,6 +679,12 @@ describe("retained Three CPU projection", () => {
     for (const attack of snapshot.crescentAttacks) {
       const mesh = meshFor(projection, attack.id);
       const halfArc = Math.acos(attack.arcCosine);
+      const length = Math.hypot(attack.direction.x, attack.direction.y);
+      const direction = {
+        x: attack.direction.x / length,
+        y: attack.direction.y / length,
+      };
+      const slash = knightSlashAnimationFor(attack.progress);
       expect((mesh.geometry as THREE.RingGeometry).parameters).toEqual({
         innerRadius: Math.max(0.45, attack.radius - 0.32),
         outerRadius: attack.radius,
@@ -553,15 +693,18 @@ describe("retained Three CPU projection", () => {
         thetaStart: -halfArc,
         thetaLength: halfArc * 2,
       });
-      expect(mesh.position.toArray()).toEqual([
-        attack.origin.x,
-        0.08,
-        -attack.origin.y,
-      ]);
-      expect(mesh.rotation.x).toBe(-Math.PI / 2);
-      expect(mesh.rotation.z).toBe(
-        Math.atan2(attack.direction.y, attack.direction.x),
+      expect(mesh.position.x).toBeCloseTo(
+        attack.origin.x + direction.x * attack.radius * slash.forward,
       );
+      expect(mesh.position.y).toBeCloseTo(slash.height);
+      expect(mesh.position.z).toBeCloseTo(
+        -(attack.origin.y + direction.y * attack.radius * slash.forward),
+      );
+      expect(mesh.rotation.x).toBe(-Math.PI / 2);
+      expect(mesh.rotation.z).toBeCloseTo(
+        Math.atan2(direction.y, direction.x) + slash.turn,
+      );
+      expect(mesh.scale.x).toBeCloseTo(slash.scale);
       expect(mesh.material).toBeInstanceOf(THREE.MeshBasicMaterial);
       expect((mesh.material as THREE.MeshBasicMaterial).color.getHex()).toBe(
         0xd8dde8,
@@ -599,8 +742,18 @@ describe("retained Three CPU projection", () => {
         ),
       });
       expect(meshFor(projection, mesh.name)).toBe(mesh);
-      expect(mesh.position.toArray()).toEqual([7, 0.08, 9]);
-      expect(mesh.rotation.z).toBe(Math.atan2(direction.y, direction.x));
+      const length = Math.hypot(direction.x, direction.y);
+      const normalized = { x: direction.x / length, y: direction.y / length };
+      const slash = knightSlashAnimationFor(0.9);
+      expect(mesh.position.x).toBeCloseTo(7 + normalized.x * 3 * slash.forward);
+      expect(mesh.position.y).toBeCloseTo(slash.height);
+      expect(mesh.position.z).toBeCloseTo(
+        -(-9 + normalized.y * 3 * slash.forward),
+      );
+      expect(mesh.rotation.z).toBeCloseTo(
+        Math.atan2(normalized.y, normalized.x) + slash.turn,
+      );
+      expect(mesh.scale.x).toBeCloseTo(slash.scale);
       expect(mesh.geometry).toBe(
         meshFor(projection, "crescent:3:0.25").geometry,
       );
@@ -926,6 +1079,8 @@ describe("retained Three CPU projection", () => {
       enemies: 0,
       projectiles: 0,
       crescents: 0,
+      fireballTrails: 0,
+      mageExplosions: 0,
       drops: 0,
       relicDrops: 0,
     });
@@ -939,6 +1094,16 @@ describe("retained Three CPU projection", () => {
 });
 
 describe("Three browser adapter ownership", () => {
+  it("caps the backing render resolution without changing logical canvas layout", () => {
+    const dom = rendererDom();
+    const renderer = createThreeRenderer(dom.host);
+    expect(maximumThreeRenderPixelRatio).toBe(0.5);
+    expect(gpu.setPixelRatio).toHaveBeenCalledWith(
+      maximumThreeRenderPixelRatio,
+    );
+    renderer.dispose();
+  });
+
   it("retains accessible enemy health bars from snapshots and prunes departed enemies", () => {
     const dom = rendererDom();
     const renderer = createThreeRenderer(dom.host);
@@ -1107,6 +1272,10 @@ describe("Three browser adapter ownership", () => {
 
   it("preserves and resets all current canvas diagnostics, with warm adapter allocations stable", () => {
     const dom = rendererDom();
+    const projectionDiagnostics = vi.spyOn(
+      RetainedProjection.prototype,
+      "diagnostics",
+    );
     const renderer = createThreeRenderer(dom.host);
     const snapshot: GameRendererSnapshot = {
       ...visualVariantSnapshot(),
@@ -1136,11 +1305,14 @@ describe("Three browser adapter ownership", () => {
       },
     });
     renderer.render(snapshot);
+    expect(projectionDiagnostics).not.toHaveBeenCalled();
     expect(dom.canvas.dataset).toMatchObject({
       floorDropCount: "1",
       weaponRelicDropCount: "0",
       homingProjectileCount: "0",
       projectileCount: "8",
+      mageFireballCount: "2",
+      mageExplosionCount: "0",
       crescentAttackCount: "5",
       playerHitRecovery: "active",
       playerHitFlash: "on",
@@ -1148,6 +1320,7 @@ describe("Three browser adapter ownership", () => {
       healingHutAuraRadii: "3,4,5,3",
     });
     const before = renderer.diagnostics();
+    expect(projectionDiagnostics).toHaveBeenCalledTimes(1);
     const styleWrites = writeStyle.mock.calls.length;
     const datasetWrites = writeDataset.mock.calls.length;
     expect(writeHealth).toHaveBeenCalledTimes(1);

@@ -76,20 +76,28 @@ afterEach(() =>
 );
 
 describe("authoritative source-bound completion", () => {
-  it("records one source-stable completion with explicit unverified remote scopes", async () => {
-    const cwd = fixture();
-    const before = common.collectInputFingerprint({ cwd }).digest;
-    const result = await finish(cwd);
-    expect(result.status).toBe("LOCAL_PASS_REMOTE_NOT_VERIFIED");
-    expect(result.scopes).toEqual({
-      local: "passed",
-      remoteCi: "not-verified",
-      settings: "not-verified",
-      deployment: "not-performed",
+  describe("source-stable completion", () => {
+    let cwd: string;
+    let before: string;
+    // Keep fixture creation and its baseline fingerprint under their unchanged
+    // 5s hook bound. The complete finish assertion keeps its default 5s bound.
+    beforeEach(() => {
+      cwd = fixture();
+      before = common.collectInputFingerprint({ cwd }).digest;
+    }, 5_000);
+    it("records one source-stable completion with explicit unverified remote scopes", async () => {
+      const result = await finish(cwd);
+      expect(result.status).toBe("LOCAL_PASS_REMOTE_NOT_VERIFIED");
+      expect(result.scopes).toEqual({
+        local: "passed",
+        remoteCi: "not-verified",
+        settings: "not-verified",
+        deployment: "not-performed",
+      });
+      expect(result.fingerprint).toBe(before);
+      expect(common.collectInputFingerprint({ cwd }).digest).toBe(before);
+      expect(readdirSync(join(cwd, ".agent/completions"))).toHaveLength(2);
     });
-    expect(result.fingerprint).toBe(before);
-    expect(common.collectInputFingerprint({ cwd }).digest).toBe(before);
-    expect(readdirSync(join(cwd, ".agent/completions"))).toHaveLength(2);
   });
   describe("check-only completion reuse", () => {
     let cwd: string;
@@ -206,25 +214,32 @@ describe("authoritative source-bound completion", () => {
       ).status,
     ).toBe("invalidated");
   });
-  it("cannot bless source mutation or validator failure during completion", async () => {
-    const cwd = fixture();
-    await runCommand({ cwd, command });
-    await expect(
-      finish(cwd, {
-        checkOnly: true,
-        externalValidation: async () => {
-          throw new Error("scanner failed");
-        },
-      }),
-    ).rejects.toThrow("scanner failed");
-    await expect(
-      finish(cwd, {
-        checkOnly: true,
-        externalValidation: async () => {
-          writeFileSync(join(cwd, "source.txt"), "changed");
-        },
-      }),
-    ).rejects.toThrow("changed");
+  describe("completion validation integrity", () => {
+    let cwd: string;
+    // Keep the real validation setup under its own unchanged 5s bound. The
+    // completion assertions then retain their separate default 5s deadline.
+    beforeEach(async () => {
+      cwd = fixture();
+      await runCommand({ cwd, command });
+    }, 5_000);
+    it("cannot bless source mutation or validator failure during completion", async () => {
+      await expect(
+        finish(cwd, {
+          checkOnly: true,
+          externalValidation: async () => {
+            throw new Error("scanner failed");
+          },
+        }),
+      ).rejects.toThrow("scanner failed");
+      await expect(
+        finish(cwd, {
+          checkOnly: true,
+          externalValidation: async () => {
+            writeFileSync(join(cwd, "source.txt"), "changed");
+          },
+        }),
+      ).rejects.toThrow("changed");
+    });
   });
   it("upgrades historical metadata without restarting its mission or discarding evidence", () => {
     const cwd = fixture();

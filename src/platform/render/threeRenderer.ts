@@ -28,6 +28,9 @@ export const defaultThreeCameraTuning = Object.freeze({
   playerOffset: { x: 11, y: 17, z: 14 },
 });
 
+/** Keep CSS geometry and raycasts crisp while bounding the software-rendered backing buffer. */
+export const maximumThreeRenderPixelRatio = 0.5;
+
 /** Disposable Three.js projection. It cannot command the session. */
 export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   const canvas = document.createElement("canvas");
@@ -39,7 +42,9 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     antialias: true,
     alpha: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio || 1, maximumThreeRenderPixelRatio),
+  );
   renderer.setClearColor(0x101820);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(
@@ -190,14 +195,20 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
         String(snapshot.weaponRelicDrops.length),
       );
       let homingProjectileCount = 0;
-      for (const projectile of snapshot.projectiles)
+      let mageFireballCount = 0;
+      for (const projectile of snapshot.projectiles) {
         if (projectile.homing === true) homingProjectileCount += 1;
+        if (projectile.style === "magic") mageFireballCount += 1;
+      }
       setDataset("homingProjectileCount", String(homingProjectileCount));
       setDataset("projectileCount", String(snapshot.projectiles.length));
+      setDataset("mageFireballCount", String(mageFireballCount));
+      setDataset("mageExplosionCount", String(projection.mageExplosionCount()));
       setDataset(
         "crescentAttackCount",
         String(snapshot.crescentAttacks.length),
       );
+      setDataset("knightSlashCount", String(snapshot.crescentAttacks.length));
       setDataset(
         "playerHitRecovery",
         snapshot.playerHitRecovery.active ? "active" : "inactive",

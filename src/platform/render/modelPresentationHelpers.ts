@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { GameRendererSnapshot } from "../../domain/notices";
+import {
+  knightSlashAnimationFor,
+  mageFireballAnimationFor,
+} from "./combatAnimationHelpers";
 import { calibratedYawFor, shortestYawTowards } from "./modelFacingHelpers";
 import {
   environmentFilenameFor,
@@ -348,27 +352,52 @@ export class ModelProjection {
             (projectile.targetPosition.y - projectile.origin.y) *
               projectile.progress,
         };
+        const direction = {
+          x: projectile.targetPosition.x - projectile.origin.x,
+          y: projectile.targetPosition.y - projectile.origin.y,
+        };
+        if (projectile.style !== "magic")
+          return {
+            id: projectile.id,
+            asset: projectileModelFor(projectile.style),
+            position,
+            height: 0.72,
+            scale: projectile.style === "arrow" ? 0.55 : 0.5,
+            rotation: calibratedYawFor(direction),
+            tangent: true,
+          };
+        const fireball = mageFireballAnimationFor(
+          projectile.progress,
+          snapshot.presentationElapsed,
+        );
         return {
           id: projectile.id,
           asset: projectileModelFor(projectile.style),
           position,
-          height: 0.72,
-          scale: projectile.style === "arrow" ? 0.55 : 0.5,
-          rotation: calibratedYawFor({
-            x: projectile.targetPosition.x - projectile.origin.x,
-            y: projectile.targetPosition.y - projectile.origin.y,
-          }),
-          tangent: true,
+          height: fireball?.height ?? 0.72,
+          scale: 0.5 * fireball.scale,
+          rotation: calibratedYawFor(direction) + fireball.spin,
         };
       }),
-      ...snapshot.crescentAttacks.map((attack) => ({
-        id: attack.id,
-        asset: "projectile-knight" as const,
-        position: attack.origin,
-        height: 0.08,
-        scale: Math.max(0.45, attack.radius * 0.28),
-        rotation: calibratedYawFor(attack.direction, { x: 0, y: 1 }),
-      })),
+      ...snapshot.crescentAttacks.map((attack) => {
+        const length = Math.hypot(attack.direction.x, attack.direction.y);
+        const direction =
+          length > 0.0001
+            ? { x: attack.direction.x / length, y: attack.direction.y / length }
+            : { x: 0, y: 1 };
+        const slash = knightSlashAnimationFor(attack.progress);
+        return {
+          id: attack.id,
+          asset: "projectile-knight" as const,
+          position: {
+            x: attack.origin.x + direction.x * attack.radius * slash.forward,
+            y: attack.origin.y + direction.y * attack.radius * slash.forward,
+          },
+          height: slash.height,
+          scale: Math.max(0.45, attack.radius * 0.28) * slash.scale,
+          rotation: calibratedYawFor(direction, { x: 0, y: 1 }) + slash.turn,
+        };
+      }),
     ];
     const visible = new Set(descriptors.map((descriptor) => descriptor.id));
     for (const descriptor of descriptors)

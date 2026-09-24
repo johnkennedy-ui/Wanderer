@@ -232,7 +232,27 @@ test(
         timeout: 8_000,
       },
     );
+    await expect(canvas).toHaveAttribute("data-knight-slash-count", /[1-9]/);
     await expect(canvas).toHaveAttribute("data-projectile-count", "0");
+  },
+);
+
+test(
+  "Mage attacks animate a fireball in flight and an explosion on impact",
+  { tag: "@manual-choices" },
+  async ({ page }) => {
+    await primeClassChoice(page);
+    await page.goto(applicationPath);
+    const classModal = page.getByTestId("class-modal");
+    await expect(classModal).toBeVisible({ timeout: 8_000 });
+    await classModal.getByTestId("class-wizard").click();
+    const canvas = page.getByTestId("world-canvas");
+    await expect(canvas).toHaveAttribute("data-mage-fireball-count", /[1-9]/, {
+      timeout: 8_000,
+    });
+    await expect(canvas).toHaveAttribute("data-mage-explosion-count", /[1-9]/, {
+      timeout: 8_000,
+    });
   },
 );
 

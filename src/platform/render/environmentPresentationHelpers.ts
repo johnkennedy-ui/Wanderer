@@ -244,6 +244,51 @@ const clearForDecoration = (
   });
 };
 
+/**
+ * Fresh presentation snapshots clone their arrays, so reference identity cannot
+ * safely identify an unchanged environment. This key includes every input that
+ * can alter environment descriptors or decoration clearance.
+ */
+export const environmentDescriptorInputKeyFor = (
+  snapshot: GameRendererSnapshot,
+): string =>
+  JSON.stringify([
+    // A reset may replace the world while preserving locally similar content.
+    snapshot.presentationResetId,
+    snapshot.visibleChunks.map((chunk) => [
+      chunk.coordinate.x,
+      chunk.coordinate.y,
+      chunk.key,
+      chunk.domainSeeds.cosmetic ?? 0,
+      chunk.obstacles.map((obstacle) => [
+        obstacle.id,
+        obstacle.kind ?? null,
+        obstacle.radius ?? null,
+        obstacle.position.x,
+        obstacle.position.y,
+      ]),
+      chunk.campfires.map((campfire) => [
+        campfire.id,
+        campfire.kind,
+        campfire.position.x,
+        campfire.position.y,
+      ]),
+      chunk.spawns.map((spawn) => [
+        spawn.id,
+        spawn.kind,
+        spawn.position.x,
+        spawn.position.y,
+      ]),
+    ]),
+    snapshot.visibleBuildings.map((building) => [
+      building.id,
+      building.kind,
+      building.level,
+      building.position.x,
+      building.position.y,
+    ]),
+  ]);
+
 /** Pure, bounded descriptors make visitation order irrelevant and keep decoration non-authoritative. */
 export const environmentDescriptorsFor = (
   snapshot: GameRendererSnapshot,
@@ -291,6 +336,7 @@ export const environmentDescriptorsFor = (
 export class EnvironmentProjection {
   readonly group = new THREE.Group();
   private readonly instances = new Map<string, Instance>();
+  private descriptorInputKey: string | undefined;
   private disposed = false;
 
   constructor(
@@ -303,6 +349,8 @@ export class EnvironmentProjection {
     setFallbackModelVisible: (id: string, visible: boolean) => void,
   ): void {
     if (this.disposed) return;
+    const descriptorInputKey = environmentDescriptorInputKeyFor(snapshot);
+    if (descriptorInputKey === this.descriptorInputKey) return;
     const descriptors = environmentDescriptorsFor(snapshot);
     const visible = new Set(descriptors.map((descriptor) => descriptor.id));
     descriptors.forEach((descriptor) =>
@@ -310,6 +358,7 @@ export class EnvironmentProjection {
     );
     for (const [id, instance] of this.instances)
       if (!visible.has(id)) this.remove(id, instance, setFallbackModelVisible);
+    this.descriptorInputKey = descriptorInputKey;
   }
 
   diagnostics(): EnvironmentProjectionDiagnostics {
@@ -336,6 +385,7 @@ export class EnvironmentProjection {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.descriptorInputKey = undefined;
     for (const [id, instance] of this.instances)
       this.remove(id, instance, () => {});
     this.group.clear();
