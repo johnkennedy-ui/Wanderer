@@ -5,15 +5,73 @@
   "assets": [
     {
       "file": "enemy_brute.glb",
-      "sha256": "dfa7c77a7cb1faef61ce3e8c79caa7945dacd24d9dcbfa89ba7aa9b6b3c285e6"
+      "sha256": "229980591742b1cb5dfb9b9bbe5d423e869edf7ac2611ffe819d0f18c2d81ea0",
+      "bytes": 222284,
+      "triangles": 1552,
+      "animationClips": [
+        "move",
+        "idle",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "namedNodes": [
+        "asset_root",
+        "body",
+        "leg_l",
+        "leg_r",
+        "head",
+        "arm_l",
+        "arm_r",
+        "club"
+      ]
     },
     {
       "file": "enemy_scout.glb",
-      "sha256": "e1b9896decc1d255be0facc81a581cb129ca6764343f5c53cea9d162f7f0787b"
+      "sha256": "798dfe817e658de166c58e412af7c80db14898c9210410c13dd08767f7fffe3f",
+      "bytes": 188256,
+      "triangles": 1288,
+      "animationClips": [
+        "move",
+        "idle",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "namedNodes": [
+        "asset_root",
+        "body",
+        "leg_l",
+        "leg_r",
+        "head",
+        "arm_l",
+        "arm_r",
+        "spear"
+      ]
     },
     {
       "file": "player_archer.glb",
-      "sha256": "7d5df585987d126d70e80640b84a306a2874c08f088f72c8a8c803033c87a240"
+      "sha256": "7595c672da7f14927b7aca07db62f8096651cb749af3f5f229e922b1b8d0c79e",
+      "bytes": 243248,
+      "triangles": 1688,
+      "animationClips": [
+        "idle",
+        "move",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "namedNodes": [
+        "asset_root",
+        "body",
+        "cape",
+        "leg_l",
+        "leg_r",
+        "head",
+        "arm_l",
+        "arm_r",
+        "bow"
+      ]
     }
   ],
   "grips": {

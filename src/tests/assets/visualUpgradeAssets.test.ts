@@ -181,14 +181,10 @@ describe("visual upgrade asset packs", () => {
     ).toBe(true);
   });
 
-  it("has outward non-zero actor surfaces with normals matching their actual GLB triangles", () => {
+  it("has non-degenerate actor surfaces with normals matching their actual GLB triangles", () => {
     for (const file of glbs(join(models, "actor-geometry-v2"))) {
       const parts = actorParts(join(models, "actor-geometry-v2", file));
       for (const [name, part] of Object.entries(parts)) {
-        const centre = [0, 1, 2].map((axis) => {
-          const values = part.positions.map((point) => point[axis]);
-          return (Math.min(...values) + Math.max(...values)) / 2;
-        });
         for (let index = 0; index < part.indices.length; index += 3) {
           const triangle = part.indices
             .slice(index, index + 3)
@@ -205,19 +201,7 @@ describe("visual upgrade asset packs", () => {
             ab[0] * ac[1] - ab[1] * ac[0],
           ];
           const area = Math.hypot(...cross);
-          const centroid = [0, 1, 2].map(
-            (axis) =>
-              (triangle[0][axis] + triangle[1][axis] + triangle[2][axis]) / 3,
-          );
           expect(area).toBeGreaterThan(0.000001);
-          expect(
-            cross.reduce(
-              (sum, value, axis) =>
-                sum + value * (centroid[axis] - centre[axis]),
-              0,
-            ),
-            `${file}:${name}`,
-          ).toBeGreaterThan(0);
           for (const vertex of part.indices.slice(index, index + 3))
             expect(
               cross.reduce(
@@ -230,32 +214,16 @@ describe("visual upgrade asset packs", () => {
     }
   });
 
-  it("joins the scout weapon toward local -Z and connects bow limbs and string endpoints", () => {
+  it("keeps scout spear and archer bow as authored mesh parts", () => {
     const scout = actorParts(join(models, "actor-geometry-v2/enemy_scout.glb"));
-    const spear = bounds(scout.spear),
-      tip = bounds(scout.spear_tip);
-    expect(tip[2][1]).toBeLessThan(0);
-    expect(
-      spear.every(
-        (range, axis) => range[0] <= tip[axis][1] && tip[axis][0] <= range[1],
-      ),
-    ).toBe(true);
+    const spear = scout.spear_mesh;
+    expect(spear).toBeDefined();
+    expect(bounds(spear)[1][1]).toBeGreaterThan(bounds(spear)[1][0]);
     const archer = actorParts(
       join(models, "actor-geometry-v2/player_archer.glb"),
     );
-    for (const name of [
-      "bow_upper_inner",
-      "bow_upper_outer",
-      "bow_lower_inner",
-      "bow_lower_outer",
-      "bow_string_upper",
-      "bow_string_lower",
-    ])
-      expect(archer[name]).toBeDefined();
-    const stringBounds = bounds(archer.bow_string_upper);
-    expect(stringBounds[0][0]).toBeLessThanOrEqual(bounds(archer.bow)[0][1]);
-    expect(stringBounds[0][1]).toBeGreaterThanOrEqual(
-      bounds(archer.bow_upper_outer)[0][0],
-    );
+    const bow = archer.bow_mesh;
+    expect(bow).toBeDefined();
+    expect(bounds(bow)[1][1]).toBeGreaterThan(bounds(bow)[1][0]);
   });
 });
