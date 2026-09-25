@@ -102,7 +102,7 @@ describe("model combat pose binding", () => {
           new THREE.Vector3(),
         expectedGrip,
       );
-      expect(binding?.neutralParts.length).toBeGreaterThan(1);
+      expect(binding?.neutralParts.length).toBeGreaterThan(0);
     },
   );
 

@@ -4,142 +4,149 @@
     {
       "id": "building_campfire",
       "file": "building_campfire.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "building",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.75,
-          0.004999999888241291,
-          -0.7232050895690918
+          -0.9072189331054688,
+          -0.014937547966837883,
+          -0.8078485131263733
         ],
         "max": [
-          0.75,
-          1.031091570854187,
-          0.8999999761581421
+          0.87547367811203,
+          0.9649999737739563,
+          0.827605128288269
         ]
       },
-      "triangles": 260,
-      "meshCount": 13,
-      "sha256": "4396cdcff716a1d77ea0865d18503da19c48fb265018de743a7039983d6aa649",
-      "bytes": 31716,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 144,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "fef66d72abc3bdc0dfc81f070da908e70db60f6e9dad51ac3e7224cb29f5a422"
+      "triangles": 1220,
+      "meshCount": 4,
+      "sha256": "2842a22eae8cac1da7a3533ea73b90a1b5cbce9d2ee5cd2d1e9994537ecc4eef",
+      "bytes": 166440,
+      "static": false,
+      "animationClips": [
+        "idle"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "building_farm",
       "file": "building_farm.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "building",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.9750000238418579,
-          0.019999999552965164,
-          -0.7799999713897705
+          -1.1799999475479126,
+          0.0,
+          -1.0099999904632568
         ],
         "max": [
-          0.9750000238418579,
-          0.5099999904632568,
-          0.7250000238418579
+          1.1799999475479126,
+          1.2899999618530273,
+          1.0149999856948853
         ]
       },
-      "triangles": 224,
-      "meshCount": 13,
-      "sha256": "2cff4618b64155e4e643e9021263c34f9cd2ca7d0141ad9ab8e13f522601bdf3",
-      "bytes": 28800,
+      "triangles": 2124,
+      "meshCount": 1,
+      "sha256": "d76af9796d4d35df735cdd3a86c513432bbe6c3744fc9915b24deb5c9824ddf7",
+      "bytes": 277604,
       "static": true,
       "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 148,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "e0790346592ca183f16259e15232f6c5115e3d820001bf2232b36b1bc4b670ca"
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "building_healing_hut",
       "file": "building_healing_hut.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "building",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.8500000238418579,
-          0.05000000074505806,
-          -0.7400000095367432
+          -1.1775283813476562,
+          0.0,
+          -1.274999976158142
         ],
         "max": [
-          0.8500000238418579,
-          1.1799999475479126,
-          1.0
+          1.1775283813476562,
+          2.2176332473754883,
+          1.1775283813476562
         ]
       },
-      "triangles": 112,
-      "meshCount": 7,
-      "sha256": "e62953ccc7a7e9c3cfa6087e1cdb2c47de24da2b49fbf81cc1aef261a03da620",
-      "bytes": 15428,
+      "triangles": 2780,
+      "meshCount": 1,
+      "sha256": "cee0c65f6157ecedeea09cebc718cd78c01247cccfa5ae3051f0ce4ff61ec2b2",
+      "bytes": 364248,
       "static": true,
       "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 76,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "120743fb51dd7a2c142a14144d45da0f4089d13fb3e7e99e1c1ba26e3e0b7557"
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "building_storage",
       "file": "building_storage.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "building",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.875,
-          0.07999999821186066,
-          -0.9950000047683716
+          -1.2651708126068115,
+          0.0,
+          -0.949999988079071
         ],
         "max": [
-          0.875,
-          1.190000057220459,
-          0.75
+          1.2651708126068115,
+          2.3125,
+          0.949999988079071
         ]
       },
-      "triangles": 96,
-      "meshCount": 8,
-      "sha256": "2abfacaf3bb56cdb2f000ae6d3c8e2ed5e9d80eaf7a2223f051d94233b168322",
-      "bytes": 14228,
+      "triangles": 4232,
+      "meshCount": 1,
+      "sha256": "e0558d73aa6fbf671caec244f7999e974985392c3e46c70a45a8d18c70fd700b",
+      "bytes": 543064,
       "static": true,
       "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 96,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "27e3dfd99e96e4c0d1dc479aaea755140a6fbc57ab0bed20f1cc566c1c2710f4"
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "building_workshop",
       "file": "building_workshop.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "building",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.8999999761581421,
+          -1.2000000476837158,
           0.0,
-          -0.7749999761581421
+          -1.159999966621399
         ],
         "max": [
-          0.8999999761581421,
-          1.3700000047683716,
-          0.7749999761581421
+          1.2000000476837158,
+          2.432499885559082,
+          1.0499999523162842
         ]
       },
-      "triangles": 104,
-      "meshCount": 7,
-      "sha256": "9270f8cf96e8df4e19c688ab9d6b2c0a369d384b4ebe2ee703c019728044d24a",
-      "bytes": 14292,
+      "triangles": 4004,
+      "meshCount": 1,
+      "sha256": "893058fedd1e900d77bcce2b3970dcf1d836edb73cd575f231108fe5e7cdf0d0",
+      "bytes": 518352,
       "static": true,
       "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 72,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "35daa0aca5608e259dc4dfa018170dccde7fe8665b18ad7d7429dfd7a13dea2e"
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "enemy_brute",
@@ -172,58 +179,72 @@
     {
       "id": "enemy_elite",
       "file": "enemy_elite.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "enemy",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.625,
-          0.0454242043197155,
-          -0.5669741630554199
+          -0.6095000029802322,
+          0.02500001430511478,
+          -0.26899999380111694
         ],
         "max": [
-          0.625,
-          2.069999933242798,
-          0.3491070866584778
+          0.6000000005960464,
+          1.6599999976158142,
+          0.2648921313881874
         ]
       },
-      "triangles": 104,
-      "meshCount": 7,
-      "sha256": "a321013dee319c82d23f83ff4253adb24d9b23e7954ce3c7e46b858dd8593f85",
-      "bytes": 14512,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 34,
-      "removedZeroAreaFaces": 20,
-      "sourceSha256": "78ddcfe722c0fef31c8a1094d983ccbf39f0ec55e8e78a6717beda66c93b27f1"
+      "triangles": 1528,
+      "meshCount": 9,
+      "sha256": "2456ffdbcab0035adabd9a8ef9b2a0dea8ef5595a82f144a28fa1e21fed3afc7",
+      "bytes": 228276,
+      "static": false,
+      "animationClips": [
+        "idle",
+        "move",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "enemy_ember_wyrm",
       "file": "enemy_ember_wyrm.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "enemy",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.9317123889923096,
-          0.10999999940395355,
-          -1.0415459871292114
+          -1.9468253660202026,
+          0.009999999776482582,
+          -1.250000011920929
         ],
         "max": [
-          0.9317123889923096,
-          1.7000000476837158,
-          1.1749999523162842
+          1.9468253660202026,
+          2.2025335907936094,
+          2.4049999713897705
         ]
       },
-      "triangles": 144,
-      "meshCount": 10,
-      "sha256": "b8ffde34723937a3af2ef212a8c3f655e7edee5d9559530f7b55e34eb3a996f2",
-      "bytes": 19948,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 72,
-      "removedZeroAreaFaces": 24,
-      "sourceSha256": "56df986fd7b71511110ba1de3491073a39746ca53c99205da61e77c6718d29e1"
+      "triangles": 1964,
+      "meshCount": 6,
+      "sha256": "8ce432f5b09342398d7acbf8b78040e270b8e12b3a9c98f803f71d743e5e6cba",
+      "bytes": 270440,
+      "static": false,
+      "animationClips": [
+        "idle",
+        "move",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "enemy_scout",
@@ -256,30 +277,37 @@
     {
       "id": "enemy_spitter",
       "file": "enemy_spitter.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "enemy",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.5316567420959473,
-          0.13973967730998993,
-          -0.5858768820762634
+          -0.5799999833106995,
+          0.014999999664723873,
+          -0.699999988079071
         ],
         "max": [
-          0.5316567420959473,
-          1.0539095401763916,
-          0.4253253936767578
+          0.5799999833106995,
+          1.0149999856948853,
+          0.5986040830612183
         ]
       },
-      "triangles": 90,
-      "meshCount": 6,
-      "sha256": "5f45d9e34f15942332823da959f26d6cacbc837812df287cdd47a2d1199ad07f",
-      "bytes": 12772,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 15,
-      "removedZeroAreaFaces": 30,
-      "sourceSha256": "50268aeea44047860b59e385be836b2b56bf569e7ef570d595c91cefe9da7d50"
+      "triangles": 1328,
+      "meshCount": 2,
+      "sha256": "1f2b57d93fce92a0ee119e784eee44a19075281b326794c7fd96fff5865ffdb0",
+      "bytes": 177104,
+      "static": false,
+      "animationClips": [
+        "idle",
+        "attack",
+        "move",
+        "hit",
+        "death"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "player_archer",
@@ -312,58 +340,72 @@
     {
       "id": "player_knight",
       "file": "player_knight.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "player",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.46000000834465027,
-          0.0,
-          -0.459862619638443
+          -0.5900000029802323,
+          0.02500001430511478,
+          -0.26899999380111694
         ],
         "max": [
-          0.7212726473808289,
-          1.2796757221221924,
-          0.4198625981807709
+          0.6100000005960464,
+          1.6299999976158142,
+          0.29082047939300537
         ]
       },
-      "triangles": 124,
-      "meshCount": 7,
-      "sha256": "69b0caad7dbd39d8061a20b8bef3da5d63933339a5e5141c34ae7ce218aad969",
-      "bytes": 16320,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 60,
-      "removedZeroAreaFaces": 0,
-      "sourceSha256": "f21ff9433ae2cba4013ae2c886206fd61c1bc1d819561f5b199c26c683e4f5ba"
+      "triangles": 1552,
+      "meshCount": 9,
+      "sha256": "1ede8c74f8848c12fda94118a38d472a05b123b4a1be722165d5e01a886e18eb",
+      "bytes": 230832,
+      "static": false,
+      "animationClips": [
+        "idle",
+        "move",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "player_wizard",
       "file": "player_wizard.glb",
-      "category": "winding-corrected-original",
-      "forward": null,
+      "category": "player",
+      "forward": [
+        0,
+        0,
+        -1
+      ],
       "bounds": {
         "min": [
-          -0.3964262902736664,
-          0.05000000074505806,
-          -0.42896828055381775
+          -0.48300000369548796,
+          0.02500001430511478,
+          -0.3423803448677063
         ],
         "max": [
-          0.6084579825401306,
-          1.4824548959732056,
-          0.42896828055381775
+          0.6050000011920929,
+          1.991215100288391,
+          0.3423803448677063
         ]
       },
-      "triangles": 100,
-      "meshCount": 6,
-      "sha256": "aade758322955873b5be6d4ebf646f8e9ae3fbdb9ca20a25cab75ecf459e5f71",
-      "bytes": 14016,
-      "static": true,
-      "animationClips": [],
-      "collision": "presentation-only; inherit existing domain obstacle or none",
-      "reversedFaces": 26,
-      "removedZeroAreaFaces": 28,
-      "sourceSha256": "0cc054031a1394c43c5130ea0b624c5afc030a2fbe60063fa7f241104406eb0a"
+      "triangles": 1548,
+      "meshCount": 8,
+      "sha256": "7310b4116a0043ee2fbec470b04d323a9db9372d3a6ae0319c2af6f332eea9e7",
+      "bytes": 224236,
+      "static": false,
+      "animationClips": [
+        "idle",
+        "move",
+        "attack",
+        "hit",
+        "death"
+      ],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
     },
     {
       "id": "projectile_archer_arrow",
