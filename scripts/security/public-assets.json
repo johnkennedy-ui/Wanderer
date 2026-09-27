@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "source": "Existing tracked public assets at 1eeed9714fb516cda707fed53adf72823da3e93d; membership changes require artifact-policy review. Models, model metadata/README and favicon remain legitimate shipped assets.",
+  "source": "Existing tracked public assets at 1eeed9714fb516cda707fed53adf72823da3e93d, plus the user-supplied 2026-09-25 run-animation pack reviewed by mission wanderer-run-animation-pack-20260927. Models, model metadata/README and favicon remain legitimate shipped assets.",
   "paths": [
     "assets/models/README.md",
     "assets/models/actor-geometry-v2/enemy_brute.glb",
@@ -50,6 +50,15 @@
     "assets/models/projectile_archer_arrow.glb",
     "assets/models/projectile_knight_blade_arc.glb",
     "assets/models/projectile_wizard_flame_orb.glb",
+    "assets/models/run-animation-v1/enemy_brute.glb",
+    "assets/models/run-animation-v1/enemy_elite.glb",
+    "assets/models/run-animation-v1/enemy_ember_wyrm.glb",
+    "assets/models/run-animation-v1/enemy_scout.glb",
+    "assets/models/run-animation-v1/enemy_spitter.glb",
+    "assets/models/run-animation-v1/manifest.json",
+    "assets/models/run-animation-v1/player_archer.glb",
+    "assets/models/run-animation-v1/player_knight.glb",
+    "assets/models/run-animation-v1/player_wizard.glb",
     "assets/models/winding-fixed-v1/building_campfire.glb",
     "assets/models/winding-fixed-v1/building_farm.glb",
     "assets/models/winding-fixed-v1/building_healing_hut.glb",

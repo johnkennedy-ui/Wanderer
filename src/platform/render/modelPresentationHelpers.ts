@@ -5,6 +5,12 @@ import {
   knightSlashAnimationFor,
   mageFireballAnimationFor,
 } from "./combatAnimationHelpers";
+import {
+  applyActorAnimation,
+  bindActorAnimation,
+  disposeActorAnimation,
+  type BoundActorAnimation,
+} from "./actorAnimationHelpers";
 import { calibratedYawFor, shortestYawTowards } from "./modelFacingHelpers";
 import {
   environmentFilenameFor,
@@ -30,16 +36,16 @@ const isModelBackedBuildingKind = (
 
 export const modelAssets = Object.freeze({
   players: Object.freeze({
-    knight: "winding-fixed-v1/player_knight.glb",
-    wizard: "winding-fixed-v1/player_wizard.glb",
-    archer: "actor-geometry-v2/player_archer.glb",
+    knight: "run-animation-v1/player_knight.glb",
+    wizard: "run-animation-v1/player_wizard.glb",
+    archer: "run-animation-v1/player_archer.glb",
   }),
   enemies: Object.freeze({
-    scout: "actor-geometry-v2/enemy_scout.glb",
-    brute: "actor-geometry-v2/enemy_brute.glb",
-    spitter: "winding-fixed-v1/enemy_spitter.glb",
-    elite: "winding-fixed-v1/enemy_elite.glb",
-    boss: "winding-fixed-v1/enemy_ember_wyrm.glb",
+    scout: "run-animation-v1/enemy_scout.glb",
+    brute: "run-animation-v1/enemy_brute.glb",
+    spitter: "run-animation-v1/enemy_spitter.glb",
+    elite: "run-animation-v1/enemy_elite.glb",
+    boss: "run-animation-v1/enemy_ember_wyrm.glb",
   } satisfies Record<EnemyKind, string>),
   projectiles: Object.freeze({
     knight: "expansion-v1/fx_blade_arc_v2.glb",
@@ -109,7 +115,10 @@ export const projectileModelFor = (style: AttackStyle): ModelAssetKey =>
       ? "projectile-archer"
       : "projectile-knight";
 
-type LoadedScene = { readonly scene: THREE.Group };
+type LoadedScene = {
+  readonly scene: THREE.Group;
+  readonly animations?: readonly THREE.AnimationClip[];
+};
 export interface ModelLoader {
   load(
     url: string,
@@ -162,6 +171,10 @@ interface PendingLoad {
 /** Renderer-owned GLB template cache. Every visible object owns cloned resources. */
 export class ModelTemplateCache {
   private readonly templates = new Map<ModelAssetKey, THREE.Group>();
+  private readonly animations = new Map<
+    ModelAssetKey,
+    readonly THREE.AnimationClip[]
+  >();
   private readonly pending = new Map<ModelAssetKey, PendingLoad>();
   private readonly failed = new Set<ModelAssetKey>();
   private disposed = false;
@@ -195,6 +208,7 @@ export class ModelTemplateCache {
               return;
             }
             this.templates.set(key, loaded.scene);
+            this.animations.set(key, loaded.animations ?? []);
             pending?.resolve(loaded.scene);
           },
           undefined,
@@ -228,6 +242,10 @@ export class ModelTemplateCache {
     return this.pending.has(key);
   }
 
+  animationClipsFor(key: ModelAssetKey): readonly THREE.AnimationClip[] {
+    return this.animations.get(key) ?? [];
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -235,6 +253,7 @@ export class ModelTemplateCache {
     this.pending.clear();
     this.templates.forEach((template) => disposeObject(template, true));
     this.templates.clear();
+    this.animations.clear();
     this.failed.clear();
   }
 }
@@ -265,6 +284,7 @@ interface ModelInstance {
   lastElapsed: number;
   resetId: number;
   pose: BoundModelPose | undefined;
+  animation: BoundActorAnimation | undefined;
   hasMeshes: boolean;
   locomotionDistance: number;
   moving: boolean;
@@ -425,6 +445,15 @@ export class ModelProjection {
       loadedInstances: attached.length,
       pendingInstances: pending.length,
       activeKeys: this.assetKeys(active),
+      activeAnimationKeys: attached
+        .flatMap((instance) =>
+          instance.animation?.activeClip === undefined
+            ? []
+            : [
+                `${instance.root.name.slice("model:".length)}:${instance.animation.activeClip}`,
+              ],
+        )
+        .sort(),
       fallbackKeys: this.assetKeys(fallback),
     });
   }
@@ -473,6 +502,7 @@ export class ModelProjection {
         lastElapsed: snapshot.presentationElapsed,
         resetId: snapshot.presentationResetId,
         pose: undefined,
+        animation: undefined,
         hasMeshes: false,
         locomotionDistance: 0,
         moving: false,
@@ -497,7 +527,15 @@ export class ModelProjection {
         expected.hasMeshes =
           model.getObjectByProperty("isMesh", true) !== undefined;
         expected.poseRoot.add(model);
-        expected.pose = bindModelPose(model, expected.poseRoot, expected.asset);
+        expected.animation = bindActorAnimation(
+          model,
+          expected.asset,
+          this.templates.animationClipsFor(expected.asset),
+        );
+        expected.pose =
+          expected.animation === undefined
+            ? bindModelPose(model, expected.poseRoot, expected.asset)
+            : undefined;
         this.syncVisibility(descriptor.id, expected, setFallbackModelVisible);
         this.onStateChange();
       });
@@ -512,6 +550,7 @@ export class ModelProjection {
       descriptor.height,
       -descriptor.position.y,
     );
+    let resetPresentation = false;
     if (descriptor.tangent === true) {
       const movement = {
         x: descriptor.position.x - instance.lastPosition.x,
@@ -531,6 +570,7 @@ export class ModelProjection {
       const teleport = distance > 4;
       const reset =
         instance.resetId !== snapshot.presentationResetId || teleport;
+      resetPresentation = reset;
       if (reset) {
         instance.targetYaw = descriptor.rotation;
         instance.locomotionDistance = 0;
@@ -557,13 +597,21 @@ export class ModelProjection {
     } else instance.yaw = descriptor.rotation;
     instance.root.rotation.set(0, instance.yaw, 0);
     instance.root.scale.setScalar(descriptor.scale);
-    applyModelPose(
-      instance.pose,
+    const animated = applyActorAnimation(
+      instance.animation,
       poseCue,
-      instance.yaw,
+      instance.moving,
       snapshot.presentationElapsed,
-      { distance: instance.locomotionDistance, moving: instance.moving },
+      resetPresentation,
     );
+    if (!animated)
+      applyModelPose(
+        instance.pose,
+        poseCue,
+        instance.yaw,
+        snapshot.presentationElapsed,
+        { distance: instance.locomotionDistance, moving: instance.moving },
+      );
     this.syncVisibility(descriptor.id, instance, setFallbackModelVisible);
   }
 
@@ -607,6 +655,7 @@ export class ModelProjection {
   ): void {
     this.instances.delete(id);
     instance.root.removeFromParent();
+    disposeActorAnimation(instance.animation, instance.model);
     // Pose binding reparents weapon parts outside model; this owns every clone resource.
     disposeObject(instance.poseRoot);
     instance.root.clear();

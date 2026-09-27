@@ -150,6 +150,10 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     setDataset("modelLoadedCount", String(modelDiagnostics.loadedInstances));
     setDataset("modelPendingCount", String(modelDiagnostics.pendingInstances));
     setDataset("modelActiveKeys", modelDiagnostics.activeKeys.join(","));
+    setDataset(
+      "modelActiveClips",
+      modelDiagnostics.activeAnimationKeys.join(","),
+    );
     setDataset("modelFallbackKeys", modelDiagnostics.fallbackKeys.join(","));
     setDataset("modelFailureCount", String(modelDiagnostics.failures));
   };

@@ -383,8 +383,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   closeSkillTree.addEventListener("click", () =>
     setSkillTreePanelVisible(false),
   );
-  cancelPlacement.addEventListener("click", () => setPlacementMode(null));
-
   const startPlacement = (mode: Exclude<PlacementMode, null>): void => {
     setPlacementFeedback("");
     setPlacementMode(mode);
@@ -398,18 +396,15 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setStatsPanelVisible(false);
     setSettingsVisible(false);
   };
-  const attachBuildChoiceActivation = (
+  const attachTouchSafeActivation = (
     button: HTMLButtonElement,
-    kind: BuildingKind,
+    activate: () => void,
   ): void => {
-    // A canvas placement consumes a touch pointer-up event. Handle the next
-    // touch choice at its primary pointer-up too, rather than relying only on
-    // the browser's later synthesized click. The following click is a
-    // duplicate of that same touch, so suppress it for this event turn while
-    // preserving ordinary mouse and keyboard click activation.
+    // A canvas placement can be followed by an incidental overlay before the
+    // browser dispatches its synthetic touch click. Complete the intended
+    // action at the primary touch release, then suppress that paired click
+    // while retaining ordinary mouse and keyboard click activation.
     let suppressNextClick = false;
-    const activate = (): void =>
-      startPlacement({ kind: "place", buildingKind: kind });
     button.addEventListener("pointerup", (event) => {
       if (
         event.pointerType !== "touch" ||
@@ -430,6 +425,15 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       }
       activate();
     });
+  };
+  attachTouchSafeActivation(cancelPlacement, () => setPlacementMode(null));
+  const attachBuildChoiceActivation = (
+    button: HTMLButtonElement,
+    kind: BuildingKind,
+  ): void => {
+    attachTouchSafeActivation(button, () =>
+      startPlacement({ kind: "place", buildingKind: kind }),
+    );
   };
   for (const kind of buildingKinds.filter((kind) => kind !== "Storage")) {
     const button = document.createElement("button");

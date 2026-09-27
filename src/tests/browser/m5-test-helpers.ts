@@ -97,7 +97,12 @@ export const openM5World = async (page: Page): Promise<void> => {
   await installIncidentalChoiceHandlers(page);
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? "/");
   const canvas = page.getByTestId("world-canvas");
-  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
+  // This diagnostic is populated by the renderer's first projection, not by
+  // page navigation; allow a slow initial frame while preserving the exact
+  // inactive-state assertion.
+  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive", {
+    timeout: 15_000,
+  });
   await expect(canvas).toHaveCSS("visibility", "visible");
   const bounds = await canvas.boundingBox();
   if (

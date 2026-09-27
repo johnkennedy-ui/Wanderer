@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  activeModelClipKeys,
   activeModelKeys,
   applicationPath,
   attachStableModelScreenshot,
@@ -30,6 +31,19 @@ for (const playerClass of ["knight", "wizard", "archer"] as const) {
     expect(faults).toEqual([]);
   });
 }
+
+test("model pack selects the supplied run clip while the player moves", async ({
+  page,
+}) => {
+  const faults = captureBrowserFaults(page);
+  await primeModelWorld(page, "knight");
+  await page.goto(applicationPath, { waitUntil: "commit" });
+  await expectModelsReady(page);
+  await page.keyboard.down("d");
+  await expect.poll(() => activeModelClipKeys(page)).toContain("player:run");
+  await page.keyboard.up("d");
+  expect(faults).toEqual([]);
+});
 
 test("model pack uses mapped building assets in the live scene", async ({
   page,
@@ -91,7 +105,7 @@ test("a missing GLB falls back without preventing active gameplay", async ({
 }, testInfo) => {
   const faults = captureBrowserFaults(page);
   await page.route(
-    "**/assets/models/winding-fixed-v1/player_wizard.glb",
+    "**/assets/models/run-animation-v1/player_wizard.glb",
     async (route) =>
       route.fulfill({
         status: 404,
@@ -118,7 +132,7 @@ test("a missing GLB falls back without preventing active gameplay", async ({
   await attachStableModelScreenshot(page, testInfo, "missing-model-fallback");
   expectOnlyMissingModelFaults(
     faults,
-    new URL("assets/models/winding-fixed-v1/player_wizard.glb", page.url())
+    new URL("assets/models/run-animation-v1/player_wizard.glb", page.url())
       .href,
   );
 });

@@ -97,6 +97,17 @@ export const activeModelKeys = async (
   return value.split(",").filter(Boolean).sort();
 };
 
+export const activeModelClipKeys = async (
+  page: Page,
+): Promise<readonly string[]> => {
+  const value = await page
+    .getByTestId("world-canvas")
+    .getAttribute("data-model-active-clips");
+  if (value === null)
+    throw new Error("Renderer did not publish data-model-active-clips");
+  return value.split(",").filter(Boolean).sort();
+};
+
 export const expectModelsReady = async (page: Page): Promise<void> => {
   const canvas = page.getByTestId("world-canvas");
   await expect(canvas).toHaveAttribute("data-model-loaded-count", /[1-9]\d*/);

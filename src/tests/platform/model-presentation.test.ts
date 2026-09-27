@@ -14,7 +14,10 @@ import { meshFor, rendererSnapshot } from "./renderer-test-helpers";
 
 interface LoadCall {
   readonly url: string;
-  readonly onLoad: (loaded: { readonly scene: THREE.Group }) => void;
+  readonly onLoad: (loaded: {
+    readonly scene: THREE.Group;
+    readonly animations?: readonly THREE.AnimationClip[];
+  }) => void;
   readonly onError: ((error: unknown) => void) | undefined;
 }
 
@@ -43,6 +46,29 @@ const modelScene = (): THREE.Group => {
   return scene;
 };
 
+const animatedActorScene = (): {
+  readonly scene: THREE.Group;
+  readonly animations: readonly THREE.AnimationClip[];
+} => {
+  const scene = modelScene();
+  const body = new THREE.Group();
+  body.name = "body";
+  scene.add(body);
+  const clip = (name: string, height: number) =>
+    new THREE.AnimationClip(name, 1, [
+      new THREE.NumberKeyframeTrack("body.position[y]", [0, 1], [0, height]),
+    ]);
+  return {
+    scene,
+    animations: [
+      clip("idle", 0.1),
+      clip("move", 0.2),
+      clip("run", 0.4),
+      clip("attack", 0.8),
+    ],
+  };
+};
+
 const playerOnlySnapshot = () => ({
   ...rendererSnapshot(),
   visibleChunks: [],
@@ -55,14 +81,14 @@ const playerOnlySnapshot = () => ({
 describe("model presentation assets", () => {
   it("maps every supplied GLB and respects the Vite base path", () => {
     const expected: readonly [ModelAssetKey, string][] = [
-      ["player-knight", "winding-fixed-v1/player_knight.glb"],
-      ["player-wizard", "winding-fixed-v1/player_wizard.glb"],
-      ["player-archer", "actor-geometry-v2/player_archer.glb"],
-      ["enemy-scout", "actor-geometry-v2/enemy_scout.glb"],
-      ["enemy-brute", "actor-geometry-v2/enemy_brute.glb"],
-      ["enemy-spitter", "winding-fixed-v1/enemy_spitter.glb"],
-      ["enemy-elite", "winding-fixed-v1/enemy_elite.glb"],
-      ["enemy-boss", "winding-fixed-v1/enemy_ember_wyrm.glb"],
+      ["player-knight", "run-animation-v1/player_knight.glb"],
+      ["player-wizard", "run-animation-v1/player_wizard.glb"],
+      ["player-archer", "run-animation-v1/player_archer.glb"],
+      ["enemy-scout", "run-animation-v1/enemy_scout.glb"],
+      ["enemy-brute", "run-animation-v1/enemy_brute.glb"],
+      ["enemy-spitter", "run-animation-v1/enemy_spitter.glb"],
+      ["enemy-elite", "run-animation-v1/enemy_elite.glb"],
+      ["enemy-boss", "run-animation-v1/enemy_ember_wyrm.glb"],
       ["projectile-knight", "expansion-v1/fx_blade_arc_v2.glb"],
       ["projectile-wizard", "expansion-v1/projectile_flame_orb_v2.glb"],
       ["projectile-archer", "expansion-v1/projectile_arrow_v2.glb"],
@@ -76,7 +102,7 @@ describe("model presentation assets", () => {
       expected.map(([, filename]) => filename),
     );
     expect(modelAssetUrlFor("enemy-boss", "/Wanderer/")).toBe(
-      "/Wanderer/assets/models/winding-fixed-v1/enemy_ember_wyrm.glb",
+      "/Wanderer/assets/models/run-animation-v1/enemy_ember_wyrm.glb",
     );
     expect(projectileModelFor("slash")).toBe("projectile-knight");
     expect(projectileModelFor("magic")).toBe("projectile-wizard");
@@ -214,7 +240,7 @@ describe("model presentation assets", () => {
       vi.fn(),
     );
     expect(calls.map((call) => call.url)).toEqual([
-      "/Wanderer/assets/models/actor-geometry-v2/player_archer.glb",
+      "/Wanderer/assets/models/run-animation-v1/player_archer.glb",
     ]);
     projection.dispose();
   });
@@ -364,6 +390,66 @@ describe("model presentation assets", () => {
       vi.fn(),
     );
     expect(pose.getObjectByName("weaponPivot")?.rotation.x).not.toBe(0);
+    projection.dispose();
+  });
+
+  it("plays embedded actor clips from presentation time, preferring run over move", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const base = playerOnlySnapshot();
+    projection.render(base, vi.fn());
+    calls[0].onLoad(animatedActorScene());
+    await Promise.resolve();
+    await Promise.resolve();
+    const moved = {
+      ...base,
+      presentationElapsed: 0.25,
+      player: { ...base.player, position: { x: 0.2, y: 0 } },
+      attackCues: [
+        {
+          actorId: "player",
+          sequence: 1,
+          direction: { x: 1, y: 0 },
+          style: "slash" as const,
+          age: 0.25,
+        },
+      ],
+    };
+    projection.render(moved, vi.fn());
+    const pose = projection.group.getObjectByName("pose:player")!;
+    const body = pose.getObjectByName("body")!;
+    expect(projection.diagnostics().activeAnimationKeys).toEqual([
+      "player:run",
+    ]);
+    expect(body.position.y).toBeCloseTo(0.1);
+    projection.render(
+      { ...moved, presentationElapsed: 0.5, attackCues: [] },
+      vi.fn(),
+    );
+    expect(projection.diagnostics().activeAnimationKeys).toEqual([
+      "player:idle",
+    ]);
+    projection.render(
+      {
+        ...moved,
+        presentationElapsed: 0.6,
+        attackCues: [
+          {
+            actorId: "player",
+            sequence: 1,
+            direction: { x: 1, y: 0 },
+            style: "slash" as const,
+            age: 0.25,
+          },
+        ],
+      },
+      vi.fn(),
+    );
+    expect(projection.diagnostics().activeAnimationKeys).toEqual([
+      "player:attack",
+    ]);
+    expect(body.position.y).toBeCloseTo(0.2);
+    expect(pose.getObjectByName("weaponPivot")).toBeUndefined();
     projection.dispose();
   });
 

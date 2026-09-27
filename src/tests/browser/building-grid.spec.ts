@@ -8,8 +8,11 @@ import {
   openM5World,
 } from "./m5-test-helpers";
 
-// Keep each user outcome in a bounded fresh journey; the original combined
-// journey exhausted its unchanged 30s watchdog before reaching relocation.
+// Keep each user outcome in a bounded fresh journey. The full single-worker
+// browser matrix can delay live rendering and combat; match the M5 watchdog
+// without adding retries or weakening assertions.
+test.setTimeout(150_000);
+
 const setup = async (page: Page, project: string) => {
   await openM5World(page);
   const player = await captureFreshStationaryM5Projection(page);

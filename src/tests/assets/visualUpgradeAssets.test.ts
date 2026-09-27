@@ -118,22 +118,24 @@ describe("visual upgrade asset packs", () => {
   });
 
   it("keeps versioned GLBs structurally valid with manifest hashes", () => {
-    for (const directory of [
-      "expansion-v1",
-      "winding-fixed-v1",
-      "actor-geometry-v2",
-    ]) {
+    const packs = {
+      "expansion-v1": 25,
+      "winding-fixed-v1": 16,
+      "actor-geometry-v2": 3,
+      "run-animation-v1": 8,
+    } as const;
+    for (const [directory, expectedCount] of Object.entries(packs)) {
       const root = join(models, directory);
       const manifest = JSON.parse(
         readFileSync(join(root, "manifest.json"), "utf8"),
-      ) as { assets: readonly { file: string; sha256: string }[] };
-      expect(glbs(root)).toHaveLength(
-        directory === "expansion-v1"
-          ? 25
-          : directory === "winding-fixed-v1"
-            ? 16
-            : 3,
-      );
+      ) as {
+        assets: readonly {
+          file: string;
+          sha256: string;
+          animationClips?: readonly string[];
+        }[];
+      };
+      expect(glbs(root)).toHaveLength(expectedCount);
       for (const asset of manifest.assets) {
         const bytes = readFileSync(join(root, asset.file));
         expect(bytes.subarray(0, 4).toString("ascii")).toBe("glTF");
@@ -158,6 +160,12 @@ describe("visual upgrade asset packs", () => {
           ),
         ).toBe(true);
       }
+      if (directory === "run-animation-v1")
+        expect(
+          manifest.assets.every((asset) =>
+            asset.animationClips?.includes("run"),
+          ),
+        ).toBe(true);
     }
   });
 
