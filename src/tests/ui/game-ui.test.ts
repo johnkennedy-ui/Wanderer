@@ -395,6 +395,29 @@ describe("current HUD placement port", () => {
     ui.dispose();
   });
 
+  it("cancels placement from a primary touch release before a synthetic click", () => {
+    const { ui, get } = setupUi();
+    ui.render(snapshot());
+    const wood = get("build-buttons").children.find(
+      (button) => button.dataset.testid === "build-WoodWall",
+    );
+    if (wood === undefined) throw new Error("Missing Wood Wall build choice");
+
+    wood.click();
+    expect(ui.isWorldPlacementEnabled()).toBe(true);
+
+    const cancel = get("cancel-placement");
+    cancel.dispatchEvent(primaryTouchUp());
+
+    expect(ui.isWorldPlacementEnabled()).toBe(false);
+    expect(get("placement-mode").hidden).toBe(true);
+    // The paired synthetic click must not reactivate or otherwise change the
+    // already-cancelled placement state.
+    cancel.click();
+    expect(ui.isWorldPlacementEnabled()).toBe(false);
+    ui.dispose();
+  });
+
   it("opens Settings above runtime-only 1×, 2×, and 5× speed controls", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot());
