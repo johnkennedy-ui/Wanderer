@@ -36,3 +36,19 @@ presentation; this asset update does not rename or migrate that ID.
 
 Focused asset tests in `src/tests/assets/modelPack.test.ts` parse GLB headers,
 chunks, buffer views, accessors, position bounds, and primitive indices.
+
+## 2026-09-25 run-animation pack
+
+`Wanderer_Run_Animation_Pack_2026-09-25.zip` is retained outside the repository
+as the supplied source archive. Its SHA-256 is
+`d64ef6ed68caeda7952e3c7aea5e3fa7acea3654c0bdbfc6493c124948b4640d`.
+The eight actor GLBs are installed under `public/assets/models/run-animation-v1/`
+with their individual byte hashes and clip names in that directory's manifest.
+
+The renderer retains embedded GLTF clips for actor instances and advances them
+from `presentationElapsed`: `run` while an actor's rendered position is moving,
+`idle` while it is stationary, and `attack` for an active attack cue. If a
+future mapped actor has no `run` clip, it falls back to `move`; if it has no
+usable actor clip, the prior procedural pose path remains active. These are
+presentation-only animations: movement, collisions, combat, saves, IDs and
+world generation remain domain-owned.

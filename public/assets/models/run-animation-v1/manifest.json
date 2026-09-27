@@ -1,0 +1,15 @@
+{
+  "pack": "wanderer-run-animation-v1",
+  "sourceArchive": "Wanderer_Run_Animation_Pack_2026-09-25.zip",
+  "coordinateSystem": "Y-up; -Z forward",
+  "assets": [
+    {"file": "enemy_brute.glb", "bytes": 225692, "sha256": "b8955b64eda7893c778c879b3804e06898ab63c249aa6a757349f19f369382e2", "animationClips": ["move", "run", "idle", "attack", "hit", "death"]},
+    {"file": "enemy_elite.glb", "bytes": 232236, "sha256": "2e6cc174efc079be7edc9918aa003c196f3eac6fb6207eeb11a19c1df5fb9d90", "animationClips": ["idle", "move", "run", "attack", "hit", "death"]},
+    {"file": "enemy_ember_wyrm.glb", "bytes": 273628, "sha256": "a3e74577ec9ef6afff4725e53989294d38a5949e504f9d21f7458a6eb2863750", "animationClips": ["idle", "move", "run", "attack", "hit", "death"]},
+    {"file": "enemy_scout.glb", "bytes": 191660, "sha256": "db0e951c7db4d5a1dd1c5d2b2f1f6e65bc76005ec0c4bfa402610eba4fcd1013", "animationClips": ["move", "run", "idle", "attack", "hit", "death"]},
+    {"file": "enemy_spitter.glb", "bytes": 179480, "sha256": "30b534ba2a92e98349937c19b93fc1ac5f50d0b2b2c04db49ecb33c58fa1aeae", "animationClips": ["idle", "attack", "move", "run", "hit", "death"]},
+    {"file": "player_archer.glb", "bytes": 247204, "sha256": "c590c42f6d9c387d84887329ce1c591a9ac1c3802b40c47a2c3768b647e47245", "animationClips": ["idle", "move", "run", "attack", "hit", "death"]},
+    {"file": "player_knight.glb", "bytes": 234792, "sha256": "1ad215e4c84ebd410d43b558705b5ca40d162369a35a8ed04376e2282e77ff6d", "animationClips": ["idle", "move", "run", "attack", "hit", "death"]},
+    {"file": "player_wizard.glb", "bytes": 228196, "sha256": "0f069a8e69fd39847f3a059124c1f626355765abd0a6a03a588d829591edee8b", "animationClips": ["idle", "move", "run", "attack", "hit", "death"]}
+  ]
+}
