@@ -10,6 +10,10 @@ import {
 
 // Keep each user outcome in a bounded fresh journey; the original combined
 // journey exhausted its unchanged 30s watchdog before reaching relocation.
+// Incidental live-game choices are resolved through public UI, so retain the
+// suite-standard 60s watchdog without adding retries or weakening assertions.
+test.setTimeout(60_000);
+
 const setup = async (page: Page, project: string) => {
   await openM5World(page);
   const player = await captureFreshStationaryM5Projection(page);
