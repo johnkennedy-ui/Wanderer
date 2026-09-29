@@ -59,6 +59,13 @@ describe("TypeScript architecture guard self-tests", () => {
     );
   });
 
+  it("rejects even type-only GameSession imports from session feature runtimes", () => {
+    expectRejectedFixture();
+    expect(rejectedFixture.stderr).toMatch(
+      /src\/domain\/session\/illegalGameSession\.ts:\d+:\d+ \[ARCH015\]/,
+    );
+  });
+
   it("rejects mutable top-level state, singleton authority, and mutable statics", () => {
     expectRejectedFixture();
     expect(rejectedFixture.stderr).toMatch(

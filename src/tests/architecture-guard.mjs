@@ -19,6 +19,7 @@ export const ARCHITECTURE_RULES = Object.freeze({
   DIRECT_STORAGE: "ARCH012",
   DIRECT_DOM: "ARCH013",
   BOOTSTRAP_COMPOSITION: "ARCH014",
+  SESSION_FEATURE_GAME_SESSION_IMPORT: "ARCH015",
 });
 
 const guardDirectory = dirname(fileURLToPath(import.meta.url));
@@ -185,6 +186,9 @@ const layerFor = (sourceRoot, fileName) =>
 
 const isApprovedGameSessionOwner = (sourceRoot, fileName) =>
   relativePath(sourceRoot, fileName) === "app/createGameApplication.ts";
+
+const isSessionFeatureRuntime = (sourceRoot, fileName) =>
+  relativePath(sourceRoot, fileName).startsWith("domain/session/");
 
 const isConcreteInputAdapter = (sourceRoot, fileName) => {
   const path = relativePath(sourceRoot, fileName);
@@ -362,6 +366,17 @@ export const inspectArchitecture = ({
           sourceFile,
           moduleSpecifier,
           "platform adapters must share narrow contract/helper modules, never concrete sibling adapters",
+        );
+      if (
+        target === gameSessionPath &&
+        ts.isImportDeclaration(declaration) &&
+        isSessionFeatureRuntime(canonicalSourceRoot, sourceFile.fileName)
+      )
+        addFailure(
+          ARCHITECTURE_RULES.SESSION_FEATURE_GAME_SESSION_IMPORT,
+          sourceFile,
+          moduleSpecifier,
+          "session feature runtimes must receive explicit inputs instead of importing GameSession",
         );
       if (
         target === gameSessionPath &&

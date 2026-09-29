@@ -38,6 +38,27 @@ Presentation gets narrow read models: `GameUiSnapshot` for the DOM UI and
 snapshot aggregate remains; consumers cannot use presentation projections to
 acquire unrelated authority or mutable session internals.
 
+## Session feature runtimes
+
+`src/domain/session/` is the gameplay-policy directory for a single retained
+session. `GameSession` owns every live mutable field, lifecycle transition,
+tick order, cache invalidation, and public method. Feature runtimes receive
+only their declared inputs and return a feature-specific result or plan; they
+never retain or import `GameSession`.
+
+| Responsibility                | Primary module                                              | Boundary retained by `GameSession`                                           |
+| ----------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| movement and navigation       | `movementRuntime.ts`                                        | applies movement and input results at the existing tick point                |
+| progression and enemy scaling | `progressionRuntime.ts`                                     | applies player, progression, and live-enemy health changes                   |
+| settlement commands           | `settlementCommandRuntime.ts`                               | owns the settlement runtime, resources, notices, and navigation invalidation |
+| world population and waves    | `worldLifecycleRuntime.ts`                                  | owns enemy and wave collections and applies a plan in tick order             |
+| combat phase wiring           | `combatSessionRuntime.ts` plus focused combat phase modules | applies each phase immediately, preserving XP/drop/wave observation order    |
+| persistence projection        | `persistenceRuntime.ts`                                     | owns save permission publication and lifecycle state after a commit          |
+
+This is deliberately not an event bus, service layer, or alternate session
+store. A new building should normally start in settlement modules, an XP or
+skill change in progression modules, and a status effect in combat modules.
+
 ## M5 ownership
 
 `GameSession` owns one instance-local `ChunkRecipeCache`, bounded to 27 frozen
@@ -140,6 +161,7 @@ reports stable rule IDs with `file:line:column` locations.
 | `ARCH012` | direct browser storage only in `src/platform/storage/`                              |
 | `ARCH013` | direct DOM access only in platform/UI adapters or `src/main.ts` bootstrap           |
 | `ARCH014` | `src/main.ts` delegates composition to `createGameApplication`                      |
+| `ARCH015` | session feature runtimes cannot import `GameSession`, including type-only imports   |
 
 Focused fixtures deliberately introduce every prohibited pattern and also prove
 that immutable constants and deeply frozen catalogues remain accepted. They are
