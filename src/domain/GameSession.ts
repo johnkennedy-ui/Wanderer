@@ -1,14 +1,9 @@
-import {
-  enemyDefinitions,
-  gameplayTuning,
-  upgradeDefinitionFor,
-} from "../data/definitions";
-import { add, magnitude, normalize, roundVector, scale } from "./math";
-import { isMeaningfulMovement, normalizeMovementIntent } from "./inputPolicy";
+import { gameplayTuning } from "../data/definitions";
+import { add, roundVector, scale } from "./math";
+import { isMeaningfulMovement } from "./inputPolicy";
 import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
 import type {
   BuildingKind,
-  BuildingState,
   AllocatablePlayerStatKind,
   ClassSkillId,
   DestinationCommand,
@@ -24,23 +19,12 @@ import type {
   WorldIdentity,
 } from "./types";
 import {
-  allocatablePlayerStatKinds,
-  emptyPlayerStatAllocations,
-} from "./types";
-import {
-  copyVector,
   createFreshSessionState,
   DEFAULT_WORLD,
   hydrateSessionState,
 } from "./session/sessionState";
 import { floorDropCollectionPolicy } from "./session/floorDropCollectionPolicy";
 import { collectNearbyWeaponRelics } from "./session/weaponRelicPolicy";
-import {
-  advanceAutoCombatPhase,
-  advanceEnemyCombatPhase,
-} from "./session/combatTickRuntime";
-import { advanceProjectileCombatPhase } from "./session/projectileCombatRuntime";
-import { resolveMeleeCombatPhase } from "./session/meleeCombatRuntime";
 import type {
   RuntimeEnemy,
   RuntimeAttackPresentation,
@@ -49,19 +33,9 @@ import type {
   SessionState,
   SettlementCampfire,
 } from "./session/sessionState";
-import {
-  missingVisibleRuntimeEnemyDraftsFor,
-  visibleChunksFor,
-} from "./session/worldRuntime";
-import { waveEnemyDraftsFor, wavePhaseFor } from "./session/wavePolicy";
-import {
-  hpWithPreservedFraction,
-  maxEnemyHpFor,
-  type EnemyHealthContext,
-} from "./session/enemyHealthScaling";
 import { projectGamePresentation } from "./session/readModels";
-import { projectCurrentSave } from "./session/saveProjection";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
+import { visibleChunksFor } from "./session/worldRuntime";
 import {
   ChunkRecipeCache,
   type ChunkRecipeSource,
@@ -71,41 +45,52 @@ import {
   type SettlementCommandOutcome,
 } from "./session/settlementRuntime";
 import {
-  applyUpgradeEffectToPlayer,
   combatStatsFor,
   describeProgressionEffects,
-  applyClassSkillToPlayer,
-  applyClassPassiveToPlayer,
-  applyAllocatedStatToPlayer,
-  applyLevelGrowthToPlayer,
-  isValidClassSkillChoice,
   movingAttackSpeedMultiplierFor,
-  normalizeLegacySkillSelectionForCurrentProgression,
   pendingClassSkillChoicesFor,
-  playerLevelForExperience,
   playerStatsFor,
   statPointsAvailableFor,
 } from "./session/progressionRules";
-import {
-  playerHitRecoveryPresentationFor,
-  playerMoveDistanceWithHitRecoveryFor,
-} from "./session/hitRecoveryPolicy";
-import {
-  enemyTerrainClearanceFor,
-  nearestTerrainSafePosition,
-  sweepTerrainMovement,
-  terrainBlocksPosition,
-} from "./world/terrainCollision";
+import { playerHitRecoveryPresentationFor } from "./session/hitRecoveryPolicy";
 import { EnemyNavigationCache } from "./session/enemyNavigation";
+import { isWallKind } from "./session/buildingGeometry";
 import {
-  isWallKind,
-  nearestWallSafePosition,
-  snapBuildingPosition,
-  shortestWallRoute,
-  sweepWallMovement,
-  wallBlocksSegment,
-} from "./session/buildingGeometry";
-import { terrainBlocksProjectileSegment } from "./world/projectileCollision";
+  advanceDestinationMovement,
+  constrainMovement,
+  destinationStateFor,
+  moveStateFor,
+  playerMoveDistanceFor,
+} from "./session/movementRuntime";
+import {
+  classChoiceFor,
+  classSkillChoiceFor,
+  enemyHealthAdjustmentsFor,
+  enemyHealthContextFor,
+  experienceResultFor,
+  statAllocationFor,
+  upgradeChoiceFor,
+} from "./session/progressionRuntime";
+import {
+  visibleEnemyInsertionsFor,
+  waveLifecyclePlanFor,
+  waveStatusFor,
+  worldResetStateFor,
+} from "./session/worldLifecycleRuntime";
+import {
+  settlementCommandOutcomeFor,
+  type SettlementCommand,
+} from "./session/settlementCommandRuntime";
+import {
+  campfireSaveRequestFor,
+  saveCommitResultFor,
+} from "./session/persistenceRuntime";
+import {
+  autoCombatPhaseFor,
+  enemyCombatPhaseFor,
+  meleeCombatPhaseFor,
+  projectileCombatPhaseFor,
+} from "./session/combatSessionRuntime";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
 
@@ -115,8 +100,6 @@ interface SessionOptions {
   /** Test-only recipe source; production sessions retain the released generator. */
   readonly chunkRecipeSource?: ChunkRecipeSource;
 }
-const isFinitePosition = (position: Vector2): boolean =>
-  Number.isFinite(position.x) && Number.isFinite(position.y);
 export class GameSession {
   private readonly chunkRecipes: ChunkRecipeCache;
   private world!: WorldIdentity;
@@ -202,24 +185,18 @@ export class GameSession {
     this.combatStatus = state.combatStatus;
   }
   move(command: MoveCommand): void {
-    this.destination = null;
-    this.input = {
-      intent: normalizeMovementIntent(command.intent),
-      source: command.source,
-      at: command.at,
-    };
+    const next = moveStateFor(command);
+    this.destination = next.destination;
+    this.input = next.input;
   }
   setDestination(command: DestinationCommand): void {
-    if (!isFinitePosition(command.destination)) {
-      this.notice = { kind: "tap-to-move.rejected.invalid-destination" };
+    const next = destinationStateFor(command);
+    if (!next.ok) {
+      this.notice = next.notice;
       return;
     }
-    this.destination = roundVector(command.destination);
-    this.input = {
-      intent: { x: 0, y: 0 },
-      source: command.source,
-      at: command.at,
-    };
+    this.destination = next.destination;
+    this.input = next.input;
   }
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
@@ -229,20 +206,45 @@ export class GameSession {
     );
     this.updateWaveLifecycle();
     this.updateProjectiles(delta);
-    const movementDistance = this.playerMoveDistanceFor(delta);
-    const destinationMoving = this.moveTowardDestination(movementDistance);
+    const movementDistance = playerMoveDistanceFor({
+      baseMoveSpeed: combatStatsFor(
+        this.settlement.buildingState,
+        this.upgrades,
+        this.classProgression,
+      ).moveSpeed,
+      frameStartElapsed: this.elapsed - delta,
+      delta,
+      recoveryEndsAt: this.playerHitRecoveryEndsAt,
+    });
+    const destination = advanceDestinationMovement({
+      playerPosition: this.player.position,
+      input: this.input,
+      destination: this.destination,
+      elapsed: this.elapsed,
+      maximumTravel: movementDistance,
+      world: this.world,
+      chunkRecipeSource: this.chunkRecipes.get,
+      buildings: this.settlement.buildingState,
+    });
+    this.player.position = destination.playerPosition;
+    this.input = destination.input;
+    this.destination = destination.destination;
+    const destinationMoving = destination.moving;
     const moving = destinationMoving || isMeaningfulMovement(this.input.intent);
 
     if (moving) {
       if (!destinationMoving)
         this.player.position = roundVector(
-          this.solidMovementFor(
-            this.player.position,
-            add(
+          constrainMovement({
+            world: this.world,
+            from: this.player.position,
+            desired: add(
               this.player.position,
               scale(this.input.intent, movementDistance),
             ),
-          ),
+            chunkRecipeSource: this.chunkRecipes.get,
+            buildings: this.settlement.buildingState,
+          }),
         );
       const attackSpeedMultiplier = movingAttackSpeedMultiplierFor(
         this.classProgression,
@@ -271,131 +273,91 @@ export class GameSession {
   }
 
   placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
-    const snapped = snapBuildingPosition(position);
-    return this.applySettlementOutcome(
-      this.settlement.place(
-        kind,
-        snapped,
-        this.resources,
-        this.world.seed,
-        this.placementInputsFor(snapped),
-      ),
-    );
+    return this.runSettlementCommand({
+      kind: "place",
+      buildingKind: kind,
+      position,
+    });
   }
   relocateBuilding(id: string, position: Vector2): PlacementResult {
-    const snapped = snapBuildingPosition(position);
-    return this.applySettlementOutcome(
-      this.settlement.relocate(
-        id,
-        snapped,
-        this.resources,
-        this.placementInputsFor(snapped),
-      ),
-    );
+    return this.runSettlementCommand({ kind: "relocate", id, position });
   }
   upgradeBuilding(id: string): PlacementResult {
-    return this.applySettlementOutcome(
-      this.settlement.upgrade(id, this.resources),
-    );
+    return this.runSettlementCommand({ kind: "upgrade", id });
   }
   demolishBuilding(id: string): PlacementResult {
-    return this.applySettlementOutcome(
-      this.settlement.demolish(id, this.resources),
-    );
+    return this.runSettlementCommand({ kind: "demolish", id });
   }
   chooseUpgrade(id: UpgradeId): boolean {
-    if (
-      this.pendingUpgradeChoices.length !== 3 ||
-      !this.pendingUpgradeChoices.includes(id) ||
-      this.upgrades.has(id)
-    ) {
-      this.notice = { kind: "upgrade.rejected.invalid-choice" };
+    const result = upgradeChoiceFor({
+      id,
+      pendingUpgradeChoices: this.pendingUpgradeChoices,
+      upgrades: this.upgrades,
+      player: this.player,
+    });
+    if (!result.ok) {
+      this.notice = result.notice;
       return false;
     }
-    this.upgrades.add(id);
-    const upgrade = upgradeDefinitionFor(id);
-    this.player = applyUpgradeEffectToPlayer(this.player, upgrade.effect);
+    this.upgrades.add(result.upgradeId);
+    this.player = result.player;
     this.pendingUpgradeChoices = [];
-    this.notice = { kind: "upgrade.applied", upgradeId: id };
+    this.notice = result.notice;
     return true;
   }
   chooseClass(playerClass: PlayerClass): boolean {
-    if (
-      this.classProgression.level < 1 ||
-      this.classProgression.playerClass !== null
-    ) {
-      this.notice = { kind: "class.rejected.invalid-choice" };
+    const result = classChoiceFor({
+      playerClass,
+      progression: this.classProgression,
+      player: this.player,
+    });
+    if (!result.ok) {
+      this.notice = result.notice;
       return false;
     }
-    this.classProgression = normalizeLegacySkillSelectionForCurrentProgression({
-      ...this.classProgression,
-      playerClass,
-    });
-    this.player = applyClassPassiveToPlayer(
-      this.player,
-      playerClass,
-      this.classProgression.level,
-    );
+    this.classProgression = result.progression;
+    this.player = result.player;
     this.refreshEnemyHealthForCurrentContext();
-    this.notice = { kind: "class.selected", playerClass };
+    this.notice = result.notice;
     return true;
   }
   /** Allocates one earned point without implying persistence or UI wording. */
   allocateStat(stat: AllocatablePlayerStatKind): boolean {
-    if (!allocatablePlayerStatKinds.includes(stat)) {
-      this.notice = { kind: "stat-allocation.rejected.invalid-stat" };
-      return false;
-    }
-    if (this.classProgression.playerClass === null) {
-      this.notice = { kind: "stat-allocation.rejected.no-class" };
-      return false;
-    }
-    const statPointsAvailable = statPointsAvailableFor(this.classProgression);
-    if (statPointsAvailable <= 0) {
-      this.notice = { kind: "stat-allocation.rejected.no-points" };
-      return false;
-    }
-    const allocated = this.classProgression.allocatedStats[stat] + 1;
-    this.classProgression = {
-      ...this.classProgression,
-      allocatedStats: {
-        ...this.classProgression.allocatedStats,
-        [stat]: allocated,
-      },
-    };
-    this.player = applyAllocatedStatToPlayer(this.player, stat);
-    this.notice = {
-      kind: "stat-allocation.applied",
+    const result = statAllocationFor({
       stat,
-      allocated,
-      statPointsAvailable: statPointsAvailable - 1,
-    };
+      progression: this.classProgression,
+      player: this.player,
+    });
+    if (!result.ok) {
+      this.notice = result.notice;
+      return false;
+    }
+    this.classProgression = result.progression;
+    this.player = result.player;
+    this.notice = result.notice;
     return true;
   }
   chooseClassSkill(skillId: ClassSkillId): boolean {
-    if (!isValidClassSkillChoice(this.classProgression, skillId)) {
-      this.notice = { kind: "class-skill.rejected.invalid-choice" };
+    const result = classSkillChoiceFor({
+      skillId,
+      progression: this.classProgression,
+      player: this.player,
+    });
+    if (!result.ok) {
+      this.notice = result.notice;
       return false;
     }
-    this.classProgression = {
-      ...this.classProgression,
-      skillIds: [...this.classProgression.skillIds, skillId],
-    };
-    this.player = applyClassSkillToPlayer(this.player, skillId);
-    this.notice = { kind: "class-skill.selected", skillId };
+    this.classProgression = result.progression;
+    this.player = result.player;
+    this.notice = result.notice;
     return true;
   }
 
   resetWorld(seed: string): void {
-    const cleanSeed = seed.trim() || DEFAULT_WORLD.seed;
     this.replaceState(
-      createFreshSessionState({
-        world: {
-          seed: cleanSeed,
-          generatorVersion: DEFAULT_WORLD.generatorVersion,
-        },
+      worldResetStateFor({
+        seed,
         elapsed: this.elapsed,
-        notice: { kind: "world.reset", seed: cleanSeed },
         combatStatus: this.combatStatus,
       }),
     );
@@ -405,42 +367,27 @@ export class GameSession {
   createValidCampfireSaveRequest(
     committedAt: number,
   ): ValidCampfireSaveRequest | null {
-    const savePoint = this.settlement.nearbyCampfireAt(
-      this.world,
-      this.player.position,
-    );
-    if (savePoint === null) {
-      this.notice = { kind: "save.rejected.not-near-campfire" };
+    const result = campfireSaveRequestFor({
+      committedAt,
+      settlement: this.settlement,
+      world: this.world,
+      player: this.player,
+      resources: this.resources,
+      defeatedBossIds: this.defeatedBossIds,
+      upgrades: this.upgrades,
+      classProgression: this.classProgression,
+    });
+    if (!result.ok) {
+      this.notice = result.notice;
       return null;
     }
-    const save = projectCurrentSave(
-      {
-        world: this.world,
-        player: this.player,
-        resources: this.resources,
-        buildings: this.settlement.buildingState,
-        defeatedBossIds: this.defeatedBossIds,
-        upgrades: this.upgrades,
-        classProgression: this.classProgression,
-        nextBuildingSerial: this.settlement.serial,
-      },
-      committedAt,
-      savePoint,
-    );
-    return { document: save, savePointLabel: savePoint.label };
+    return result.request;
   }
 
   recordSaveCommitted(document: CurrentSave): void {
-    this.committedSavePoint = {
-      id: document.savePointId,
-      label: "committed campfire",
-      position: copyVector(document.savePointPosition),
-      level: 1,
-    };
-    this.notice = {
-      kind: "save.committed",
-      savePointId: document.savePointId,
-    };
+    const result = saveCommitResultFor(document);
+    this.committedSavePoint = result.committedSavePoint;
+    this.notice = result.notice;
   }
 
   presentation(): GamePresentation {
@@ -535,157 +482,50 @@ export class GameSession {
     });
   }
   private ensureNeighborhoodEnemies(): void {
-    const visibleChunks = visibleChunksFor(
-      this.world,
-      this.player.position,
-      this.chunkRecipes.get,
-    );
-    const drafts = missingVisibleRuntimeEnemyDraftsFor({
-      visibleChunks,
-      existingEnemies: this.enemies,
+    const additions = visibleEnemyInsertionsFor({
+      world: this.world,
+      playerPosition: this.player.position,
+      chunkRecipeSource: this.chunkRecipes.get,
+      enemies: this.enemies,
       defeatedBossIds: this.defeatedBossIds,
-      enemyHealthContext: this.enemyHealthContext(),
+      enemyHealthContext: enemyHealthContextFor(this.classProgression),
+      buildings: this.settlement.buildingState,
     });
-    const buildings = this.settlement.buildingState;
-    for (const draft of drafts) {
-      const clearance = enemyTerrainClearanceFor(draft.kind);
-      const position = nearestWallSafePosition(
-        draft.position,
-        buildings,
-        clearance,
-        (candidate) =>
-          terrainBlocksPosition(
-            this.world,
-            candidate,
-            this.chunkRecipes.get,
-            clearance,
-          ),
-      );
-      if (position === null) continue;
-      this.enemies.set(
-        draft.id,
-        position === draft.position
-          ? draft
-          : {
-              ...draft,
-              position: copyVector(position),
-              spawnPosition: copyVector(position),
-            },
-      );
-    }
+    for (const enemy of additions) this.enemies.set(enemy.id, enemy);
   }
   /** Owns the transient timed encounter lifecycle; it is never serialized. */
   private updateWaveLifecycle(): void {
-    for (const [id, enemy] of this.enemies)
-      if (
-        enemy.waveExpiresAt !== undefined &&
-        this.elapsed + 0.000_001 >= enemy.waveExpiresAt
-      )
-        this.enemies.delete(id);
-
-    const phase = wavePhaseFor(this.elapsed);
-    if (
-      phase.active &&
-      !this.startedWaveIndices.has(phase.waveIndex) &&
-      !this.pendingWaveIndices.has(phase.waveIndex)
-    )
-      this.pendingWaveIndices.add(phase.waveIndex);
-
-    for (const waveIndex of this.pendingWaveIndices) {
-      const drafts = waveEnemyDraftsFor({
-        seed: this.world.seed,
-        waveIndex,
-        center: this.player.position,
-        enemyHealthContext: this.enemyHealthContext(),
-      });
-      const buildings = this.settlement.buildingState;
-      const safeDrafts = drafts.map((enemy) => {
-        const clearance = enemyTerrainClearanceFor(enemy.kind);
-        const terrainPosition = nearestTerrainSafePosition(
-          this.world,
-          enemy.position,
-          this.chunkRecipes.get,
-          clearance,
-        );
-        return {
-          enemy,
-          position:
-            terrainPosition === null
-              ? null
-              : nearestWallSafePosition(
-                  terrainPosition,
-                  buildings,
-                  clearance,
-                  (candidate) =>
-                    terrainBlocksPosition(
-                      this.world,
-                      candidate,
-                      this.chunkRecipes.get,
-                      clearance,
-                    ),
-                ),
-        };
-      });
-      // Do not partially materialize a required wave. A bounded V3 search can
-      // exhaust while terrain blocks every draft, so retain the complete wave
-      // for a later retry rather than treating that failure as progression.
-      if (safeDrafts.some((draft) => draft.position === null)) return;
-      for (const { enemy, position } of safeDrafts) {
-        if (position === null) return;
-        const waveExpiresAt =
-          enemy.waveExpiresAt !== undefined &&
-          this.elapsed + 0.000_001 >= enemy.waveExpiresAt
-            ? this.elapsed + gameplayTuning.waveDurationSeconds
-            : enemy.waveExpiresAt;
-        this.enemies.set(enemy.id, {
-          ...enemy,
-          ...(waveExpiresAt === undefined ? {} : { waveExpiresAt }),
-          ...(position === enemy.position
-            ? {}
-            : {
-                position: copyVector(position),
-                spawnPosition: copyVector(position),
-              }),
-        });
-      }
-      this.pendingWaveIndices.delete(waveIndex);
-      this.startedWaveIndices.add(waveIndex);
-      const boss = [...this.enemies.values()].find(
-        (enemy) => enemy.waveIndex === waveIndex && enemy.isWaveBoss === true,
-      );
-      if (boss?.bossName !== undefined)
-        this.notice = {
-          kind: "wave.started",
-          waveIndex,
-          bossName: boss.bossName,
-        };
-      return;
-    }
+    const plan = waveLifecyclePlanFor({
+      world: this.world,
+      playerPosition: this.player.position,
+      elapsed: this.elapsed,
+      enemies: this.enemies,
+      startedWaveIndices: this.startedWaveIndices,
+      pendingWaveIndices: this.pendingWaveIndices,
+      enemyHealthContext: enemyHealthContextFor(this.classProgression),
+      chunkRecipeSource: this.chunkRecipes.get,
+      buildings: this.settlement.buildingState,
+    });
+    for (const id of plan.expiredEnemyIds) this.enemies.delete(id);
+    if (plan.pendingWaveIndex !== null)
+      this.pendingWaveIndices.add(plan.pendingWaveIndex);
+    if (plan.startedWave === null) return;
+    for (const enemy of plan.startedWave.enemies)
+      this.enemies.set(enemy.id, enemy);
+    this.pendingWaveIndices.delete(plan.startedWave.waveIndex);
+    this.startedWaveIndices.add(plan.startedWave.waveIndex);
+    if (plan.startedWave.notice !== null) this.notice = plan.startedWave.notice;
   }
   private waveStatus() {
-    const phase = wavePhaseFor(this.elapsed);
-    const bosses = [...this.enemies.values()]
-      .filter((enemy) => enemy.isWaveBoss === true && !enemy.defeated)
-      .sort((left, right) => (right.waveIndex ?? 0) - (left.waveIndex ?? 0));
-    const boss = bosses[0];
-    return {
-      active: phase.active,
-      waveIndex: phase.waveIndex,
-      secondsRemaining: phase.secondsRemaining,
-      nextWaveInSeconds: phase.nextWaveInSeconds,
-      bossName: boss?.bossName ?? null,
-      bossActive: boss !== undefined,
-    };
+    return waveStatusFor({ elapsed: this.elapsed, enemies: this.enemies });
   }
   private updateAutoCombat(delta: number, attackSpeedMultiplier = 1): void {
-    const buildings = this.settlement.buildingState;
-    const result = advanceAutoCombatPhase({
+    const result = autoCombatPhaseFor({
       delta,
       attackSpeedMultiplier,
       playerPosition: this.player.position,
       enemies: this.enemies,
-      buildings,
-      isAttackBlocked: (from, to) => wallBlocksSegment(from, to, buildings),
+      buildings: this.settlement.buildingState,
       upgrades: this.upgrades,
       classProgression: this.classProgression,
       projectiles: this.projectiles,
@@ -711,7 +551,7 @@ export class GameSession {
   private updateMeleeCombat(
     impacts: readonly import("./session/combatTickRuntime").MeleeImpact[],
   ): void {
-    const result = resolveMeleeCombatPhase({
+    const result = meleeCombatPhaseFor({
       impacts,
       elapsed: this.elapsed,
       enemies: this.enemies,
@@ -722,7 +562,6 @@ export class GameSession {
       nextFloorDropSerial: this.nextFloorDropSerial,
       worldSeed: this.world.seed,
       upgrades: this.upgrades,
-      floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
     });
     this.enemies = result.enemies;
     this.floorDrops = result.floorDrops;
@@ -735,12 +574,10 @@ export class GameSession {
     if (result.notice !== null) this.notice = result.notice;
   }
   private updateProjectiles(delta: number): void {
-    const buildings = this.settlement.buildingState;
-    const result = advanceProjectileCombatPhase({
+    const result = projectileCombatPhaseFor({
       delta,
       elapsed: this.elapsed,
-      playerHp: this.player.hp,
-      playerMaxHp: this.player.maxHp,
+      player: this.player,
       enemies: this.enemies,
       projectiles: this.projectiles,
       floorDrops: this.floorDrops,
@@ -748,18 +585,10 @@ export class GameSession {
       defeatedBossIds: this.defeatedBossIds,
       pendingUpgradeChoices: this.pendingUpgradeChoices,
       nextFloorDropSerial: this.nextFloorDropSerial,
-      worldSeed: this.world.seed,
+      world: this.world,
       upgrades: this.upgrades,
-      projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
-      floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
-      isFlightBlocked: (from, to) =>
-        wallBlocksSegment(from, to, buildings) ||
-        terrainBlocksProjectileSegment(
-          this.world,
-          from,
-          to,
-          this.chunkRecipes.get,
-        ),
+      buildings: this.settlement.buildingState,
+      chunkRecipeSource: this.chunkRecipes.get,
     });
     this.player.hp = result.playerHp;
     this.enemies = result.enemies;
@@ -773,80 +602,8 @@ export class GameSession {
     this.nextFloorDropSerial = result.nextFloorDropSerial;
     if (result.notice !== null) this.notice = result.notice;
   }
-  private playerMoveDistanceFor(delta: number): number {
-    return playerMoveDistanceWithHitRecoveryFor({
-      baseMoveSpeed: combatStatsFor(
-        this.settlement.buildingState,
-        this.upgrades,
-        this.classProgression,
-      ).moveSpeed,
-      frameStartElapsed: this.elapsed - delta,
-      delta,
-      recoveryEndsAt: this.playerHitRecoveryEndsAt,
-      recoverySeconds: gameplayTuning.playerHitRecoverySeconds,
-      speedMultiplier: gameplayTuning.playerHitRecoverySpeedMultiplier,
-    });
-  }
-  private moveTowardDestination(maximumTravel: number): boolean {
-    if (this.destination === null) return false;
-    const offset = {
-      x: this.destination.x - this.player.position.x,
-      y: this.destination.y - this.player.position.y,
-    };
-    const remainingDistance = magnitude(offset);
-    if (
-      remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
-      maximumTravel >= remainingDistance
-    ) {
-      this.player.position = roundVector(
-        this.solidMovementFor(this.player.position, this.destination),
-      );
-      this.destination = null;
-      this.input = {
-        intent: { x: 0, y: 0 },
-        source: "system",
-        at: this.elapsed,
-      };
-      return false;
-    }
-    const desired = add(
-      this.player.position,
-      scale(normalize(offset), maximumTravel),
-    );
-    const swept = this.solidMovementFor(this.player.position, desired);
-    const next = roundVector(swept);
-    if (
-      next.x === this.player.position.x &&
-      next.y === this.player.position.y
-    ) {
-      // Keep a tap alive when its unconstrained two-decimal movement is too
-      // small to advance this frame. Terrain may adjust that sub-quantum
-      // sweep, so equality with `desired` is not the signal for cancellation.
-      const unconstrainedNext = roundVector(desired);
-      if (
-        unconstrainedNext.x === this.player.position.x &&
-        unconstrainedNext.y === this.player.position.y
-      )
-        return true;
-      this.destination = null;
-      this.input = {
-        intent: { x: 0, y: 0 },
-        source: "system",
-        at: this.elapsed,
-      };
-      return false;
-    }
-    this.player.position = next;
-    return true;
-  }
   private updateEnemyCombat(delta: number): void {
-    const buildings = this.settlement.buildingState;
-    const combatStats = combatStatsFor(
-      this.settlement.buildingState,
-      this.upgrades,
-      this.classProgression,
-    );
-    const result = advanceEnemyCombatPhase({
+    const result = enemyCombatPhaseFor({
       delta,
       elapsed: this.elapsed,
       player: this.player,
@@ -856,54 +613,13 @@ export class GameSession {
       input: this.input,
       destination: this.destination,
       attackElapsed: this.attackElapsed,
-      enemyAttackStandoff: gameplayTuning.enemyAttackStandoff,
-      deathResourceLossRate: gameplayTuning.deathResourceLossRate,
       playerHitRecoveryEndsAt: this.playerHitRecoveryEndsAt,
-      playerHitRecoverySeconds: gameplayTuning.playerHitRecoverySeconds,
-      playerPhysicalDefense: combatStats.physicalDefense,
-      playerDodgeChance: combatStats.dodgeChance,
-      worldSeed: this.world.seed,
-      isAttackBlocked: (from, to) => wallBlocksSegment(from, to, buildings),
-      resolveEnemyRespawnPosition: (position, enemy) => {
-        const clearance = enemyTerrainClearanceFor(enemy.kind);
-        return nearestWallSafePosition(
-          position,
-          buildings,
-          clearance,
-          (candidate) =>
-            terrainBlocksPosition(
-              this.world,
-              candidate,
-              this.chunkRecipes.get,
-              clearance,
-            ),
-        );
-      },
-      constrainEnemyPosition: (from, desired, enemy) => {
-        const clearance = enemyTerrainClearanceFor(enemy.kind);
-        return this.enemyNavigation.route({
-          from,
-          desired,
-          target: this.player.position,
-          enemyId: enemy.id,
-          shortestWallRoute: () =>
-            wallBlocksSegment(from, desired, buildings, clearance)
-              ? shortestWallRoute(
-                  from,
-                  this.player.position,
-                  buildings,
-                  clearance,
-                )
-              : null,
-          constrain: (routeFrom, routeDesired) =>
-            this.solidMovementFor(
-              routeFrom,
-              routeDesired,
-              clearance,
-              buildings,
-            ),
-        });
-      },
+      world: this.world,
+      buildings: this.settlement.buildingState,
+      classProgression: this.classProgression,
+      upgrades: this.upgrades,
+      chunkRecipeSource: this.chunkRecipes.get,
+      enemyNavigation: this.enemyNavigation,
     });
     this.player = result.player;
     this.resources = result.resources;
@@ -982,90 +698,40 @@ export class GameSession {
       this.enemyNavigation.clear();
     return outcome.result;
   }
-  private placementInputsFor(position: Vector2) {
-    const inputs = this.settlement.inputsFor(this.world, position);
-    return {
-      ...inputs,
-      occupiedActors: [
-        { position: this.player.position, clearance: 0.28 },
-        { position: this.committedSavePoint.position, clearance: 0.28 },
-        // A later explicit save may select any nearby campfire. Keep those
-        // return positions clear too, without moving or committing the player.
-        ...inputs.campfires.map((campfire) => ({
-          position: campfire.position,
-          clearance: 0.28,
-        })),
-        ...[...this.enemies.values()]
-          .filter((enemy) => !enemy.defeated)
-          .map((enemy) => ({
-            position: enemy.position,
-            clearance: enemyTerrainClearanceFor(enemy.kind),
-          })),
-      ],
-    };
-  }
-  /** Both resolvers shorten the same segment, so neither can undo a contact. */
-  private solidMovementFor(
-    from: Vector2,
-    desired: Vector2,
-    clearance = 0.28,
-    buildings: readonly BuildingState[] = this.settlement.buildingState,
-  ): Vector2 {
-    return sweepWallMovement(
-      from,
-      sweepTerrainMovement(
-        this.world,
-        from,
-        desired,
-        this.chunkRecipes.get,
-        clearance,
-      ),
-      buildings,
-      clearance,
+  private runSettlementCommand(command: SettlementCommand): PlacementResult {
+    return this.applySettlementOutcome(
+      settlementCommandOutcomeFor({
+        command,
+        settlement: this.settlement,
+        resources: this.resources,
+        world: this.world,
+        playerPosition: this.player.position,
+        committedSavePoint: this.committedSavePoint,
+        enemies: this.enemies,
+      }),
     );
   }
   /** Applies XP and the identical next-level base-stat grant exactly once. */
   private grantExperience(amount: number): void {
-    const previous = this.classProgression;
-    const experience = previous.experience + amount;
-    const next = normalizeLegacySkillSelectionForCurrentProgression({
-      ...previous,
-      experience,
-      level: playerLevelForExperience(experience),
+    const result = experienceResultFor({
+      amount,
+      progression: this.classProgression,
+      player: this.player,
     });
-    this.classProgression = next;
-    this.player = applyLevelGrowthToPlayer(this.player, previous, next);
-    if (next.level > previous.level) this.refreshEnemyHealthForCurrentContext();
-  }
-  /**
-   * Uses only the selected class and earned level. Optional player power is
-   * intentionally absent so skills, stats, upgrades, and relics retain payoff.
-   */
-  private enemyHealthContext(): EnemyHealthContext {
-    const baselineProgression = {
-      ...this.classProgression,
-      skillIds: [],
-      allocatedStats: emptyPlayerStatAllocations(),
-      weaponRank: 0,
-    };
-    return {
-      level: baselineProgression.level,
-      normalPrimaryDamage: combatStatsFor([], [], baselineProgression)
-        .attackDamage,
-    };
+    this.classProgression = result.progression;
+    this.player = result.player;
+    if (result.gainedLevel) this.refreshEnemyHealthForCurrentContext();
   }
   private refreshEnemyHealthForCurrentContext(): void {
-    const context = this.enemyHealthContext();
-    for (const enemy of this.enemies.values()) {
-      const spawnHealthMultiplier = enemy.spawnHealthMultiplier ?? 1;
-      const nextMaxHp = maxEnemyHpFor({
-        authoredMaxHp: enemyDefinitions[enemy.kind].maxHp,
-        spawnHealthMultiplier,
-        context,
-      });
-      enemy.hp = hpWithPreservedFraction(enemy, nextMaxHp);
-      enemy.maxHp = nextMaxHp;
-      enemy.spawnHealthMultiplier = spawnHealthMultiplier;
+    for (const adjustment of enemyHealthAdjustmentsFor(
+      this.enemies,
+      enemyHealthContextFor(this.classProgression),
+    )) {
+      const enemy = this.enemies.get(adjustment.id);
+      if (enemy === undefined) continue;
+      enemy.hp = adjustment.hp;
+      enemy.maxHp = adjustment.maxHp;
+      enemy.spawnHealthMultiplier = adjustment.spawnHealthMultiplier;
     }
   }
   private clampPlayerState(): void {
