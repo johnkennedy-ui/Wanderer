@@ -23,10 +23,16 @@ export const REQUIRED_FINAL_COMMANDS = [
   "npm run security:check",
   "node scripts/security/artifact.mjs verify --base /Wanderer/",
 ];
+export const REQUIRED_FULL_MATRIX_COMMANDS = [
+  "npm run verify",
+  "npm run test:browser -- --reuse-root-build --scope matrix",
+  "npm run security:check",
+  "node scripts/security/artifact.mjs verify --base /Wanderer/",
+];
 // Outer bounds cover the existing complete matrices/scanner stages, not a
 // relaxation of any individual test's assertions, retries or timeout.
 const timeoutFor = (command) =>
-  command === REQUIRED_FINAL_COMMANDS[1] ||
+  command.startsWith("npm run test:browser") ||
   command === REQUIRED_FINAL_COMMANDS[2]
     ? 1_800_000
     : 300_000;
@@ -102,6 +108,14 @@ const requireRecord = ({ records, command, fingerprint, cwd, identity }) => {
     );
   return record;
 };
+
+const reusableRecord = ({ records, command, fingerprint, cwd, identity }) => {
+  try {
+    return requireRecord({ records, command, fingerprint, cwd, identity });
+  } catch {
+    return null;
+  }
+};
 export const validateRecordedRuns = ({
   cwd = process.cwd(),
   state = readMissionState(cwd),
@@ -159,25 +173,63 @@ export const finishMission = async ({
   runner = runCommand,
   commands = REQUIRED_FINAL_COMMANDS,
   externalValidation = lazyExternalValidation,
+  fullMatrix = false,
 } = {}) => {
   const state = readMissionState(cwd);
   const before = frozenCandidate(cwd, state);
   const prerequisite = await doctor({ cwd });
   if (prerequisite.status !== "ready")
     reject(prerequisite.nextAction, "DOCTOR_BLOCKED");
-  if (!checkOnly)
-    for (const command of commands) {
-      const record = await runner({
+  const requiredCommands =
+    commands === REQUIRED_FINAL_COMMANDS && fullMatrix
+      ? REQUIRED_FULL_MATRIX_COMMANDS
+      : commands;
+  const reusedRunIds = [];
+  const executedRunIds = [];
+  let browserMustRun = false;
+  for (const command of requiredCommands) {
+    const mustRun =
+      !checkOnly &&
+      (command === "npm run security:check" ||
+        command ===
+          "node scripts/security/artifact.mjs verify --base /Wanderer/" ||
+        (command.startsWith("npm run test:browser") && browserMustRun));
+    const record = mustRun
+      ? null
+      : reusableRecord({
+          records: readMissionState(cwd).runs ?? [],
+          command,
+          fingerprint: before.fingerprint,
+          cwd,
+          identity: before.identity,
+        });
+    if (record) {
+      reusedRunIds.push(record.id);
+      continue;
+    }
+    if (checkOnly)
+      requireRecord({
+        records: readMissionState(cwd).runs ?? [],
+        command,
+        fingerprint: before.fingerprint,
+        cwd,
+        identity: before.identity,
+      });
+    else {
+      const executed = await runner({
         cwd,
         command: command.split(" "),
         timeoutMs: timeoutFor(command),
       });
-      if (record.status !== "passed")
+      if (executed.status !== "passed")
         reject(
           "Required final command did not pass: " + command,
           "FINAL_COMMAND_FAILED",
         );
+      executedRunIds.push(executed.id);
+      if (command === "npm run verify") browserMustRun = true;
     }
+  }
   const after = frozenCandidate(cwd, readMissionState(cwd));
   if (
     before.fingerprint.digest !== after.fingerprint.digest ||
@@ -187,7 +239,7 @@ export const finishMission = async ({
   const runs = validateRecordedRuns({
     cwd,
     fingerprint: after.fingerprint,
-    commands,
+    commands: requiredCommands,
   });
   await externalValidation(cwd);
   if (collectInputFingerprint({ cwd }).digest !== after.fingerprint.digest)
@@ -204,6 +256,13 @@ export const finishMission = async ({
     fingerprint: after.fingerprint.digest,
     fixtures: collectFixtureHashes(cwd),
     runIds: runs.map((run) => run.id),
+    verification: {
+      browserScope: fullMatrix
+        ? "full-two-path-matrix"
+        : "primary-plus-pages-smoke",
+      executedRunIds,
+      reusedRunIds,
+    },
     scopes: {
       local: "passed",
       remoteCi: "not-verified",
@@ -220,7 +279,7 @@ export const finishMission = async ({
   writeJsonAtomic(path, result);
   writeFileSync(
     markdownPath,
-    `# Local completion\n\n- Mission: ${result.missionId}\n- Candidate: ${result.head}\n- Source fingerprint: ${result.fingerprint}\n- Local required gate: passed\n- Remote CI/settings: not verified\n- Deployment: not performed\n\n## Required validation records\n\n${runs.map((run) => `- ${run.commandText}: exit ${run.exitCode}; ${run.durationMs} ms; ${run.logPath}`).join("\n")}\n\nThis repository-local record is drift detection, not an independent trust authority. Protected owner review remains necessary.\n`,
+    `# Local completion\n\n- Mission: ${result.missionId}\n- Candidate: ${result.head}\n- Source fingerprint: ${result.fingerprint}\n- Local required gate: passed\n- Remote CI/settings: not verified\n- Deployment: not performed\n\n## Required validation records\n\n${runs.map((run) => `- ${run.commandText}: exit ${run.exitCode}; ${run.durationMs} ms; ${run.logPath}`).join("\n")}\n\n## Verification scope\n\n- Browser: ${result.verification.browserScope}\n- Executed in this finish: ${result.verification.executedRunIds.join(", ") || "none"}\n- Reused current-candidate records: ${result.verification.reusedRunIds.join(", ") || "none"}\n\nThis repository-local record is drift detection, not an independent trust authority. Protected owner review remains necessary.\n`,
     { mode: 0o600 },
   );
   return { ...result, evidencePaths: [path, markdownPath] };
@@ -232,9 +291,20 @@ if (
   Promise.resolve()
     .then(() => {
       const args = process.argv.slice(2);
-      if (args.length > 1 || (args.length === 1 && args[0] !== "--check-only"))
-        reject("Usage: agent:finish [--check-only]", "INVALID_ARGUMENT");
-      return finishMission({ checkOnly: args.length === 1 });
+      const known = new Set(["--check-only", "--full-matrix"]);
+      if (
+        args.length > 2 ||
+        new Set(args).size !== args.length ||
+        args.some((argument) => !known.has(argument))
+      )
+        reject(
+          "Usage: agent:finish [--check-only] [--full-matrix]",
+          "INVALID_ARGUMENT",
+        );
+      return finishMission({
+        checkOnly: args.includes("--check-only"),
+        fullMatrix: args.includes("--full-matrix"),
+      });
     })
     .then((result) => console.log(JSON.stringify(result, null, 2)))
     .catch((error) => {

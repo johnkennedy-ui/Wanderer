@@ -10,6 +10,25 @@ const fullPaths = [
   /^\.github\//,
   /^(?:scripts\/agent|scripts\/security|scripts\/ci)\//,
   /^src\/tests\/agent\//,
+  /^AGENTS\.md$/,
+  /^TEST_MATRIX\.md$/,
+  /^Documentation~\/(?:agent-workflow|CI_SECURITY_CONTRACT)\.md$/,
+];
+
+// A prefixed deployment can diverge from root serving only when the build,
+// browser harness, URL/base-path plumbing, or published assets change. Keep
+// this list intentionally small and conservative: it controls whether a local
+// completed-change check requests the retained full two-base browser matrix.
+const fullBrowserMatrixPaths = [
+  /^package\.json$/,
+  /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock)$/,
+  /(?:^|\/)(?:vite|playwright|capacitor)\.config\.[cm]?[jt]s$/,
+  /^\.github\//,
+  /^scripts\/agent\/(?:browser-test|browser-preview)\.mjs$/,
+  /^scripts\/security\/artifact\.mjs$/,
+  /^(?:index\.html|src\/main\.ts|public\/)/,
+  /^src\/.*\.css$/i,
+  /(?:^|\/)(?:asset|assets|routing|router|url)(?:\/|\.|$)/i,
 ];
 
 const has = (path, expression) => expression.test(path);
@@ -68,6 +87,11 @@ export const buildImpactMap = (changes, { exists = existsSync } = {}) =>
     return {
       ...change,
       impacts,
+      requiresFullBrowserMatrix:
+        impacts.includes("harness") ||
+        impactPaths.some((path) =>
+          fullBrowserMatrixPaths.some((expression) => has(path, expression)),
+        ),
       isTest,
       deletedTest,
       executableTest: isTest && !deletedTest && exists(change.path),
@@ -84,6 +108,9 @@ export const impactSummary = (changes) => {
     impacts: [...new Set(map.flatMap((entry) => entry.impacts))],
     warnings: map.flatMap((entry) =>
       entry.coverageWarning ? [entry.coverageWarning] : [],
+    ),
+    requiresFullBrowserMatrix: map.some(
+      (entry) => entry.requiresFullBrowserMatrix,
     ),
   };
 };

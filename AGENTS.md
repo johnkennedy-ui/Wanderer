@@ -153,18 +153,34 @@ npm run agent:doctor
 npm run agent:finish
 ```
 
-`agent:finish` records the complete `verify`, root/Pages browser, fresh security
-and pre-upload artifact gates. It rejects stale, foreign, incomplete or changed
-inputs, rehashes fixtures, and separates local/remote/settings/deployment scopes.
-`agent:check` is local iteration; `agent:evidence` only writes an inspection
-report. Neither is permission to claim completion or perform remote writes.
+`agent:check` is the fast development profile: it uses the existing diff impact
+map for formatting, focused unit/integration tests, type/architecture checks and
+a conservative broad `verify` fallback, but does not run a browser matrix.
+`npm run agent:check -- --complete` is the completed-change profile: executable
+changes run `verify` plus either the full primary browser suite and focused
+Pages smoke suite, or the retained full two-base matrix for base-path/build/
+asset/deployment/harness risk. Documentation-only changes explicitly report no
+browser coverage. It is recorded evidence, not a completion receipt.
 
-`test:browser` uses the production static preview for both `/` and `/Wanderer/`,
-not the Vite development server. Finish reuses the root build from `verify` and
-leaves the exact tested Pages output. Do not rebuild, modify output or recreate
-its manifest before publication. Follow `Documentation~/CI_SECURITY_CONTRACT.md`
-for pinned scanner tooling, fail-closed CI, independent owner review and rollback.
-See `TEST_MATRIX.md` for covered scenarios and unverified boundaries.
+`agent:finish` records the complete release-equivalent local gate. It reuses
+valid current-candidate `verify`/browser records from `--complete` when their
+identity, dependency, configuration and scope match; otherwise it runs them.
+Security and the pre-upload artifact verifier run fresh. Its normal browser
+scope is the full `/` suite plus focused `/Wanderer/` smoke. Use
+`npm run agent:finish -- --full-matrix` when the impact map requires the
+retained two-path matrix. It rejects stale, foreign, incomplete or changed
+inputs and separates local/remote/settings/deployment scopes. `agent:evidence`
+only writes an inspection report; none of these commands authorize remote writes.
+
+`test:browser` uses the production static preview, not the Vite development
+server. With no arguments it remains the full `/` + `/Wanderer/` matrix.
+`--reuse-root-build` defaults to release scope so Finish/CI reuse `verify`'s root
+artifact, run the primary suite, then build and run the focused Pages smoke
+suite. `--scope matrix` retains the full two-path escape hatch. Do not rebuild,
+modify output or recreate its manifest after the browser gate. Follow
+`Documentation~/CI_SECURITY_CONTRACT.md` for pinned scanner tooling, fail-closed
+CI, independent owner review and rollback. See `TEST_MATRIX.md` for scenarios
+and unverified boundaries.
 
 ### Change classification
 

@@ -20,7 +20,8 @@ const {
   markBrowserVerified,
   parseArguments,
 } = await import(artifactModulePath);
-const { runBrowserMatrix } = await import(browserModulePath);
+const { runBrowserMatrix, parseBrowserArguments, PAGES_SMOKE_GREP } =
+  await import(browserModulePath);
 const directories: string[] = [];
 const html = (base: string) =>
   `<!doctype html><html><head><link rel="icon" href="${base}favicon.svg"><script type="module" src="${base}assets/index-abc123.js"></script><link rel="stylesheet" href="${base}assets/index-abc123.css"></head><body></body></html>`;
@@ -327,6 +328,21 @@ describe("build-once/browser-existing orchestration", () => {
             c.args[0].endsWith("node_modules/playwright/cli.js"),
         ),
       ).toHaveLength(2);
+      const browserTests = commands.filter(
+        (c) =>
+          c.command === process.execPath &&
+          c.args[0].endsWith("node_modules/playwright/cli.js"),
+      );
+      const primaryTest = browserTests.find(
+        (c) => c.env.PLAYWRIGHT_BASE_PATH === "/",
+      );
+      const pagesTest = browserTests.find(
+        (c) => c.env.PLAYWRIGHT_BASE_PATH === "/Wanderer/",
+      );
+      expect(primaryTest?.args.slice(1)).toEqual(["test"]);
+      expect(pagesTest?.args.slice(1)).toEqual(
+        reuse ? ["test", "--grep", PAGES_SMOKE_GREP] : ["test"],
+      );
       for (const c of commands)
         expect(c.env.VITE_BASE_PATH).toBe(c.env.PLAYWRIGHT_BASE_PATH);
       expect(events.filter((e) => e.startsWith("test:"))).toEqual([
@@ -341,6 +357,34 @@ describe("build-once/browser-existing orchestration", () => {
       }
     },
   );
+  it("keeps explicit full-matrix Pages tests unfiltered when reusing the root build", () => {
+    const cwd = setup();
+    const commands: any[] = [];
+    runBrowserMatrix({
+      cwd,
+      argv: ["--reuse-root-build", "--scope", "matrix"],
+      environment: {},
+      run: (command: string, args: string[], options: any) => {
+        commands.push({ command, args, environment: options.env });
+        return { status: 0 };
+      },
+      verify: () => ({ manifest: { contentSha256: "stable" } }),
+      mark: () => {},
+    });
+    const browserTests = commands.filter((command) =>
+      command.args[0].endsWith("node_modules/playwright/cli.js"),
+    );
+    expect(browserTests).toHaveLength(2);
+    expect(
+      browserTests.map((command) => ({
+        basePath: command.environment.PLAYWRIGHT_BASE_PATH,
+        args: command.args.slice(1),
+      })),
+    ).toEqual([
+      { basePath: "/", args: ["test"] },
+      { basePath: "/Wanderer/", args: ["test"] },
+    ]);
+  });
   it("stops on command failure and never marks an unverified artifact", () => {
     const cwd = setup();
     let marks = 0;
@@ -372,12 +416,51 @@ describe("build-once/browser-existing orchestration", () => {
     ).toThrow("changed");
     expect(marks).toBe(0);
   });
+  it("runs the Pages smoke as an existing-test grep only at the prefixed base", () => {
+    const cwd = setup();
+    const commands: any[] = [];
+    runBrowserMatrix({
+      cwd,
+      argv: ["--scope", "pages-smoke"],
+      environment: {},
+      run: (command: string, args: string[], options: any) => {
+        commands.push({ command, args, environment: options.env });
+        return { status: 0 };
+      },
+      verify: () => ({ manifest: { contentSha256: "stable" } }),
+      mark: () => {},
+    });
+    const playwright = commands.find((command) =>
+      command.args[0].endsWith("node_modules/playwright/cli.js"),
+    );
+    expect(playwright.environment.PLAYWRIGHT_BASE_PATH).toBe("/Wanderer/");
+    expect(playwright.args).toEqual(
+      expect.arrayContaining(["test", "--grep", PAGES_SMOKE_GREP]),
+    );
+    expect(
+      commands.filter((command) =>
+        command.args[0].endsWith("node_modules/playwright/cli.js"),
+      ),
+    ).toHaveLength(1);
+  });
   it("rejects missing dependencies, unknown and repeated flags", () => {
     expect(() => runBrowserMatrix({ cwd: fixture() })).toThrow("missing");
     for (const argv of [
       ["--skip"],
       ["--reuse-root-build", "--reuse-root-build"],
+      ["--scope"],
+      ["--scope", "--reuse-root-build"],
+      ["--scope", "unknown"],
+      ["--scope", "primary", "--scope", "matrix"],
     ])
       expect(() => runBrowserMatrix({ cwd: setup(), argv })).toThrow("Usage");
+    expect(parseBrowserArguments(["--reuse-root-build"])).toEqual({
+      reuseRootBuild: true,
+      scope: "release",
+    });
+    expect(parseBrowserArguments([])).toEqual({
+      reuseRootBuild: false,
+      scope: "matrix",
+    });
   });
 });

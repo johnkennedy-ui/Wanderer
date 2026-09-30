@@ -58,8 +58,11 @@ export const selectFocusedChecks = (
     full = false,
     formatMode = "check",
     nodePath = process.execPath,
+    scope = "development",
   } = {},
 ) => {
+  if (!["development", "completion"].includes(scope))
+    throw new Error("Check scope must be development or completion.");
   const impactMap = buildImpactMap(changedFiles);
   const classifications = impactMap.map((entry) => ({
     path: entry.path,
@@ -70,6 +73,12 @@ export const selectFocusedChecks = (
   const categories = new Set(impactMap.flatMap((entry) => entry.impacts));
   const forcedFull =
     full || categories.has("full") || categories.has("unknown");
+  const documentationOnly =
+    impactMap.length > 0 &&
+    [...categories].every((category) => category === "documentation");
+  const requiresFullBrowserMatrix = impactMap.some(
+    (entry) => entry.requiresFullBrowserMatrix,
+  );
   const commands = new Map();
   const changedEligibleFiles = impactMap
     .map((entry) => entry.path)
@@ -85,6 +94,71 @@ export const selectFocusedChecks = (
       60_000,
     ),
   );
+
+  if (scope === "completion" && (!documentationOnly || full)) {
+    if (formatMode === "write" && changedEligibleFiles.length > 0)
+      mergeCommand(
+        commands,
+        command(
+          "format-changed",
+          "--format is restricted to changed eligible tracked files",
+          [
+            nodePath,
+            "scripts/agent/format.mjs",
+            formatAction,
+            "--files",
+            ...changedEligibleFiles,
+          ],
+          180_000,
+        ),
+      );
+    mergeCommand(
+      commands,
+      command(
+        "verify",
+        "local completion retains the full inexpensive verification suite",
+        ["npm", "run", "verify"],
+        600_000,
+      ),
+    );
+    mergeCommand(
+      commands,
+      command(
+        requiresFullBrowserMatrix || forcedFull
+          ? "browser-matrix"
+          : "browser-release",
+        requiresFullBrowserMatrix || forcedFull
+          ? "cross-cutting deployment-path risk requires the retained full two-base browser matrix"
+          : "completed executable changes receive the full primary suite plus the focused Pages smoke suite",
+        requiresFullBrowserMatrix || forcedFull
+          ? [
+              "npm",
+              "run",
+              "test:browser",
+              "--",
+              "--reuse-root-build",
+              "--scope",
+              "matrix",
+            ]
+          : ["npm", "run", "test:browser", "--", "--reuse-root-build"],
+        browserCheckTimeoutMs,
+      ),
+    );
+    return {
+      mode: requiresFullBrowserMatrix || forcedFull ? "full" : "completion",
+      scope,
+      changedFiles,
+      classifications,
+      browserCoverage:
+        requiresFullBrowserMatrix || forcedFull
+          ? "full-two-path-matrix"
+          : "primary-plus-pages-smoke",
+      commands: [...commands.values()],
+      commandTexts: [...commands.values()].map((entry) =>
+        commandText(entry.command),
+      ),
+    };
+  }
 
   if (forcedFull) {
     if (formatMode === "write" && changedEligibleFiles.length > 0)
@@ -107,24 +181,17 @@ export const selectFocusedChecks = (
       commands,
       command(
         "verify",
-        "full mode was requested or forced by configuration",
+        "development scope is broad for configuration or unknown changes, without a browser matrix",
         ["npm", "run", "verify"],
         600_000,
       ),
     );
-    mergeCommand(
-      commands,
-      command(
-        "browser",
-        "full mode includes the built-output browser matrix",
-        ["npm", "run", "test:browser"],
-        browserCheckTimeoutMs,
-      ),
-    );
     return {
       mode: "full",
+      scope,
       changedFiles,
       classifications,
+      browserCoverage: "none",
       commands: [...commands.values()],
       commandTexts: [...commands.values()].map((entry) =>
         commandText(entry.command),
@@ -175,6 +242,15 @@ export const selectFocusedChecks = (
     );
 
   if (categories.has("save")) {
+    mergeCommand(
+      commands,
+      command(
+        "save-session-integration",
+        "persistence changes require existing session integration coverage",
+        ["npm", "run", "test", "--", "src/tests/domain/session-"],
+        240_000,
+      ),
+    );
     mergeCommand(
       commands,
       command(
@@ -234,19 +310,27 @@ export const selectFocusedChecks = (
     mergeCommand(
       commands,
       command(
-        "build",
-        "presentation changes require a production build",
-        ["npm", "run", "build"],
-        300_000,
+        "presentation-tests",
+        "presentation changes use existing app, platform, and UI integration suites",
+        [
+          "npm",
+          "run",
+          "test",
+          "--",
+          "src/tests/app",
+          "src/tests/platform",
+          "src/tests/ui",
+        ],
+        240_000,
       ),
     );
     mergeCommand(
       commands,
       command(
-        "browser",
-        "presentation changes require built-output browser checks",
-        ["npm", "run", "test:browser"],
-        browserCheckTimeoutMs,
+        "build",
+        "presentation changes require a production build",
+        ["npm", "run", "build"],
+        300_000,
       ),
     );
   }
@@ -279,8 +363,10 @@ export const selectFocusedChecks = (
 
   return {
     mode: "focused",
+    scope,
     changedFiles,
     classifications,
+    browserCoverage: "none",
     commands: [...commands.values()],
     commandTexts: [...commands.values()].map((entry) =>
       commandText(entry.command),

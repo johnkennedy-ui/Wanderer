@@ -126,6 +126,18 @@ describe("authoritative source-bound completion", () => {
       "Missing required",
     );
   });
+  it("reuses a matching current-candidate record before running a duplicate command", async () => {
+    const cwd = fixture();
+    const existing = await runCommand({ cwd, command });
+    const result = await finish(cwd, {
+      runner: async () => {
+        throw new Error("duplicate execution should not occur");
+      },
+    });
+
+    expect(result.verification.reusedRunIds).toEqual([existing.id]);
+    expect(result.verification.executedRunIds).toEqual([]);
+  });
   it.each([
     "source-after-pass",
     "staged",

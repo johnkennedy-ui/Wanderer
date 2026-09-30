@@ -6,7 +6,7 @@
 | WEB-DOMAIN-002  | Vitest                              | five resources, L1-L3 building effects, capacity, upgrades, death                                                                                                                           | `src/tests/domain/session-*.test.ts`                     |
 | WEB-SAVE-003    | Vitest                              | frozen schema-v2/schema-v3 fail-closed parsing and pure V4 migration, strict V4 progression/route-field validation, explicit-only storage writes, backup fallback, interrupted-write safety | `src/tests/domain/save.test.ts`                          |
 | WEB-ARCH-004    | Node source guard                   | pure domain and explicit composition entrypoint                                                                                                                                             | `npm run check:architecture`                             |
-| WEB-BROWSER-005 | Playwright desktop + touch viewport | built `dist/` from both `/` and `/Wanderer/` via `vite preview`; input paths, resource UI, Storage UI, save/reload, invalid placement, and rendered native-evidence boundary                | `npm run test:browser`                                   |
+| WEB-BROWSER-005 | Playwright desktop + touch viewport | built `dist/` from both `/` and `/Wanderer/` via `vite preview`; full primary coverage plus a focused prefixed-path smoke in release scope, with the retained full two-path matrix          | `npm run test:browser`                                   |
 | WEB-BROWSER-006 | Playwright desktop + touch viewport | public keyboard route defeats the real boss, exposes exactly three choices, selects one, and proves reload rollback without a Save action                                                   | `npm run test:browser`                                   |
 | WEB-BUILD-006   | Vite                                | root production browser bundle, including the canonical verification build                                                                                                                  | `npm run verify`                                         |
 | WEB-BUILD-007   | Vite                                | GitHub Pages `/Wanderer/` production bundle is built and preview-tested                                                                                                                     | `npm run test:browser`; pre-upload artifact verification |
@@ -32,10 +32,20 @@ npm run agent:finish
 ```
 
 `verify` covers formatting, TypeScript, unit/integration/soak, architecture,
-CI policy, and the root build/manifest. Finish then runs
-`test:browser -- --reuse-root-build`, fresh `security:check`, and the exact Pages
-artifact verifier. Public `test:browser` still builds/tests both bases on its own.
-Both modes serve production `dist/` at `/` and `/Wanderer/`.
+CI policy, and the root build/manifest. The scopes are deliberately not
+sequential duplicate gates:
+
+| Scope                             | Command                             | Browser coverage                                                               | Security             |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ | -------------------- |
+| Development                       | `npm run agent:check`               | none; focused unit/type/architecture feedback                                  | none                 |
+| Local completion                  | `npm run agent:check -- --complete` | full `/` + focused `/Wanderer/` smoke, or full matrix for cross-cutting impact | none                 |
+| Release-equivalent / protected CI | `npm run agent:finish` / CI         | full `/` + focused `/Wanderer/` smoke                                          | mandatory fresh gate |
+
+Finish reuses matching current-candidate `verify`/browser evidence from local
+completion rather than repeating it, then runs fresh `security:check` and the
+exact Pages artifact verifier. Public `test:browser` with no arguments still
+builds/tests both bases. Both modes serve production `dist/` at `/` and
+`/Wanderer/`.
 The browser scenarios cover initial resource/capacity presentation, the visible
 native-evidence limitation, keyboard/stationary auto-attack, virtual-stick
 movement/release, valid manual save/reload with later unsaved rollback, invalid
@@ -48,6 +58,14 @@ Do not rebuild Pages after the browser test. The content/identity manifest and
 successful browser witness must still match immediately before upload; an
 artifact manifest is not itself test evidence. Normal `test` discovery includes
 the existing soak files, so no duplicate mandatory soak invocation is added.
+
+The routine Pages smoke is selected from existing tests and runs in both desktop
+and touch projects: prefixed startup/model-cache load, base-safe GLB responses,
+initial controls, supported campfire save/reload, one public boss journey, and
+production CSP. It does **not** prove all previously duplicated `/Wanderer/`
+gameplay behavior. Run the complete two-base matrix (`npm run test:browser`, or
+`npm run agent:finish -- --full-matrix`) for base-path, routing/URL, asset,
+build/bundler, deployment, browser-runner, or other cross-cutting changes.
 
 ## Hardening regression matrix
 

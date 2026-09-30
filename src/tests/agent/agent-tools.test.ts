@@ -145,11 +145,11 @@ const commandIds = (paths: string[]) =>
   );
 
 describe("changed-file check selection", () => {
-  it("keeps documentation-only changes out of browser and build checks", () => {
-    const selection = selectFocusedChecks(["Documentation~/agent-workflow.md"]);
+  it("keeps ordinary documentation-only changes out of browser and build checks", () => {
+    const selection = selectFocusedChecks(["Documentation~/model-pack.md"]);
 
     expect(selection.mode).toBe("focused");
-    expect(commandIds(["Documentation~/agent-workflow.md"])).toEqual([
+    expect(commandIds(["Documentation~/model-pack.md"])).toEqual([
       "git-diff-check",
       "format-changed",
     ]);
@@ -157,10 +157,33 @@ describe("changed-file check selection", () => {
     expect(selection.commandTexts.join("\n")).not.toContain("npm run build");
   });
 
-  it("routes save changes to the save test suite", () => {
+  it("honors explicit full mode for documentation-only changes", () => {
+    const selection = selectFocusedChecks(
+      ["Documentation~/model-pack.md"],
+      { full: true, scope: "completion" },
+    );
+
+    expect(selection.mode).toBe("full");
+    expect(selection.browserCoverage).toBe("full-two-path-matrix");
     expect(
-      commandIds(["src/platform/storage/browserSaveStorage.ts"]),
-    ).toContain("save-tests");
+      selection.commands.find(
+        (entry: { id: string }) => entry.id === "browser-matrix",
+      )?.command,
+    ).toEqual([
+      "npm",
+      "run",
+      "test:browser",
+      "--",
+      "--reuse-root-build",
+      "--scope",
+      "matrix",
+    ]);
+  });
+
+  it("routes save changes to the save test suite", () => {
+    const ids = commandIds(["src/platform/storage/browserSaveStorage.ts"]);
+    expect(ids).toContain("save-tests");
+    expect(ids).toContain("save-session-integration");
   });
 
   it("classifies session-prefixed split-suite helpers as session changes", () => {
@@ -195,20 +218,100 @@ describe("changed-file check selection", () => {
     );
   });
 
-  it("routes renderer changes to a built-output browser check", () => {
+  it("keeps renderer browser work out of the development profile", () => {
     const selection = selectFocusedChecks([
       "src/platform/rendering/threeRenderer.ts",
     ]);
 
-    expect(commandIds(["src/platform/rendering/threeRenderer.ts"])).toContain(
-      "browser",
+    expect(
+      commandIds(["src/platform/rendering/threeRenderer.ts"]),
+    ).not.toContain("browser");
+    expect(selection.browserCoverage).toBe("none");
+    expect(selection.commandTexts.join("\n")).not.toContain(
+      "npm run test:browser",
     );
-    expect(selection.commandTexts.join("\n")).toContain("npm run test:browser");
+  });
+
+  it("adds primary plus Pages smoke browser coverage for completed presentation changes", () => {
+    const selection = selectFocusedChecks(
+      ["src/platform/rendering/threeRenderer.ts"],
+      { scope: "completion" },
+    );
+
+    expect(selection.mode).toBe("completion");
+    expect(selection.browserCoverage).toBe("primary-plus-pages-smoke");
+    expect(
+      selection.commands.find(
+        (entry: { id: string }) => entry.id === "browser-release",
+      )?.command,
+    ).toEqual(["npm", "run", "test:browser", "--", "--reuse-root-build"]);
   });
 
   it("forces full mode for package and workflow changes", () => {
-    expect(selectFocusedChecks(["package.json"]).mode).toBe("full");
-    expect(selectFocusedChecks([".github/workflows/ci.yml"]).mode).toBe("full");
+    const development = selectFocusedChecks(["package.json"]);
+    const completion = selectFocusedChecks([".github/workflows/ci.yml"], {
+      scope: "completion",
+    });
+
+    expect(development.mode).toBe("full");
+    expect(development.browserCoverage).toBe("none");
+    expect(completion.mode).toBe("full");
+    expect(completion.browserCoverage).toBe("full-two-path-matrix");
+    expect(
+      completion.commands.map((entry: { id: string }) => entry.id),
+    ).toContain("browser-matrix");
+  });
+
+  it("does not treat operational contracts as harmless documentation", () => {
+    for (const path of [
+      "AGENTS.md",
+      "TEST_MATRIX.md",
+      "Documentation~/agent-workflow.md",
+      "Documentation~/CI_SECURITY_CONTRACT.md",
+    ])
+      expect(selectFocusedChecks([path]).mode).toBe("full");
+  });
+
+  it("requires the retained matrix for browser-runner changes", () => {
+    const selection = selectFocusedChecks(["scripts/agent/browser-test.mjs"], {
+      scope: "completion",
+    });
+
+    expect(selection.browserCoverage).toBe("full-two-path-matrix");
+    expect(
+      selection.commands.find(
+        (entry: { id: string }) => entry.id === "browser-matrix",
+      )?.command,
+    ).toEqual([
+      "npm",
+      "run",
+      "test:browser",
+      "--",
+      "--reuse-root-build",
+      "--scope",
+      "matrix",
+    ]);
+  });
+
+  it("escalates stylesheet changes to the full browser matrix", () => {
+    const selection = selectFocusedChecks(["src/ui/style.css"], {
+      scope: "completion",
+    });
+
+    expect(selection.browserCoverage).toBe("full-two-path-matrix");
+    expect(
+      selection.commands.find(
+        (entry: { id: string }) => entry.id === "browser-matrix",
+      )?.command,
+    ).toEqual([
+      "npm",
+      "run",
+      "test:browser",
+      "--",
+      "--reuse-root-build",
+      "--scope",
+      "matrix",
+    ]);
   });
 
   it("runs changed tests themselves and maps saveProjection to save plus session", () => {

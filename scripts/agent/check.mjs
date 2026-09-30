@@ -8,9 +8,12 @@ import { runCommand } from "./run.mjs";
 import { selectFocusedChecks } from "./checks.mjs";
 
 const parseArguments = (argv) => {
-  const options = { full: false, formatMode: "check" };
+  const options = { full: false, formatMode: "check", scope: "development" };
   for (const argument of argv) {
-    if (argument === "--full") options.full = true;
+    if (argument === "--full") {
+      options.full = true;
+      options.scope = "completion";
+    } else if (argument === "--complete") options.scope = "completion";
     else if (argument === "--format") options.formatMode = "write";
     else
       throw new AgentError(`Unknown argument: ${argument}`, "INVALID_ARGUMENT");
@@ -22,6 +25,7 @@ export const runSelectedChecks = async ({
   cwd = process.cwd(),
   full = false,
   formatMode = "check",
+  scope = "development",
 } = {}) => {
   const initialState = readMissionState(cwd);
   const changedFiles = changedPathsSince(cwd, initialState.baselineCommit);
@@ -29,6 +33,7 @@ export const runSelectedChecks = async ({
     baselineCommit: initialState.baselineCommit,
     full,
     formatMode,
+    scope,
   });
   writeMissionState(cwd, { ...initialState, phase: "checking" });
 
