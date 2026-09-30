@@ -7,7 +7,7 @@ work and the original objective through corrections and continuation.
 
 ## Start, iterate, freeze, complete
 
-Use the exact repository Node version in `.nvmrc` and npm 10.x, then `npm ci`.
+Use the exact repository Node version in `.nvmrc` and npm 11.x, then `npm ci`.
 Install locked Playwright Chromium separately on first use. Linux x64 plus
 Python 3 is the currently supported local scanner-bootstrap platform.
 

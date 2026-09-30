@@ -110,11 +110,11 @@ export function assertPackage(packageJson, vitestSource, nodeVersion) {
         `package script ${name} must execute the complete reviewed command`,
       );
   if (
-    packageJson.engines?.node !== "22.x" ||
-    packageJson.engines?.npm !== "10.x" ||
-    nodeVersion.trim() !== "22.23.3"
+    packageJson.engines?.node !== "24.x" ||
+    packageJson.engines?.npm !== "11.x" ||
+    nodeVersion.trim() !== "24.21.0"
   )
-    policyError("Node 22.23.3/npm10 toolchain contract differs");
+    policyError("Node 24.21.0/npm11 toolchain contract differs");
   const approved = `import { defineConfig } from "vitest/config";
 export default defineConfig({ test: { include: ["src/tests/**/*.test.ts"], environment: "node", maxWorkers: 2, }, });`;
   if (vitestSource.replace(/\s/g, "") !== approved.replace(/\s/g, ""))

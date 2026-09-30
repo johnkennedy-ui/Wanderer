@@ -18,7 +18,7 @@ scenario without hidden world RNG.
 
 ## Validation commands
 
-Wanderer requires Node 22 (pinned in [`.nvmrc`](.nvmrc)). Run this complete
+Wanderer requires Node 24 (pinned in [`.nvmrc`](.nvmrc)). Run this complete
 validation sequence before handing off a compatibility-sensitive feature
 branch:
 
@@ -33,7 +33,7 @@ npx playwright install chromium
 npx playwright install --with-deps chromium
 ```
 
-Use Node 22.23.3 and npm 10.x. Start a repository mission on the clean feature
+Use Node 24.21.0 and npm 11.x. Start a repository mission on the clean feature
 branch using the documented [agent workflow](Documentation~/agent-workflow.md),
 then make bounded changes. After review, commit all source/configuration/docs
 and run the supported completion route:

@@ -78,7 +78,8 @@ retained-enemy growth above initial materialization are test assertions.
 `deathReturns` counts observed >1m jumps to home at full health: a lower-bound
 observation of actual death/respawn, not every death (deaths already at home are
 not counted). The schedule asserts at least one such observed return. If that
-coverage or any traversal assertion fails under Node 22, revise the public
+coverage or any traversal assertion fails under the repository-pinned Node
+runtime, revise the public
 command fixture and rerun; never change gameplay or silently relabel a failure
 as a pass. Existing death/respawn policy suites remain regression gates.
 
@@ -114,7 +115,7 @@ fixture and browser regression tests.
 
 ## Evidence capture and root handoff
 
-Run `npm run test:soak` under the repository's Node 22 toolchain. Capture each
+Run `npm run test:soak` under the exact Node version in `.nvmrc`. Capture each
 `M4_SOAK_EVIDENCE` JSON line from the successful run. It includes step count,
 step size, route, final SHA-256, durable midpoint and hydrated SHA-256, reset
 result, maxima for every runtime count, initial/final retained counts, growth,

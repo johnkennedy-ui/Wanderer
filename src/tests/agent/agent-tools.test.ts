@@ -690,8 +690,8 @@ describe("mission initialization", () => {
       baselineCommit: "337994caccb3ff322cde883671846b40d5f91737",
       currentCommit: "337994caccb3ff322cde883671846b40d5f91737",
       baselineIsDescendant: true,
-      nodeVersion: "v22.23.2",
-      npmVersion: "10.9.2",
+      nodeVersion: "v24.21.0",
+      npmVersion: "11.19.0",
       worktree: {
         state: "dirty",
         trackedState: "clean",

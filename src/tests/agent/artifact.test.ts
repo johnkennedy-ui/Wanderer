@@ -48,7 +48,7 @@ const identity = {
   sourceTree: "b".repeat(40),
   sourceInputDigest: "c".repeat(64),
   lockfileSha256: "d".repeat(64),
-  tools: { node: "v22.23.2", npm: "10.9.8" },
+  tools: { node: "v24.21.0", npm: "11.19.0" },
   workflowRunId: "1",
   workflowRunAttempt: "1",
 };
