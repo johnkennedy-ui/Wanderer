@@ -112,9 +112,9 @@ export function assertPackage(packageJson, vitestSource, nodeVersion) {
   if (
     packageJson.engines?.node !== "22.x" ||
     packageJson.engines?.npm !== "10.x" ||
-    nodeVersion.trim() !== "22.23.2"
+    nodeVersion.trim() !== "22.23.3"
   )
-    policyError("Node 22.23.2/npm10 toolchain contract differs");
+    policyError("Node 22.23.3/npm10 toolchain contract differs");
   const approved = `import { defineConfig } from "vitest/config";
 export default defineConfig({ test: { include: ["src/tests/**/*.test.ts"], environment: "node", maxWorkers: 2, }, });`;
   if (vitestSource.replace(/\s/g, "") !== approved.replace(/\s/g, ""))
