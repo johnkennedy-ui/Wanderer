@@ -158,10 +158,10 @@ describe("changed-file check selection", () => {
   });
 
   it("honors explicit full mode for documentation-only changes", () => {
-    const selection = selectFocusedChecks(
-      ["Documentation~/model-pack.md"],
-      { full: true, scope: "completion" },
-    );
+    const selection = selectFocusedChecks(["Documentation~/model-pack.md"], {
+      full: true,
+      scope: "completion",
+    });
 
     expect(selection.mode).toBe("full");
     expect(selection.browserCoverage).toBe("full-two-path-matrix");
