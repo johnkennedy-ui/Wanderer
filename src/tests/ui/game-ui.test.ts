@@ -154,6 +154,31 @@ describe("retained UI list operations", () => {
     rows.dispose();
   });
 
+  it("starts retained relocation from a primary touch release without double-activating its paired click", () => {
+    installDom();
+    const host = new ElementDouble();
+    const intents = {
+      startRelocation: vi.fn(),
+      upgradeBuilding: vi.fn(),
+      demolish: vi.fn(),
+    };
+    const rows = new RetainedBuildingRows(asElement(host), intents);
+    rows.render([building("wall")]);
+    const relocate = host.children[0].children[2];
+
+    relocate.dispatchEvent(primaryTouchUp());
+    expect(intents.startRelocation).toHaveBeenCalledExactlyOnceWith(
+      "wall",
+      "Workshop",
+    );
+    relocate.click();
+    expect(intents.startRelocation).toHaveBeenCalledExactlyOnceWith(
+      "wall",
+      "Workshop",
+    );
+    rows.dispose();
+  });
+
   it("preserves order by moving only needed rows and removes detached listeners", () => {
     installDom();
     const host = new ElementDouble();

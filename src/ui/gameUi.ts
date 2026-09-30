@@ -27,6 +27,7 @@ import {
   setAttribute,
   setText as text,
 } from "./retainedLists";
+import { attachTouchSafeActivation } from "./touchActivation";
 
 export interface UiIntents {
   save(): void;
@@ -395,36 +396,6 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setSkillTreePanelVisible(false);
     setStatsPanelVisible(false);
     setSettingsVisible(false);
-  };
-  const attachTouchSafeActivation = (
-    button: HTMLButtonElement,
-    activate: () => void,
-  ): void => {
-    // A canvas placement can be followed by an incidental overlay before the
-    // browser dispatches its synthetic touch click. Complete the intended
-    // action at the primary touch release, then suppress that paired click
-    // while retaining ordinary mouse and keyboard click activation.
-    let suppressNextClick = false;
-    button.addEventListener("pointerup", (event) => {
-      if (
-        event.pointerType !== "touch" ||
-        !event.isPrimary ||
-        event.button !== 0
-      )
-        return;
-      suppressNextClick = true;
-      activate();
-      setTimeout(() => {
-        suppressNextClick = false;
-      }, 0);
-    });
-    button.addEventListener("click", () => {
-      if (suppressNextClick) {
-        suppressNextClick = false;
-        return;
-      }
-      activate();
-    });
   };
   attachTouchSafeActivation(cancelPlacement, () => setPlacementMode(null));
   const attachBuildChoiceActivation = (
