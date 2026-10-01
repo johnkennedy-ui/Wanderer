@@ -76,6 +76,9 @@ const buildingPlaceholderIcons: Record<BuildingKind, string> = {
   Healer: "✚",
   WoodWall: "🪵",
   StoneWall: "🪨",
+  ArcherTower: "🏹",
+  SwordTower: "⚔",
+  MageTower: "✦",
 };
 
 const resourcePlaceholderIcons = {

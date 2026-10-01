@@ -73,6 +73,7 @@ export interface RuntimeProjectile {
   readonly hitHeal: number;
   readonly style?: AttackStyle;
   readonly homing?: boolean;
+  readonly visual?: import("../types").TowerProjectileVisual;
   elapsed: number;
 }
 
@@ -96,6 +97,8 @@ export interface RuntimeAttackPresentation {
   readonly sequence: number;
   readonly direction: Vector2;
   readonly style?: AttackStyle;
+  /** Longer tower clips remain observable without extending player cues. */
+  readonly durationSeconds?: number;
   readonly committedAt: number;
 }
 

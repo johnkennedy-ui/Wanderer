@@ -21,10 +21,12 @@ import {
   bindModelPose,
   type BoundModelPose,
 } from "./modelPoseHelpers";
+import { isTowerBuildingKind } from "../../domain/types";
 import type {
   AttackStyle,
   BuildingKind,
   EnemyKind,
+  TowerProjectileVisual,
   Vector2,
 } from "../../domain/types";
 
@@ -51,6 +53,8 @@ export const modelAssets = Object.freeze({
     knight: "expansion-v1/fx_blade_arc_v2.glb",
     wizard: "expansion-v1/projectile_flame_orb_v2.glb",
     archer: "expansion-v1/projectile_arrow_v2.glb",
+    "tower-ballista": "tower-expansion-v1/projectile_ballista_bolt.glb",
+    "tower-crystal": "tower-expansion-v1/projectile_crystal_bolt.glb",
   }),
   buildings: Object.freeze({
     Campfire: "winding-fixed-v1/building_campfire.glb",
@@ -58,6 +62,9 @@ export const modelAssets = Object.freeze({
     Farm: "winding-fixed-v1/building_farm.glb",
     Storage: "winding-fixed-v1/building_storage.glb",
     Healer: "winding-fixed-v1/building_healing_hut.glb",
+    ArcherTower: "tower-expansion-v1/tower_archer.glb",
+    SwordTower: "tower-expansion-v1/tower_sword.glb",
+    MageTower: "tower-expansion-v1/tower_mage.glb",
   } satisfies Record<ModelBackedBuildingKind, string>),
 });
 
@@ -74,16 +81,23 @@ export type ModelAssetKey =
   | "projectile-knight"
   | "projectile-wizard"
   | "projectile-archer"
+  | "projectile-tower-ballista"
+  | "projectile-tower-crystal"
   | "building-Campfire"
   | "building-Workshop"
   | "building-Farm"
   | "building-Storage"
-  | "building-Healer";
+  | "building-Healer"
+  | "building-ArcherTower"
+  | "building-SwordTower"
+  | "building-MageTower";
 
 export const modelFilenameFor = (key: ModelAssetKey): string => {
   if (key.startsWith("environment-"))
     return environmentFilenameFor(key as EnvironmentAssetKey);
-  const [category, kind] = key.split("-") as [string, string];
+  const separator = key.indexOf("-");
+  const category = key.slice(0, separator);
+  const kind = key.slice(separator + 1);
   if (category === "player")
     return modelAssets.players[kind as keyof typeof modelAssets.players];
   if (category === "enemy") return modelAssets.enemies[kind as EnemyKind];
@@ -108,12 +122,18 @@ export const modelAssetUrlFor = (
   return `${basePath.endsWith("/") ? basePath : `${basePath}/`}${filename}`;
 };
 
-export const projectileModelFor = (style: AttackStyle): ModelAssetKey =>
-  style === "magic"
+export const projectileModelFor = (
+  style: AttackStyle,
+  visual?: TowerProjectileVisual,
+): ModelAssetKey => {
+  if (visual === "tower-ballista") return "projectile-tower-ballista";
+  if (visual === "tower-crystal") return "projectile-tower-crystal";
+  return style === "magic"
     ? "projectile-wizard"
     : style === "arrow"
       ? "projectile-archer"
       : "projectile-knight";
+};
 
 type LoadedScene = {
   readonly scene: THREE.Group;
@@ -269,6 +289,8 @@ interface ModelDescriptor {
   readonly tangent?: boolean;
   readonly playerHitRecovery?: boolean;
   readonly attackCue?: GameRendererSnapshot["attackCues"][number];
+  /** Towers rotate their named aim pivot independently of their grounded base. */
+  readonly aimDirection?: Vector2;
 }
 
 interface ModelInstance {
@@ -288,6 +310,7 @@ interface ModelInstance {
   hasMeshes: boolean;
   locomotionDistance: number;
   moving: boolean;
+  aimYaw: number;
   suppressedCueSequence: number | undefined;
 }
 
@@ -343,6 +366,12 @@ export class ModelProjection {
       ...snapshot.visibleBuildings
         .filter((building) => isModelBackedBuildingKind(building.kind))
         .map((building) => ({
+          ...(isTowerBuildingKind(building.kind)
+            ? {
+                attackCue: attackCueByActor.get(building.id),
+                aimDirection: attackCueByActor.get(building.id)?.direction,
+              }
+            : {}),
           id: building.id,
           asset: `building-${building.kind}` as ModelAssetKey,
           position: building.position,
@@ -379,7 +408,7 @@ export class ModelProjection {
         if (projectile.style !== "magic")
           return {
             id: projectile.id,
-            asset: projectileModelFor(projectile.style),
+            asset: projectileModelFor(projectile.style, projectile.visual),
             position,
             height: 0.72,
             scale: projectile.style === "arrow" ? 0.55 : 0.5,
@@ -392,7 +421,7 @@ export class ModelProjection {
         );
         return {
           id: projectile.id,
-          asset: projectileModelFor(projectile.style),
+          asset: projectileModelFor(projectile.style, projectile.visual),
           position,
           height: fireball?.height ?? 0.72,
           scale: 0.5 * fireball.scale,
@@ -506,6 +535,7 @@ export class ModelProjection {
         hasMeshes: false,
         locomotionDistance: 0,
         moving: false,
+        aimYaw: 0,
         suppressedCueSequence: replacedAsset
           ? descriptor.attackCue?.sequence
           : undefined,
@@ -604,6 +634,11 @@ export class ModelProjection {
       snapshot.presentationElapsed,
       resetPresentation,
     );
+    if (descriptor.aimDirection !== undefined) {
+      instance.aimYaw = calibratedYawFor(descriptor.aimDirection);
+      const aimPivot = instance.model?.getObjectByName("aim_pivot");
+      if (aimPivot !== undefined) aimPivot.rotation.y = instance.aimYaw;
+    }
     if (!animated)
       applyModelPose(
         instance.pose,

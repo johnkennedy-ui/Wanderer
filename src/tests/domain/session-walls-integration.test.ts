@@ -11,6 +11,7 @@ import type {
   PlayerClass,
   Vector2,
 } from "../../domain/types";
+import { towerBuildingKinds } from "../../domain/types";
 import { generateChunk, WANDERER_WEB_V3 } from "../../domain/world";
 import { enemyTerrainClearanceFor } from "../../domain/world/terrainCollision";
 import { advance, savedAtHome } from "./session-test-helpers";
@@ -95,6 +96,9 @@ describe("GameSession wall and tile integration", () => {
     "Healer",
     "WoodWall",
     "StoneWall",
+    "ArcherTower",
+    "SwordTower",
+    "MageTower",
   ])("snaps %s placement before producing a stable building record", (kind) => {
     const session = createSession();
     const building = place(session, kind, { x: 1.49, y: 1.51 });
@@ -136,6 +140,24 @@ describe("GameSession wall and tile integration", () => {
       rejection: { kind: "building-not-upgradeable" },
     });
   });
+
+  it.each(towerBuildingKinds)(
+    "places %s on the wall grid but leaves its tile non-solid after placement",
+    (kind) => {
+      const session = createSession();
+      expect(session.placeBuilding(kind, { x: 0.2, y: -0.2 })).toMatchObject({
+        ok: false,
+        rejection: { kind: "occupied-by-actor" },
+      });
+      const tower = place(session, kind, { x: 1.1, y: 0.1 });
+      expect(tower.position).toEqual({ x: 1, y: 0 });
+      expect(wallBlocksPosition(tower.position, [tower])).toBe(false);
+      expect(session.upgradeBuilding(tower.id)).toMatchObject({
+        ok: false,
+        rejection: { kind: "building-not-upgradeable" },
+      });
+    },
+  );
 
   it.each(["keyboard", "tap-to-move"] as const)(
     "blocks %s movement at an adjoining wall seam and opens after demolition",
@@ -223,7 +245,7 @@ describe("GameSession wall and tile integration", () => {
     },
   );
 
-  it("keeps both wall kinds and old off-grid buildings through explicit save and reload", () => {
+  it("keeps wall/tower content and old off-grid buildings through explicit save and reload", () => {
     const legacy = {
       id: "building:legacy:0001",
       kind: "Campfire" as const,
@@ -236,6 +258,7 @@ describe("GameSession wall and tile integration", () => {
     });
     const wood = place(session, "WoodWall", { x: 1.2, y: 0.1 });
     const stone = place(session, "StoneWall", { x: 2.2, y: 0.1 });
+    const tower = place(session, "ArcherTower", { x: 3.2, y: 0.1 });
     expect(session.presentation().ui.buildings[0]).toEqual(legacy);
     const request = session.createValidCampfireSaveRequest(55);
     expect(request).not.toBeNull();
@@ -245,12 +268,18 @@ describe("GameSession wall and tile integration", () => {
       JSON.stringify(toCurrentSaveStorageDocument(request.document)),
     );
     expect(decoded.ok).toBe(true);
-    if (!decoded.ok) throw new Error("Current wall document did not roundtrip");
+    if (!decoded.ok)
+      throw new Error("Current tower document did not roundtrip");
     const restored = new GameSession({
       saved: decoded.document,
       chunkRecipeSource: recipeSource(),
     });
-    expect(restored.presentation().ui.buildings).toEqual([legacy, wood, stone]);
+    expect(restored.presentation().ui.buildings).toEqual([
+      legacy,
+      wood,
+      stone,
+      tower,
+    ]);
     expect(restored.presentation().ui.buildings[0].position).toEqual({
       x: 4.25,
       y: 4.25,

@@ -2,6 +2,15 @@ import { buildingDefinitions, gameplayTuning } from "../data/definitions";
 import type { BuildingKind, BuildingState } from "../domain/types";
 import { attachTouchSafeActivation } from "./touchActivation";
 
+/** Keep this consumer's standalone runtime dependency boundary unchanged. */
+const isWallBuildingKind = (kind: BuildingKind): boolean =>
+  kind === "WoodWall" || kind === "StoneWall";
+const isSingleTierBuildingKind = (kind: BuildingKind): boolean =>
+  isWallBuildingKind(kind) ||
+  kind === "ArcherTower" ||
+  kind === "SwordTower" ||
+  kind === "MageTower";
+
 export const setText = (element: HTMLElement, value: string): void => {
   if (element.textContent !== value) element.textContent = value;
 };
@@ -84,9 +93,9 @@ export class RetainedBuildingRows {
         row.aura.remove();
         row.aura = null;
       }
-      const wall =
-        building.kind === "WoodWall" || building.kind === "StoneWall";
-      const upgradeDisabled = legacyStorage || wall || building.level === 3;
+      const singleTier = isSingleTierBuildingKind(building.kind);
+      const upgradeDisabled =
+        legacyStorage || singleTier || building.level === 3;
       if (row.upgrade.disabled !== upgradeDisabled)
         row.upgrade.disabled = upgradeDisabled;
       setAttribute(
@@ -94,8 +103,10 @@ export class RetainedBuildingRows {
         "title",
         legacyStorage
           ? "Legacy Storage cannot be upgraded."
-          : wall
-            ? "Walls are single-tier and cannot be upgraded."
+          : singleTier
+            ? isWallBuildingKind(building.kind)
+              ? "Walls are single-tier and cannot be upgraded."
+              : "Defensive towers are single-tier and cannot be upgraded."
             : "",
       );
       if (row.move.disabled !== legacyStorage)

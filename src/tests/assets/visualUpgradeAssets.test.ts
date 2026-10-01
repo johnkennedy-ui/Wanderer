@@ -123,6 +123,7 @@ describe("visual upgrade asset packs", () => {
       "winding-fixed-v1": 16,
       "actor-geometry-v2": 3,
       "run-animation-v1": 8,
+      "tower-expansion-v1": 5,
     } as const;
     for (const [directory, expectedCount] of Object.entries(packs)) {
       const root = join(models, directory);

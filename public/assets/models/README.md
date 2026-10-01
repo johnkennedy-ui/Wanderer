@@ -24,11 +24,16 @@ short combat read distances, and a forest / ember / bronze palette.
 | Building | `Farm` | `building_farm.glb` |
 | Building | `Storage` | `building_storage.glb` |
 | Building | `Healer` | `building_healing_hut.glb` |
+| Building | `ArcherTower` | `tower-expansion-v1/tower_archer.glb` |
+| Building | `SwordTower` | `tower-expansion-v1/tower_sword.glb` |
+| Building | `MageTower` | `tower-expansion-v1/tower_mage.glb` |
+| Tower projectile | Ballista bolt | `tower-expansion-v1/projectile_ballista_bolt.glb` |
+| Tower projectile | Crystal bolt | `tower-expansion-v1/projectile_crystal_bolt.glb` |
 
-The meshes are static and intentionally compact. They use embedded PBR
-base-color materials with no external texture files, so each GLB can be moved
-into `public/assets/models/` and loaded independently with Three.js
-`GLTFLoader`.
+The meshes use embedded PBR base-color materials with no external texture
+files, so each GLB can be loaded independently with Three.js `GLTFLoader`.
+The three tower models retain their embedded `idle` and `attack` clips; during
+an attack cue only their named `aim_pivot` rotates.
 
 The source generator is kept at `tools/generate_wanderer_models.py` so the
 pack can be regenerated or edited without a model-generation service.

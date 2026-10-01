@@ -679,7 +679,7 @@ describe("current HUD placement port", () => {
       "Boss Core: 1",
     ]);
     expect(get("resources").children[4].textContent).toBe("◉ 1");
-    expect(get("build-buttons").children).toHaveLength(6);
+    expect(get("build-buttons").children).toHaveLength(9);
     expect(get("build-buttons").children[3].textContent).toBe("✚ Healing Hut");
     expect(get("build-buttons").children[3].getAttribute("aria-label")).toBe(
       "Place Healing Hut",
@@ -689,6 +689,11 @@ describe("current HUD placement port", () => {
       "Place Wood Wall",
     );
     expect(get("build-buttons").children[5].textContent).toBe("🪨 Stone Wall");
+    expect(get("build-buttons").children[6].textContent).toBe(
+      "🏹 Archer Tower",
+    );
+    expect(get("build-buttons").children[7].textContent).toBe("⚔ Sword Tower");
+    expect(get("build-buttons").children[8].textContent).toBe("✦ Mage Tower");
     expect(get("build-radius").textContent).toContain(
       "snap to 1m tile centres",
     );

@@ -32,6 +32,7 @@ import { resolveMeleeCombatPhase } from "./meleeCombatRuntime";
 import { constrainMovement } from "./movementRuntime";
 import { advanceProjectileCombatPhase } from "./projectileCombatRuntime";
 import { combatStatsFor } from "./progressionRules";
+import { advanceTowerCombatPhase } from "./towerCombatRuntime";
 import type {
   RuntimeCrescentAttack,
   RuntimeEnemy,
@@ -123,6 +124,41 @@ export const meleeCombatPhaseFor = ({
     worldSeed,
     upgrades,
     floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
+  });
+
+/** Runs every persistent tower through one shared terrain/wall line-of-sight policy. */
+export const towerCombatPhaseFor = ({
+  delta,
+  buildings,
+  enemies,
+  projectiles,
+  elapsedByTowerId,
+  nextProjectileSerial,
+  nextAttackSequence,
+  world,
+  chunkRecipeSource,
+}: {
+  readonly delta: number;
+  readonly buildings: readonly BuildingState[];
+  readonly enemies: ReadonlyMap<string, RuntimeEnemy>;
+  readonly projectiles: readonly RuntimeProjectile[];
+  readonly elapsedByTowerId: ReadonlyMap<string, number>;
+  readonly nextProjectileSerial: number;
+  readonly nextAttackSequence: number;
+  readonly world: WorldIdentity;
+  readonly chunkRecipeSource: ChunkRecipeSource;
+}) =>
+  advanceTowerCombatPhase({
+    delta,
+    buildings,
+    enemies,
+    projectiles,
+    elapsedByTowerId,
+    nextProjectileSerial,
+    nextAttackSequence,
+    isAttackBlocked: (from, to) =>
+      wallBlocksSegment(from, to, buildings) ||
+      terrainBlocksProjectileSegment(world, from, to, chunkRecipeSource),
   });
 
 export const projectileCombatPhaseFor = ({

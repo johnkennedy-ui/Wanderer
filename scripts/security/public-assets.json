@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "source": "Existing tracked public assets at 1eeed9714fb516cda707fed53adf72823da3e93d, plus the user-supplied 2026-09-25 run-animation pack reviewed by mission wanderer-run-animation-pack-20260927. Models, model metadata/README and favicon remain legitimate shipped assets.",
+  "source": "Existing tracked public assets at 1eeed9714fb516cda707fed53adf72823da3e93d, plus the user-supplied 2026-09-25 run-animation pack reviewed by mission wanderer-run-animation-pack-20260927 and five hash-verified 2026-09-22 tower-expansion files reviewed by mission wanderer-grid-towers-20261001. Models, model metadata/README and favicon remain legitimate shipped assets.",
   "paths": [
     "assets/models/README.md",
     "assets/models/actor-geometry-v2/enemy_brute.glb",
@@ -59,6 +59,12 @@
     "assets/models/run-animation-v1/player_archer.glb",
     "assets/models/run-animation-v1/player_knight.glb",
     "assets/models/run-animation-v1/player_wizard.glb",
+    "assets/models/tower-expansion-v1/manifest.json",
+    "assets/models/tower-expansion-v1/projectile_ballista_bolt.glb",
+    "assets/models/tower-expansion-v1/projectile_crystal_bolt.glb",
+    "assets/models/tower-expansion-v1/tower_archer.glb",
+    "assets/models/tower-expansion-v1/tower_mage.glb",
+    "assets/models/tower-expansion-v1/tower_sword.glb",
     "assets/models/winding-fixed-v1/building_campfire.glb",
     "assets/models/winding-fixed-v1/building_farm.glb",
     "assets/models/winding-fixed-v1/building_healing_hut.glb",

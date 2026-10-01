@@ -80,7 +80,7 @@ const validSave = (): SaveDocument => {
 };
 
 describe("schema-2 persistence boundary", () => {
-  it("round-trips current wall content while rejecting an explicit V2 projection", () => {
+  it("round-trips current wall and tower content while rejecting an explicit V2 projection", () => {
     const current = {
       ...validSave(),
       buildings: [
@@ -97,7 +97,13 @@ describe("schema-2 persistence boundary", () => {
           position: { x: 0, y: 2 },
         },
         {
-          id: "building:legacy:0003",
+          id: "building:tower:0003",
+          kind: "MageTower" as const,
+          level: 1 as const,
+          position: { x: 1, y: 2 },
+        },
+        {
+          id: "building:legacy:0004",
           kind: "Farm" as const,
           level: 1 as const,
           position: { x: 1.25, y: -2.75 },

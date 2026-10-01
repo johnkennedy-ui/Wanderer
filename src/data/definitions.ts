@@ -17,6 +17,8 @@ import type {
   PlayerStats,
   ResourceKind,
   ReadonlyResourceBag,
+  TowerBuildingKind,
+  TowerProjectileVisual,
   UpgradeId,
 } from "../domain/types";
 import { deepFreeze } from "./deepFreeze";
@@ -41,6 +43,19 @@ export interface BuildingDefinition {
   readonly baseCost: ReadonlyResourceBag;
   readonly description: string;
   readonly levelEffects: readonly [string, string, string];
+}
+
+/** Domain-owned tower tuning. Model clips never define damage or cooldowns. */
+export interface TowerCombatDefinition {
+  readonly attackStyle: "arrow" | "magic" | "slash";
+  readonly damage: number;
+  readonly range: number;
+  readonly attackEverySeconds: number;
+  readonly presentationSeconds: number;
+  readonly projectileVisual?: TowerProjectileVisual;
+  readonly chainTargets?: number;
+  readonly chainDamageMultiplier?: number;
+  readonly splashRadius?: number;
 }
 
 export type UpgradeEffect =
@@ -317,9 +332,79 @@ const authoredBuildingDefinitions = {
       "L3: solid one-tile stone wall.",
     ],
   },
+  ArcherTower: {
+    label: "Archer Tower",
+    baseCost: { wood: 14, stone: 4, scrap: 4, essence: 0, bossCore: 0 },
+    description:
+      "A single-tier ballista that fires at the nearest visible enemy from its snapped tile.",
+    levelEffects: [
+      "L1: 12 ballista damage, 6.5m range, every 1.1s.",
+      "L2: single-tier defensive tower.",
+      "L3: single-tier defensive tower.",
+    ],
+  },
+  SwordTower: {
+    label: "Sword Tower",
+    baseCost: { wood: 8, stone: 8, scrap: 5, essence: 0, bossCore: 0 },
+    description:
+      "A single-tier close defender whose rotating blades sweep every visible enemy in range.",
+    levelEffects: [
+      "L1: 14 sweep damage in 1.75m, every 1.2s.",
+      "L2: single-tier defensive tower.",
+      "L3: single-tier defensive tower.",
+    ],
+  },
+  MageTower: {
+    label: "Mage Tower",
+    baseCost: { wood: 4, stone: 10, scrap: 4, essence: 2, bossCore: 0 },
+    description:
+      "A single-tier crystal tower whose visible bolt splashes nearby enemies at the impact point.",
+    levelEffects: [
+      "L1: 9 crystal damage plus two 60% splash targets in 5.5m, every 1.3s.",
+      "L2: single-tier defensive tower.",
+      "L3: single-tier defensive tower.",
+    ],
+  },
 } satisfies Record<BuildingKind, BuildingDefinition>;
 
 export const buildingDefinitions = deepFreeze(authoredBuildingDefinitions);
+
+const authoredTowerCombatDefinitions = {
+  ArcherTower: {
+    attackStyle: "arrow",
+    damage: 12,
+    range: 6.5,
+    attackEverySeconds: 1.1,
+    presentationSeconds: 1.1,
+    projectileVisual: "tower-ballista",
+  },
+  SwordTower: {
+    attackStyle: "slash",
+    damage: 14,
+    range: 1.75,
+    attackEverySeconds: 1.2,
+    presentationSeconds: 1.12,
+  },
+  MageTower: {
+    attackStyle: "magic",
+    damage: 9,
+    range: 5.5,
+    attackEverySeconds: 1.3,
+    presentationSeconds: 1.3,
+    projectileVisual: "tower-crystal",
+    chainTargets: 2,
+    chainDamageMultiplier: 0.6,
+    splashRadius: 1.6,
+  },
+} satisfies Record<TowerBuildingKind, TowerCombatDefinition>;
+
+export const towerCombatDefinitions = deepFreeze(
+  authoredTowerCombatDefinitions,
+);
+
+export const towerCombatDefinitionFor = (
+  kind: TowerBuildingKind,
+): TowerCombatDefinition => towerCombatDefinitions[kind];
 
 type UpgradeDefinitionCatalogue = {
   readonly [Id in UpgradeId]: UpgradeDefinition & { readonly id: Id };
