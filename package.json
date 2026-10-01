@@ -39,7 +39,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "@playwright/test": "^1.55.0",
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.6.1",
     "@types/three": "^0.179.0",
     "prettier": "^3.6.2",
     "typescript": "^5.8.3",
