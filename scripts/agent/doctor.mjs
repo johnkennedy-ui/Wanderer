@@ -60,8 +60,8 @@ export const inspectDoctor = async ({
     ),
     check(
       "npm",
-      /^10\./.test(runtime.npmVersion),
-      "Observed npm " + runtime.npmVersion + "; npm 10.x is required.",
+      /^11\./.test(runtime.npmVersion),
+      "Observed npm " + runtime.npmVersion + "; npm 11.x is required.",
     ),
     check(
       "mission-policy",

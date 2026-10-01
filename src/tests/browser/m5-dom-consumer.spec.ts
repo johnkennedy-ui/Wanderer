@@ -47,8 +47,10 @@ test("M5 standalone real-DOM consumers: fixed explicit inputs retain nodes with 
     "../domain/types": types,
     "./deepFreeze": freeze,
   });
+  const touchActivation = moduleUrl("../../ui/touchActivation.ts");
   const consumers = moduleUrl("../../ui/retainedLists.ts", {
     "../data/definitions": definitions,
+    "./touchActivation": touchActivation,
   });
   await testInfo.attach("standalone-consumer-source-provenance", {
     body: JSON.stringify(sources, null, 2),

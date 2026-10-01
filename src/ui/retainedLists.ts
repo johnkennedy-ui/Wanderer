@@ -1,5 +1,6 @@
 import { buildingDefinitions, gameplayTuning } from "../data/definitions";
 import type { BuildingKind, BuildingState } from "../domain/types";
+import { attachTouchSafeActivation } from "./touchActivation";
 
 export const setText = (element: HTMLElement, value: string): void => {
   if (element.textContent !== value) element.textContent = value;
@@ -137,6 +138,7 @@ export class RetainedBuildingRows {
     const onUpgrade = (): void => this.intents.upgradeBuilding(id);
     const onMove = (): void => this.intents.startRelocation(id, row.kind);
     const onDemolish = (): void => this.intents.demolish(id);
+    const removeMoveActivation = attachTouchSafeActivation(move, onMove);
     const row: BuildingRow = {
       element,
       label,
@@ -146,13 +148,12 @@ export class RetainedBuildingRows {
       aura: null,
       dispose(): void {
         upgrade.removeEventListener("click", onUpgrade);
-        move.removeEventListener("click", onMove);
+        removeMoveActivation();
         demolish.removeEventListener("click", onDemolish);
         element.remove();
       },
     };
     upgrade.addEventListener("click", onUpgrade);
-    move.addEventListener("click", onMove);
     demolish.addEventListener("click", onDemolish);
     element.append(label, upgrade, move, demolish);
     return row;

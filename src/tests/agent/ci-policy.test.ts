@@ -416,9 +416,16 @@ describe("actual repository workflow mutation tests", () => {
         nodeVersion,
       ),
     ).toThrow("discovery");
-    expect(() => assertPackage(packageJson(), vitestSource, "24")).toThrow(
+    expect(() => assertPackage(packageJson(), vitestSource, "22.23.3")).toThrow(
       "toolchain",
     );
+    expect(() =>
+      assertPackage(
+        { ...packageJson(), engines: { node: "22.x", npm: "10.x" } },
+        vitestSource,
+        nodeVersion,
+      ),
+    ).toThrow("toolchain");
   });
   it("rejects malformed, duplicate-key, alias and anchor YAML", () => {
     for (const text of [

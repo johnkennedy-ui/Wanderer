@@ -7,7 +7,7 @@ work and the original objective through corrections and continuation.
 
 ## Start, iterate, freeze, complete
 
-Use the exact repository Node version in `.nvmrc` and npm 10.x, then `npm ci`.
+Use the exact repository Node version in `.nvmrc` and npm 11.x, then `npm ci`.
 Install locked Playwright Chromium separately on first use. Linux x64 plus
 Python 3 is the currently supported local scanner-bootstrap platform.
 
@@ -37,8 +37,20 @@ The shared `impact-map.mjs` drives focused selection and save/world impact
 statements. Added/modified/renamed tests select themselves; deleted tests require
 owning/full coverage and review. `saveProjection.ts` selects save and session
 checks. Unknown paths and harness/CI/dependency/config changes escalate safely.
-Focused `agent:check --full` still is not completion: only finish enforces the
-complete security/artifact/evidence contract.
+It includes staged, unstaged and untracked repository files, excluding only
+agent/dependency runtime outputs. A requested filtered test command that selects
+no tests fails in its own runner; an intentional no-browser decision is reported
+as `browserCoverage: "none"` for documentation-only impact.
+
+`agent:check` is development feedback: it never launches a browser matrix.
+`agent:check -- --complete` keeps the full inexpensive `verify` suite for an
+executable finished change, then uses the same impact map to select either
+primary + Pages smoke browser coverage or the full two-base matrix. Legacy
+`agent:check -- --full` remains an explicit full-matrix completion-style check.
+These are profiles, not sequential gates: a later Finish reuses valid matching
+`verify` and browser records instead of running them again. Run the completion
+profile only after committing the frozen candidate; pre-commit records have a
+different source fingerprint and Finish must rerun the affected gates.
 
 Formatting includes new as well as tracked eligible source, preserves approved
 specifications and generated lockfiles, refuses symlinks/outside paths, and
@@ -46,21 +58,39 @@ checks actual formatted bytes after a writer returns. Empty selection is no work
 not a claim that files were formatted. Python/TOML and binary assets are outside
 Prettier's supported policy; their own parsers/consumers must validate them.
 
-After review, commit all source, docs and configuration, then:
+After review, commit all source, docs and configuration, then run completion on
+that exact committed candidate:
 
 ```bash
+npm run agent:check -- --complete
 npm run agent:doctor
 npm run agent:finish
-# Recheck already recorded required evidence without rerunning it:
+```
+
+Use exactly one Finish mode. For base-path/build/asset/deployment/harness
+changes, replace the normal Finish command above with:
+
+```bash
+npm run agent:finish -- --full-matrix
+```
+
+To validate the existing required records later without rerunning them:
+
+```bash
 npm run agent:finish -- --check-only
 ```
 
 Doctor distinguishes environment prerequisites from code outcomes: Node/npm,
 locked dependency tree, browser/libraries, scanner platform, current mission
 policy, baseline ancestry, dirty/untracked/ignored inputs and stale records.
-Readiness does not establish PASS. Finish requires a frozen candidate and runs
-`verify`, both production browser bases with root-build reuse, fresh security,
-and final Pages artifact verification. No rebuild follows the browser gate.
+Readiness does not establish PASS. Finish requires a frozen candidate. Its normal
+release scope is `verify`, the full root browser suite with root-build reuse,
+the focused Pages smoke suite, fresh security, and final Pages artifact
+verification. The Pages smoke reuses existing tests (no copies): direct startup,
+model/GLB loading, initial controls, campfire save/reload, a public boss journey,
+and production CSP. `--full-matrix` replaces that browser scope with the retained
+full two-base matrix for cross-cutting base-path risk. No rebuild follows the
+browser gate.
 It checks each fixed command's schema, mission/repository/baseline, actual
 HEAD/tree/index/source/dependency fingerprint, times/exit/interruption, and
 original record/log digests. It rehashes historical fixtures and time-sensitive

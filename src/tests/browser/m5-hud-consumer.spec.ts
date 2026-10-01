@@ -42,8 +42,10 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
     "../domain/types": types,
     "./deepFreeze": freeze,
   });
+  const touchActivation = moduleUrl("../../ui/touchActivation.ts");
   const lists = moduleUrl("../../ui/retainedLists.ts", {
     "../data/definitions": definitions,
+    "./touchActivation": touchActivation,
   });
   const notices = moduleUrl("../../ui/noticePresentation.ts", {
     "../data/definitions": definitions,
@@ -53,6 +55,7 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
     "../domain/types": types,
     "./noticePresentation": notices,
     "./retainedLists": lists,
+    "./touchActivation": touchActivation,
   });
   await testInfo.attach("combined-hud-source-provenance", {
     body: JSON.stringify(sources, null, 2),

@@ -25,7 +25,7 @@ import {
 
 export const AGENT_DIRECTORY = ".agent";
 export const REQUIRED_BASELINE = "a4c74f9";
-export const SUPPORTED_NODE_MAJOR = 22;
+export const SUPPORTED_NODE_MAJOR = 24;
 export const AGENT_EVIDENCE_SCHEMA_VERSION = 2;
 export const AGENT_POLICY_VERSION = "wanderer-agent-v2";
 

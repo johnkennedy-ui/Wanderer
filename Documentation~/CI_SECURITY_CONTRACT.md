@@ -47,11 +47,18 @@ source/index/working-input fingerprint, HEAD/tree, lockfile, Node/npm, base path
 and workflow run/attempt. `.agent/artifacts/*.browser.json` is reset by each
 build. A manifest alone is not proof that a browser test passed.
 
-`test:browser` builds and tests `/` and `/Wanderer/`, checking the artifact before
-and after each matrix. `--reuse-root-build` requires the manifest already made
-by `verify`; it avoids rebuilding that root output. The command leaves the
-browser-tested Pages output. Its CLI pre-upload verifier requires the successful
-browser witness; never recreate a manifest or rebuild after those checks.
+`test:browser` with no arguments builds and tests the full `/` and `/Wanderer/`
+matrix, checking the artifact before and after each base. `--reuse-root-build`
+requires the manifest already made by `verify`; it avoids rebuilding that root
+output and defaults to release scope: the full `/` suite plus the focused
+`/Wanderer/` smoke. That smoke uses existing path-sensitive tests for startup,
+model/GLB loading, controls, save/reload, a representative gameplay journey and
+CSP; it is deliberately not a claim of complete secondary-path equivalence.
+`--scope matrix` retains full two-base coverage for base-path/build/asset/
+deployment/harness impact. Release, Pages-smoke and matrix scopes leave a
+browser-tested Pages output; primary scope intentionally leaves the root output.
+Its CLI pre-upload verifier requires the successful Pages browser witness; never
+recreate a manifest or rebuild after those checks.
 `upload-pages-artifact` uses the exact name
 `github-pages-${run_id}-${run_attempt}-${sha}`, used unchanged by deploy.
 
@@ -215,13 +222,16 @@ paths and evidence-only stability in `input-path-policy.test.ts` and
 
 ## Completion, review and rollback
 
-`agent:finish` is the only supported local completion command. Commit all source,
-documentation and configuration first, then run it. It verifies identity and
-prerequisites, runs the fixed complete gate through the existing bounded runner,
-rehashes historical fixtures and artifact/security evidence, and writes one
-candidate-keyed JSON/Markdown receipt under `.agent/completions/`. The
-`--check-only` option verifies existing required records; it cannot turn missing
-or stale checks into success. `agent:evidence` is an inspection report, not PASS.
+`agent:finish` is the only supported local completion receipt command. Commit
+all source, documentation and configuration first, then run it. It verifies
+identity and prerequisites, reuses only matching current-candidate `verify` and
+browser records from `agent:check -- --complete`, runs missing records through
+the existing bounded runner, always refreshes security/artifact evidence, and
+writes one candidate-keyed JSON/Markdown receipt under `.agent/completions/`.
+The normal browser release scope is primary + Pages smoke; `--full-matrix` is the
+documented cross-cutting escape hatch. `--check-only` verifies existing required
+records; it cannot turn missing or stale checks into success. `agent:evidence`
+is an inspection report, not PASS.
 
 The result deliberately separates local PASS, remote CI not verified, settings
 not verified and deployment not performed. PR-head, synthetic merge and main
