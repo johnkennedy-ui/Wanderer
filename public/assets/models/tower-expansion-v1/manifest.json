@@ -1,0 +1,11 @@
+{
+  "format": "wanderer-tower-expansion-v1",
+  "sourceArchiveSha256": "eb836e2ec5bd97808818adb21f0f641cd54209eb91e629753e454658186edd05",
+  "assets": [
+    { "file": "tower_archer.glb", "sha256": "9328e4d281e132698f6cfb58b5c13f79b6313ed51af736e6e660d71e7fdef3bc", "animationClips": ["idle", "attack", "build", "hit", "collapse"] },
+    { "file": "tower_sword.glb", "sha256": "a17e1d75f6e92546347e32dadd72dadf977c08827a656a3c83063bd6dcc90861", "animationClips": ["idle", "attack", "build", "hit", "collapse"] },
+    { "file": "tower_mage.glb", "sha256": "7d5cb2e705a87576c8d759eb44688a8988b94a0227413891f431d09e827d54e2", "animationClips": ["idle", "attack", "build", "hit", "collapse"] },
+    { "file": "projectile_ballista_bolt.glb", "sha256": "229a9f775c75e0f649f54bdcf7dbfdf77d705717a1026bcddf95cb6cfe097a4f", "animationClips": ["flight"] },
+    { "file": "projectile_crystal_bolt.glb", "sha256": "65e161f73487443b73ccfae44e74225d3888898195820040e28cfb2a021895ec", "animationClips": ["flight"] }
+  ]
+}

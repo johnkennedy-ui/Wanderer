@@ -1,6 +1,11 @@
 import { gameplayTuning } from "../../data/definitions";
 import { roundVector } from "../math";
-import type { BuildingKind, BuildingState, Vector2 } from "../types";
+import {
+  isWallBuildingKind,
+  type BuildingKind,
+  type BuildingState,
+  type Vector2,
+} from "../types";
 
 /** GameSession rounds movement to two decimal places after a sweep. */
 const ROUNDING_CLEARANCE = Math.SQRT2 * 0.005 + 0.0001;
@@ -23,8 +28,7 @@ export const snapBuildingPosition = (position: Vector2): Vector2 => {
   };
 };
 
-export const isWallKind = (kind: BuildingKind): boolean =>
-  kind === "WoodWall" || kind === "StoneWall";
+export const isWallKind = isWallBuildingKind;
 
 /** Tile footprints touch at their edges but overlap only when their interiors do. */
 export const buildingFootprintsOverlap = (
@@ -74,6 +78,16 @@ const contains = (
   );
 };
 
+/** Tests a tile footprint regardless of whether it blocks later movement. */
+export const buildingBlocksPosition = (
+  position: Vector2,
+  building: Pick<BuildingState, "position">,
+  clearance = 0,
+): boolean =>
+  isFinitePosition(position) &&
+  isFinitePosition(building.position) &&
+  contains(position, building.position, finiteClearance(clearance));
+
 /** Tests a point against wall squares expanded by an actor/projectile clearance. */
 export const wallBlocksPosition = (
   position: Vector2,
@@ -81,10 +95,8 @@ export const wallBlocksPosition = (
   clearance = 0,
 ): boolean =>
   isFinitePosition(position) &&
-  walls(buildings).some(
-    (wall) =>
-      isFinitePosition(wall.position) &&
-      contains(position, wall.position, finiteClearance(clearance)),
+  walls(buildings).some((wall) =>
+    buildingBlocksPosition(position, wall, clearance),
   );
 
 /**

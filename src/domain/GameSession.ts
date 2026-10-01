@@ -90,6 +90,7 @@ import {
   enemyCombatPhaseFor,
   meleeCombatPhaseFor,
   projectileCombatPhaseFor,
+  towerCombatPhaseFor,
 } from "./session/combatSessionRuntime";
 
 export { selectBossUpgradeChoices } from "./session/bossUpgradeChoices";
@@ -120,6 +121,8 @@ export class GameSession {
   private nextCrescentSerial!: number;
   private nextFloorDropSerial!: number;
   private nextAttackEventSerial!: number;
+  private towerAttackElapsedById = new Map<string, number>();
+  private nextTowerAttackSequence = 1;
   private committedSavePoint!: SettlementCampfire;
   private input!: MoveCommand;
   private destination!: Vector2 | null;
@@ -173,6 +176,8 @@ export class GameSession {
     this.nextCrescentSerial = state.nextCrescentSerial;
     this.nextFloorDropSerial = state.nextFloorDropSerial;
     this.nextAttackEventSerial = state.nextAttackEventSerial;
+    this.towerAttackElapsedById = new Map();
+    this.nextTowerAttackSequence = 1;
     this.committedSavePoint = state.committedSavePoint;
     this.input = state.input;
     this.destination = state.destination;
@@ -202,9 +207,12 @@ export class GameSession {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
     this.attackPresentation = this.attackPresentation.filter(
-      (attack) => attack.committedAt >= this.elapsed - 0.45,
+      (attack) =>
+        attack.committedAt >= this.elapsed - (attack.durationSeconds ?? 0.45),
     );
     this.updateWaveLifecycle();
+    // Preserve the established contract: a projectile created later in this
+    // tick first appears at progress zero and advances on the next tick.
     this.updateProjectiles(delta);
     const movementDistance = playerMoveDistanceFor({
       baseMoveSpeed: combatStatsFor(
@@ -265,6 +273,7 @@ export class GameSession {
       this.updateAutoCombat(delta);
     }
 
+    this.updateTowerCombat(delta);
     this.collectNearbyFloorDrops();
     this.collectNearbyWeaponRelics();
     this.updateEnemyCombat(delta);
@@ -601,6 +610,26 @@ export class GameSession {
       this.grantExperience(result.experienceEarned);
     this.nextFloorDropSerial = result.nextFloorDropSerial;
     if (result.notice !== null) this.notice = result.notice;
+  }
+  private updateTowerCombat(delta: number): void {
+    const result = towerCombatPhaseFor({
+      delta,
+      buildings: this.settlement.buildingState,
+      enemies: this.enemies,
+      projectiles: this.projectiles,
+      elapsedByTowerId: this.towerAttackElapsedById,
+      nextProjectileSerial: this.nextProjectileSerial,
+      nextAttackSequence: this.nextTowerAttackSequence,
+      world: this.world,
+      chunkRecipeSource: this.chunkRecipes.get,
+    });
+    this.projectiles = result.projectiles;
+    this.towerAttackElapsedById = result.elapsedByTowerId;
+    this.nextProjectileSerial = result.nextProjectileSerial;
+    this.nextTowerAttackSequence = result.nextAttackSequence;
+    this.recordPresentationAttacks(result.presentationAttacks);
+    if (result.meleeImpacts.length > 0)
+      this.updateMeleeCombat(result.meleeImpacts);
   }
   private updateEnemyCombat(delta: number): void {
     const result = enemyCombatPhaseFor({

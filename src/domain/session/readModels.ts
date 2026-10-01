@@ -50,6 +50,7 @@ export interface ReadModelProjectileInput {
   readonly elapsed: number;
   readonly style?: "basic" | "slash" | "magic" | "arrow";
   readonly homing?: boolean;
+  readonly visual?: import("../types").TowerProjectileVisual;
 }
 
 export interface ReadModelCrescentAttackInput {
@@ -157,6 +158,7 @@ export const projectGamePresentation = (
       progress: Math.min(1, projectile.elapsed / input.projectileTravelSeconds),
       style: projectile.style ?? "basic",
       ...(projectile.homing === true ? { homing: true } : {}),
+      ...(projectile.visual === undefined ? {} : { visual: projectile.visual }),
     };
   });
   const crescentAttacks: readonly CrescentAttackState[] =
@@ -169,12 +171,19 @@ export const projectGamePresentation = (
       progress: Math.min(1, attack.elapsed / 0.18),
     }));
   const attackCues = input.attackPresentation
-    .filter((attack) => attack.committedAt >= input.presentationElapsed - 0.45)
+    .filter(
+      (attack) =>
+        attack.committedAt >=
+        input.presentationElapsed - (attack.durationSeconds ?? 0.45),
+    )
     .map((attack) => ({
       actorId: attack.actorId,
       sequence: attack.sequence,
       direction: copyVector(attack.direction),
       ...(attack.style === undefined ? {} : { style: attack.style }),
+      ...(attack.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: attack.durationSeconds }),
       age: input.presentationElapsed - attack.committedAt,
     }));
   const floorDrops = input.floorDrops

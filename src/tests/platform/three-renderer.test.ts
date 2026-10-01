@@ -846,6 +846,7 @@ describe("retained Three CPU projection", () => {
     const snapshot = rendererSnapshot();
     const colors = [
       0xff9f43, 0x8d6e63, 0x4caf50, 0x607d8b, 0x9c6ade, 0x8b5a2b, 0x78828a,
+      0x8d6e63, 0x78909c, 0x7e57c2,
     ];
     const enemyColors = [0xc75c5c, 0x8e2424, 0x6a9f58, 0xfbc02d, 0xd84315];
     projection.render(snapshot);

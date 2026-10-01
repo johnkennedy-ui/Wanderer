@@ -92,11 +92,22 @@ describe("model presentation assets", () => {
       ["projectile-knight", "expansion-v1/fx_blade_arc_v2.glb"],
       ["projectile-wizard", "expansion-v1/projectile_flame_orb_v2.glb"],
       ["projectile-archer", "expansion-v1/projectile_arrow_v2.glb"],
+      [
+        "projectile-tower-ballista",
+        "tower-expansion-v1/projectile_ballista_bolt.glb",
+      ],
+      [
+        "projectile-tower-crystal",
+        "tower-expansion-v1/projectile_crystal_bolt.glb",
+      ],
       ["building-Campfire", "winding-fixed-v1/building_campfire.glb"],
       ["building-Workshop", "winding-fixed-v1/building_workshop.glb"],
       ["building-Farm", "winding-fixed-v1/building_farm.glb"],
       ["building-Storage", "winding-fixed-v1/building_storage.glb"],
       ["building-Healer", "winding-fixed-v1/building_healing_hut.glb"],
+      ["building-ArcherTower", "tower-expansion-v1/tower_archer.glb"],
+      ["building-SwordTower", "tower-expansion-v1/tower_sword.glb"],
+      ["building-MageTower", "tower-expansion-v1/tower_mage.glb"],
     ];
     expect(expected.map(([key]) => modelFilenameFor(key))).toEqual(
       expected.map(([, filename]) => filename),
@@ -108,6 +119,63 @@ describe("model presentation assets", () => {
     expect(projectileModelFor("magic")).toBe("projectile-wizard");
     expect(projectileModelFor("arrow")).toBe("projectile-archer");
     expect(projectileModelFor("basic")).toBe("projectile-knight");
+    expect(projectileModelFor("arrow", "tower-ballista")).toBe(
+      "projectile-tower-ballista",
+    );
+    expect(projectileModelFor("magic", "tower-crystal")).toBe(
+      "projectile-tower-crystal",
+    );
+  });
+
+  it("plays a tower attack clip and rotates only its named aim pivot", async () => {
+    const { loader, calls } = loaderDouble();
+    const projection = new ModelProjection(new ModelTemplateCache(loader, "/"));
+    const frame = {
+      ...playerOnlySnapshot(),
+      presentationElapsed: 0.5,
+      visibleBuildings: [
+        {
+          id: "tower:archer",
+          kind: "ArcherTower" as const,
+          level: 1 as const,
+          position: { x: 2, y: 3 },
+        },
+      ],
+      attackCues: [
+        {
+          actorId: "tower:archer",
+          sequence: 4,
+          direction: { x: 1, y: 0 },
+          style: "arrow" as const,
+          durationSeconds: 1.1,
+          age: 0.5,
+        },
+      ],
+    };
+    projection.render(frame, vi.fn());
+    const towerLoad = calls.find((call) => call.url.includes("tower_archer"));
+    expect(towerLoad).toBeDefined();
+    const loaded = animatedActorScene();
+    const aimPivot = new THREE.Group();
+    aimPivot.name = "aim_pivot";
+    loaded.scene.add(aimPivot);
+    towerLoad?.onLoad(loaded);
+    await Promise.resolve();
+    await Promise.resolve();
+    projection.render(frame, vi.fn());
+
+    const pose = projection.group.getObjectByName("pose:tower:archer")!;
+    expect(projection.diagnostics().activeAnimationKeys).toEqual([
+      "tower:archer:attack",
+    ]);
+    expect(pose.getObjectByName("body")?.position.y).toBeCloseTo(0.4);
+    expect(pose.getObjectByName("aim_pivot")?.rotation.y).toBeCloseTo(
+      -Math.PI / 2,
+    );
+    expect(
+      projection.group.getObjectByName("model:tower:archer")?.rotation.y,
+    ).toBe(0);
+    projection.dispose();
   });
 
   it("deduplicates an in-flight template and gives every presentation its own resources", async () => {

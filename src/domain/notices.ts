@@ -169,6 +169,8 @@ export interface AttackPresentationCue {
   readonly sequence: number;
   readonly direction: Vector2;
   readonly style?: "basic" | "slash" | "magic" | "arrow";
+  /** A tower may keep its supplied attack clip visible beyond the actor cue window. */
+  readonly durationSeconds?: number;
   readonly age: number;
 }
 

@@ -9,16 +9,21 @@ has no separate license file or explicit license terms; no license is asserted
 here.
 
 Thirty GLBs replace the bytes at existing renderer-mapped public paths; runtime
-mappings and gameplay authority are unchanged. The 18 additional tower, wall,
-projectile, weapon, pickup, and effect models have no current model mapping and
-are being held outside `public/` for later review. They are not part of the
-shipped asset set. The original supplied archive remains the source of truth.
+mappings and gameplay authority are unchanged. Five of the 18 additional models
+are installed under `public/assets/models/tower-expansion-v1/`: Archer, Sword
+and Mage towers plus ballista and crystal bolts. Their manifest records the
+source archive and individual byte hashes. The remaining 13 wall, projectile,
+weapon, pickup and effect models remain outside `public/` for later review and
+are not part of the shipped asset set. The original supplied archive remains the
+source of truth.
 
 The archive also contains 53 PNGs and one GIF under `previews/`. These are
 previews, not verified runtime sprites or sprite sheets; this update adds no
-sprite assets. The pack's embedded clips are not evidence of animation
-playback: the current renderer uses its existing procedural poses, and this
-asset update does not add clip playback.
+sprite assets. The mapped towers retain their embedded `idle` and `attack`
+clips in the renderer cache. During a tower attack cue the renderer applies the
+`attack` clip and rotates only the model's `aim_pivot`; the grounded base stays
+static. Those clips remain presentation-only: domain mechanics, IDs, saves and
+world generation remain authoritative outside the renderer.
 
 The installed and held GLBs were checked byte-for-byte against the supplied
 manifest hashes and for GLB v2 headers and declared file lengths. Browser

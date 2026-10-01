@@ -73,7 +73,7 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => {
     )
   )
     throw new Error(
-      "Current wall content cannot be projected to schema version 2.",
+      "Current building content cannot be projected to schema version 2.",
     );
   return {
     schemaVersion: 2,

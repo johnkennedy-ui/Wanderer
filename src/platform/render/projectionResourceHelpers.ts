@@ -10,6 +10,9 @@ export const buildingColors = Object.freeze({
   Healer: 0x9c6ade,
   WoodWall: 0x8b5a2b,
   StoneWall: 0x78828a,
+  ArcherTower: 0x8d6e63,
+  SwordTower: 0x78909c,
+  MageTower: 0x7e57c2,
 } satisfies Record<BuildingKind, number>);
 
 export const enemyPresentation = Object.freeze({

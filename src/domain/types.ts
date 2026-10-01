@@ -70,6 +70,8 @@ export interface ProjectileState {
   readonly progress: number;
   readonly style: AttackStyle;
   readonly homing?: boolean;
+  /** Presentation-only tower ammunition selection; never serialized. */
+  readonly visual?: TowerProjectileVisual;
 }
 
 /** A short-lived close-range attack projection. It is never a projectile or save data. */
@@ -109,9 +111,33 @@ export const buildingKinds = Object.freeze([
   "Healer",
   "WoodWall",
   "StoneWall",
+  "ArcherTower",
+  "SwordTower",
+  "MageTower",
 ] as const);
 
 export type BuildingKind = (typeof buildingKinds)[number];
+
+/** Append-only, current-schema defensive structures. */
+export const towerBuildingKinds = Object.freeze([
+  "ArcherTower",
+  "SwordTower",
+  "MageTower",
+] as const);
+
+export type TowerBuildingKind = (typeof towerBuildingKinds)[number];
+
+export const isTowerBuildingKind = (
+  kind: BuildingKind,
+): kind is TowerBuildingKind =>
+  towerBuildingKinds.includes(kind as TowerBuildingKind);
+
+export const isWallBuildingKind = (kind: BuildingKind): boolean =>
+  kind === "WoodWall" || kind === "StoneWall";
+
+/** Walls and towers are intentionally single-tier structures. */
+export const isSingleTierBuildingKind = (kind: BuildingKind): boolean =>
+  isWallBuildingKind(kind) || isTowerBuildingKind(kind);
 
 export interface BuildingState {
   readonly id: string;
@@ -270,6 +296,9 @@ export const classSkillIds: readonly ClassSkillId[] = Object.freeze([
 ]);
 
 export type AttackStyle = "basic" | "slash" | "magic" | "arrow";
+
+/** Maps tower projectiles to their supplied, disposable GLB presentation. */
+export type TowerProjectileVisual = "tower-ballista" | "tower-crystal";
 
 export interface ClassProgression {
   readonly experience: number;

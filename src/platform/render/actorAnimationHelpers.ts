@@ -7,16 +7,20 @@ export interface BoundActorAnimation {
   activeClip: string | undefined;
 }
 
-const actorAsset = (asset: string): boolean =>
-  asset.startsWith("player-") || asset.startsWith("enemy-");
+const animatedAsset = (asset: string): boolean =>
+  asset.startsWith("player-") ||
+  asset.startsWith("enemy-") ||
+  asset === "building-ArcherTower" ||
+  asset === "building-SwordTower" ||
+  asset === "building-MageTower";
 
-/** Binds only actor clips, leaving static environment and projectile models alone. */
+/** Binds actor and tower clips, leaving static props and projectiles alone. */
 export const bindActorAnimation = (
   model: THREE.Group,
   asset: string,
   clips: readonly THREE.AnimationClip[],
 ): BoundActorAnimation | undefined => {
-  if (!actorAsset(asset) || clips.length === 0) return undefined;
+  if (!animatedAsset(asset) || clips.length === 0) return undefined;
   const mixer = new THREE.AnimationMixer(model);
   const actions = new Map<string, THREE.AnimationAction>();
   for (const clip of clips)
@@ -43,7 +47,7 @@ const clipNameFor = (
   if (
     cue !== undefined &&
     cue.age >= 0 &&
-    cue.age <= 0.45 &&
+    cue.age <= (cue.durationSeconds ?? 0.45) &&
     available("attack")
   )
     return "attack";
