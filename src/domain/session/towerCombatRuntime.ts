@@ -10,6 +10,7 @@ import { liveTargetsInRange } from "./combatPolicy";
 import type { MeleeImpact } from "./combatTickRuntime";
 import type {
   RuntimeAttackPresentation,
+  RuntimeCrescentAttack,
   RuntimeEnemy,
   RuntimeProjectile,
 } from "./sessionState";
@@ -28,6 +29,7 @@ export interface TowerCombatPhaseInput {
 export interface TowerCombatPhaseResult {
   readonly projectiles: RuntimeProjectile[];
   readonly meleeImpacts: readonly MeleeImpact[];
+  readonly sweepAttacks: readonly RuntimeCrescentAttack[];
   readonly presentationAttacks: readonly RuntimeAttackPresentation[];
   readonly elapsedByTowerId: Map<string, number>;
   readonly nextProjectileSerial: number;
@@ -57,6 +59,7 @@ export const advanceTowerCombatPhase = ({
 }: TowerCombatPhaseInput): TowerCombatPhaseResult => {
   const projectiles = [...currentProjectiles];
   const meleeImpacts: MeleeImpact[] = [];
+  const sweepAttacks: RuntimeCrescentAttack[] = [];
   const presentationAttacks: RuntimeAttackPresentation[] = [];
   const elapsedByTowerId = new Map<string, number>();
   let nextProjectileSerial = initialProjectileSerial;
@@ -86,17 +89,27 @@ export const advanceTowerCombatPhase = ({
       x: target.position.x - tower.position.x,
       y: target.position.y - tower.position.y,
     });
+    const sequence = nextAttackSequence;
     presentationAttacks.push({
       actorId: tower.id,
-      sequence: nextAttackSequence,
+      sequence,
       direction,
       style: definition.attackStyle,
       durationSeconds: definition.presentationSeconds,
       committedAt: 0,
     });
-    nextAttackSequence += 1;
+    nextAttackSequence = sequence + 1;
 
     if (definition.attackStyle === "slash") {
+      sweepAttacks.push({
+        id: `tower-sweep:${tower.id}:${sequence.toString().padStart(4, "0")}`,
+        origin: { ...tower.position },
+        direction,
+        radius: definition.range,
+        arcCosine: -1,
+        centered: true,
+        elapsed: 0,
+      });
       for (const candidate of targets)
         meleeImpacts.push({
           targetId: candidate.id,
@@ -134,6 +147,7 @@ export const advanceTowerCombatPhase = ({
   return {
     projectiles,
     meleeImpacts,
+    sweepAttacks,
     presentationAttacks,
     elapsedByTowerId,
     nextProjectileSerial,

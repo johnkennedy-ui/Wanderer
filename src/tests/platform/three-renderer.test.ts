@@ -771,6 +771,32 @@ describe("retained Three CPU projection", () => {
     projection.dispose();
   });
 
+  it("keeps a full defensive sweep centred on its tower for its entire visual lifetime", () => {
+    const projection = new RetainedProjection();
+    const snapshot = visualVariantSnapshot();
+    const sweep = {
+      id: "tower-sweep:test:0001",
+      origin: { x: 5, y: -3 },
+      direction: { x: -1, y: 0 },
+      radius: 1.75,
+      arcCosine: -1,
+      centered: true,
+      progress: 0.5,
+    };
+
+    projection.render({ ...snapshot, crescentAttacks: [sweep] });
+
+    const mesh = meshFor(projection, sweep.id);
+    const slash = knightSlashAnimationFor(sweep.progress);
+    expect((mesh.geometry as THREE.RingGeometry).parameters).toMatchObject({
+      thetaStart: -Math.PI,
+      thetaLength: Math.PI * 2,
+    });
+    expect(mesh.position).toMatchObject({ x: 5, y: slash.height, z: 3 });
+    expect(mesh.rotation.z).toBe(0);
+    projection.dispose();
+  });
+
   it("resets player recovery materials and reuses warmed variants without color bleed", () => {
     const projection = new RetainedProjection();
     const snapshot = visualVariantSnapshot();

@@ -81,6 +81,8 @@ export interface CrescentAttackState {
   readonly direction: Vector2;
   readonly radius: number;
   readonly arcCosine: number;
+  /** Keeps a complete defensive sweep centred on its emitter while it fades. */
+  readonly centered?: boolean;
   readonly progress: number;
 }
 

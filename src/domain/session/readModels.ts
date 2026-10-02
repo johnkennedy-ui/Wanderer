@@ -59,6 +59,7 @@ export interface ReadModelCrescentAttackInput {
   readonly direction: Vector2;
   readonly radius: number;
   readonly arcCosine: number;
+  readonly centered?: boolean;
   readonly elapsed: number;
 }
 
@@ -168,6 +169,7 @@ export const projectGamePresentation = (
       direction: copyVector(attack.direction),
       radius: attack.radius,
       arcCosine: attack.arcCosine,
+      ...(attack.centered === true ? { centered: true } : {}),
       progress: Math.min(1, attack.elapsed / 0.18),
     }));
   const attackCues = input.attackPresentation

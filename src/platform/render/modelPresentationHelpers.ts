@@ -428,25 +428,32 @@ export class ModelProjection {
           rotation: calibratedYawFor(direction) + fireball.spin,
         };
       }),
-      ...snapshot.crescentAttacks.map((attack) => {
-        const length = Math.hypot(attack.direction.x, attack.direction.y);
-        const direction =
-          length > 0.0001
-            ? { x: attack.direction.x / length, y: attack.direction.y / length }
-            : { x: 0, y: 1 };
-        const slash = knightSlashAnimationFor(attack.progress);
-        return {
-          id: attack.id,
-          asset: "projectile-knight" as const,
-          position: {
-            x: attack.origin.x + direction.x * attack.radius * slash.forward,
-            y: attack.origin.y + direction.y * attack.radius * slash.forward,
-          },
-          height: slash.height,
-          scale: Math.max(0.45, attack.radius * 0.28) * slash.scale,
-          rotation: calibratedYawFor(direction, { x: 0, y: 1 }) + slash.turn,
-        };
-      }),
+      // A full tower sweep uses the retained ring projection so it remains a
+      // complete circle around the tower rather than a travelling blade arc.
+      ...snapshot.crescentAttacks
+        .filter((attack) => !attack.centered)
+        .map((attack) => {
+          const length = Math.hypot(attack.direction.x, attack.direction.y);
+          const direction =
+            length > 0.0001
+              ? {
+                  x: attack.direction.x / length,
+                  y: attack.direction.y / length,
+                }
+              : { x: 0, y: 1 };
+          const slash = knightSlashAnimationFor(attack.progress);
+          return {
+            id: attack.id,
+            asset: "projectile-knight" as const,
+            position: {
+              x: attack.origin.x + direction.x * attack.radius * slash.forward,
+              y: attack.origin.y + direction.y * attack.radius * slash.forward,
+            },
+            height: slash.height,
+            scale: Math.max(0.45, attack.radius * 0.28) * slash.scale,
+            rotation: calibratedYawFor(direction, { x: 0, y: 1 }) + slash.turn,
+          };
+        }),
     ];
     const visible = new Set(descriptors.map((descriptor) => descriptor.id));
     for (const descriptor of descriptors)
