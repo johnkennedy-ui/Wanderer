@@ -292,6 +292,27 @@ describe("retained UI list operations", () => {
     rows.dispose();
   });
 
+  it("keeps tower upgrades available through level two and disables only level three", () => {
+    installDom();
+    const host = new ElementDouble();
+    const intents = {
+      startRelocation: vi.fn(),
+      upgradeBuilding: vi.fn(),
+      demolish: vi.fn(),
+    };
+    const rows = new RetainedBuildingRows(asElement(host), intents);
+    rows.render([{ ...building("tower"), kind: "ArcherTower", level: 1 }]);
+    const [row] = host.children;
+    const [, upgrade] = row.children;
+    expect(upgrade.disabled).toBe(false);
+    upgrade.click();
+    expect(intents.upgradeBuilding).toHaveBeenCalledExactlyOnceWith("tower");
+
+    rows.render([{ ...building("tower"), kind: "ArcherTower", level: 3 }]);
+    expect(upgrade.disabled).toBe(true);
+    rows.dispose();
+  });
+
   it("uses an unambiguous effects value signature and suppresses identical text writes", () => {
     installDom();
     const host = new ElementDouble();

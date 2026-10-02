@@ -6,10 +6,7 @@ import { attachTouchSafeActivation } from "./touchActivation";
 const isWallBuildingKind = (kind: BuildingKind): boolean =>
   kind === "WoodWall" || kind === "StoneWall";
 const isSingleTierBuildingKind = (kind: BuildingKind): boolean =>
-  isWallBuildingKind(kind) ||
-  kind === "ArcherTower" ||
-  kind === "SwordTower" ||
-  kind === "MageTower";
+  isWallBuildingKind(kind);
 
 export const setText = (element: HTMLElement, value: string): void => {
   if (element.textContent !== value) element.textContent = value;
@@ -104,9 +101,7 @@ export class RetainedBuildingRows {
         legacyStorage
           ? "Legacy Storage cannot be upgraded."
           : singleTier
-            ? isWallBuildingKind(building.kind)
-              ? "Walls are single-tier and cannot be upgraded."
-              : "Defensive towers are single-tier and cannot be upgraded."
+            ? "Walls are single-tier and cannot be upgraded."
             : "",
       );
       if (row.move.disabled !== legacyStorage)

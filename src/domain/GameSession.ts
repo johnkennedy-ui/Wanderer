@@ -621,6 +621,8 @@ export class GameSession {
       nextProjectileSerial: this.nextProjectileSerial,
       nextAttackSequence: this.nextTowerAttackSequence,
       world: this.world,
+      upgrades: this.upgrades,
+      classProgression: this.classProgression,
       chunkRecipeSource: this.chunkRecipes.get,
     });
     this.projectiles = result.projectiles;

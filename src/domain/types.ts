@@ -137,9 +137,9 @@ export const isTowerBuildingKind = (
 export const isWallBuildingKind = (kind: BuildingKind): boolean =>
   kind === "WoodWall" || kind === "StoneWall";
 
-/** Walls and towers are intentionally single-tier structures. */
+/** Walls are intentionally single-tier structures. */
 export const isSingleTierBuildingKind = (kind: BuildingKind): boolean =>
-  isWallBuildingKind(kind) || isTowerBuildingKind(kind);
+  isWallBuildingKind(kind);
 
 export interface BuildingState {
   readonly id: string;

@@ -200,6 +200,7 @@ export interface ProjectileCombatPhaseInput {
   readonly projectileTravelSeconds: number;
   readonly floorDropOffsetDistance: number;
   readonly isFlightBlocked?: (from: Vector2, to: Vector2) => boolean;
+  readonly isWallFlightBlocked?: (from: Vector2, to: Vector2) => boolean;
 }
 
 export interface ProjectileCombatPhaseResult {
@@ -233,6 +234,7 @@ export const advanceProjectileCombatPhase = ({
   projectileTravelSeconds,
   floorDropOffsetDistance,
   isFlightBlocked,
+  isWallFlightBlocked,
 }: ProjectileCombatPhaseInput): ProjectileCombatPhaseResult => {
   const enemies = copyEnemies(currentEnemies);
   const projectiles: RuntimeProjectile[] = [];
@@ -245,6 +247,14 @@ export const advanceProjectileCombatPhase = ({
   let nextPlayerHp = playerHp;
   let notice: GameNotice | null = null;
   let experienceEarned = 0;
+  const isBlocked = (
+    projectile: RuntimeProjectile,
+    from: Vector2,
+    to: Vector2,
+  ): boolean =>
+    isFlightBlocked?.(from, to) === true ||
+    (projectile.bypassesWalls !== true &&
+      isWallFlightBlocked?.(from, to) === true);
 
   for (const current of currentProjectiles) {
     const projectile = copyProjectile(current);
@@ -265,7 +275,7 @@ export const advanceProjectileCombatPhase = ({
       projectile,
       Math.min(1, flight.elapsed / projectileTravelSeconds),
     );
-    if (isFlightBlocked?.(previousPosition, nextPosition) === true) continue;
+    if (isBlocked(projectile, previousPosition, nextPosition)) continue;
     (flight.completed ? completed : projectiles).push(projectile);
   }
 
@@ -273,8 +283,7 @@ export const advanceProjectileCombatPhase = ({
     const primaryTarget = enemies.get(projectile.targetId);
     if (
       primaryTarget !== undefined &&
-      isFlightBlocked?.(projectile.targetPosition, primaryTarget.position) ===
-        true
+      isBlocked(projectile, projectile.targetPosition, primaryTarget.position)
     )
       continue;
     const resolution = projectileImpactResolutionFor({
@@ -293,10 +302,11 @@ export const advanceProjectileCombatPhase = ({
       if (enemy === undefined || enemy.defeated) continue;
       if (
         impact.targetId !== projectile.targetId &&
-        isFlightBlocked?.(
+        isBlocked(
+          projectile,
           primaryTarget?.position ?? projectile.targetPosition,
           enemy.position,
-        ) === true
+        )
       )
         continue;
       landedHitCount += 1;

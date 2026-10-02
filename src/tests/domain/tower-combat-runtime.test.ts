@@ -11,7 +11,8 @@ const tower = (
   kind: TowerBuildingKind,
   id: string,
   position: Vector2 = { x: 0, y: 0 },
-): BuildingState => ({ id, kind, position, level: 1 });
+  level: 1 | 2 | 3 = 1,
+): BuildingState => ({ id, kind, position, level });
 
 const enemy = (id: string, position: Vector2): RuntimeEnemy => ({
   id,
@@ -34,11 +35,13 @@ const phase = ({
   delta,
   buildings,
   enemies,
+  playerDamage = 100,
   isAttackBlocked = () => false,
 }: {
   readonly delta: number;
   readonly buildings: readonly BuildingState[];
   readonly enemies: readonly RuntimeEnemy[];
+  readonly playerDamage?: number;
   readonly isAttackBlocked?: (from: Vector2, to: Vector2) => boolean;
 }) =>
   advanceTowerCombatPhase({
@@ -49,6 +52,7 @@ const phase = ({
     elapsedByTowerId: new Map(),
     nextProjectileSerial: 7,
     nextAttackSequence: 11,
+    playerDamage,
     isAttackBlocked,
   });
 
@@ -68,10 +72,11 @@ describe("tower combat runtime", () => {
         id: "tower-projectile:0007",
         targetId: "enemy:alpha",
         targetPosition: { x: -3, y: 0 },
-        damage: 12,
+        damage: 10,
         chainTargetIds: [],
         style: "arrow",
         visual: "tower-ballista",
+        bypassesWalls: true,
       }),
     ]);
     expect(result.presentationAttacks).toEqual([
@@ -102,16 +107,16 @@ describe("tower combat runtime", () => {
     expect(result.projectiles).toEqual([
       expect.objectContaining({
         targetId: "enemy:primary",
-        damage: 9,
+        damage: 10,
         chainTargetIds: ["enemy:alpha", "enemy:beta"],
         style: "magic",
         visual: "tower-crystal",
       }),
     ]);
-    expect(result.projectiles[0]?.chainDamage).toBeCloseTo(5.4);
+    expect(result.projectiles[0]?.chainDamage).toBeCloseTo(6);
   });
 
-  it("sweeps every visible enemy in sword range while a blocked line never starts a cooldown", () => {
+  it("sweeps every terrain-visible enemy in sword range while a blocked line never starts a cooldown", () => {
     const sword = phase({
       delta: 1.2,
       buildings: [tower("SwordTower", "tower:sword")],
@@ -134,8 +139,8 @@ describe("tower combat runtime", () => {
       }),
     ]);
     expect(sword.meleeImpacts).toEqual([
-      { targetId: "enemy:primary", damage: 14 },
-      { targetId: "enemy:visible", damage: 14 },
+      { targetId: "enemy:primary", damage: 10 },
+      { targetId: "enemy:visible", damage: 10 },
     ]);
 
     const blockedArcher = phase({
@@ -152,4 +157,40 @@ describe("tower combat runtime", () => {
     });
     expect(blockedArcher.elapsedByTowerId).toEqual(new Map());
   });
+
+  it.each([
+    { level: 1 as const, expectedDamage: 10 },
+    { level: 2 as const, expectedDamage: 20 },
+    { level: 3 as const, expectedDamage: 30 },
+  ])(
+    "scales a tower's hit to $expectedDamage% of a 100-damage player at level $level",
+    ({ level, expectedDamage }) => {
+      const archer = phase({
+        delta: 5,
+        buildings: [
+          tower("ArcherTower", "tower:archer", { x: 0, y: 0 }, level),
+        ],
+        enemies: [enemy("enemy:archer", { x: 3, y: 0 })],
+      });
+      const sword = phase({
+        delta: 5,
+        buildings: [tower("SwordTower", "tower:sword", { x: 0, y: 0 }, level)],
+        enemies: [enemy("enemy:sword", { x: 1, y: 0 })],
+      });
+      const mage = phase({
+        delta: 5,
+        buildings: [tower("MageTower", "tower:mage", { x: 0, y: 0 }, level)],
+        enemies: [enemy("enemy:mage", { x: 3, y: 0 })],
+      });
+
+      expect(archer.projectiles[0]?.damage).toBe(expectedDamage);
+      expect(sword.meleeImpacts).toEqual([
+        { targetId: "enemy:sword", damage: expectedDamage },
+      ]);
+      expect(mage.projectiles[0]).toMatchObject({
+        damage: expectedDamage,
+        bypassesWalls: true,
+      });
+    },
+  );
 });
