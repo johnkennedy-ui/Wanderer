@@ -152,9 +152,21 @@ describe("GameSession wall and tile integration", () => {
       const tower = place(session, kind, { x: 1.1, y: 0.1 });
       expect(tower.position).toEqual({ x: 1, y: 0 });
       expect(wallBlocksPosition(tower.position, [tower])).toBe(false);
+      const levelTwo = session.upgradeBuilding(tower.id);
+      expect(levelTwo).toMatchObject({
+        ok: true,
+        outcome: "upgraded",
+        building: { id: tower.id, kind, level: 2 },
+      });
+      const levelThree = session.upgradeBuilding(tower.id);
+      expect(levelThree).toMatchObject({
+        ok: true,
+        outcome: "upgraded",
+        building: { id: tower.id, kind, level: 3 },
+      });
       expect(session.upgradeBuilding(tower.id)).toMatchObject({
         ok: false,
-        rejection: { kind: "building-not-upgradeable" },
+        rejection: { kind: "already-level-3" },
       });
     },
   );
@@ -259,6 +271,15 @@ describe("GameSession wall and tile integration", () => {
     const wood = place(session, "WoodWall", { x: 1.2, y: 0.1 });
     const stone = place(session, "StoneWall", { x: 2.2, y: 0.1 });
     const tower = place(session, "ArcherTower", { x: 3.2, y: 0.1 });
+    expect(session.upgradeBuilding(tower.id)).toMatchObject({
+      ok: true,
+      building: { id: tower.id, level: 2 },
+    });
+    const upgradedTower = session.upgradeBuilding(tower.id);
+    expect(upgradedTower).toMatchObject({
+      ok: true,
+      building: { id: tower.id, level: 3 },
+    });
     expect(session.presentation().ui.buildings[0]).toEqual(legacy);
     const request = session.createValidCampfireSaveRequest(55);
     expect(request).not.toBeNull();
@@ -278,7 +299,7 @@ describe("GameSession wall and tile integration", () => {
       legacy,
       wood,
       stone,
-      tower,
+      { ...tower, level: 3 },
     ]);
     expect(restored.presentation().ui.buildings[0].position).toEqual({
       x: 4.25,

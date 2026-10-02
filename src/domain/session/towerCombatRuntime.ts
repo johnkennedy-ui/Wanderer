@@ -1,4 +1,7 @@
-import { towerCombatDefinitionFor } from "../../data/definitions";
+import {
+  gameplayTuning,
+  towerCombatDefinitionFor,
+} from "../../data/definitions";
 import { distance, normalize } from "../math";
 import {
   isTowerBuildingKind,
@@ -23,6 +26,7 @@ export interface TowerCombatPhaseInput {
   readonly elapsedByTowerId: ReadonlyMap<string, number>;
   readonly nextProjectileSerial: number;
   readonly nextAttackSequence: number;
+  readonly playerDamage: number;
   readonly isAttackBlocked: (from: Vector2, to: Vector2) => boolean;
 }
 
@@ -55,6 +59,7 @@ export const advanceTowerCombatPhase = ({
   elapsedByTowerId: currentElapsedByTowerId,
   nextProjectileSerial: initialProjectileSerial,
   nextAttackSequence: initialAttackSequence,
+  playerDamage,
   isAttackBlocked,
 }: TowerCombatPhaseInput): TowerCombatPhaseResult => {
   const projectiles = [...currentProjectiles];
@@ -71,6 +76,9 @@ export const advanceTowerCombatPhase = ({
     if (!isTowerBuilding(building)) continue;
     const tower = building;
     const definition = towerCombatDefinitionFor(tower.kind);
+    const damage =
+      playerDamage *
+      gameplayTuning.towerDamageMultiplierByLevel[tower.level - 1];
     const targets = liveTargetsInRange({
       playerPosition: tower.position,
       targets: enemies.values(),
@@ -113,7 +121,7 @@ export const advanceTowerCombatPhase = ({
       for (const candidate of targets)
         meleeImpacts.push({
           targetId: candidate.id,
-          damage: definition.damage,
+          damage,
         });
       continue;
     }
@@ -131,14 +139,15 @@ export const advanceTowerCombatPhase = ({
       origin: { ...tower.position },
       targetId: target.id,
       targetPosition: { ...target.position },
-      damage: definition.damage,
+      damage,
       chainTargetIds: splashTargets.map((candidate) => candidate.id),
-      chainDamage: definition.damage * (definition.chainDamageMultiplier ?? 0),
+      chainDamage: damage * (definition.chainDamageMultiplier ?? 0),
       hitHeal: 0,
       style: definition.attackStyle,
       ...(definition.projectileVisual === undefined
         ? {}
         : { visual: definition.projectileVisual }),
+      bypassesWalls: true,
       elapsed: 0,
     });
     nextProjectileSerial += 1;

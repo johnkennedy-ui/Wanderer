@@ -160,6 +160,16 @@ describe("authored definitions", () => {
     ]);
   });
 
+  it("authors tower levels as 10%, 20%, and 30% of player damage", () => {
+    expect(gameplayTuning.towerDamageMultiplierByLevel).toEqual([
+      0.1, 0.2, 0.3,
+    ]);
+    for (const kind of ["ArcherTower", "SwordTower", "MageTower"] as const)
+      expect(buildingDefinitions[kind].levelEffects[2]).toContain(
+        "30% of player damage",
+      );
+  });
+
   it("represents every upgrade as one explicit qualitative effect", () => {
     expect(
       Object.fromEntries(

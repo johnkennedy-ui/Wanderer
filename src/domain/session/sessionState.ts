@@ -74,6 +74,8 @@ export interface RuntimeProjectile {
   readonly style?: AttackStyle;
   readonly homing?: boolean;
   readonly visual?: import("../types").TowerProjectileVisual;
+  /** Tower ammunition flies above walls but remains blocked by solid terrain. */
+  readonly bypassesWalls?: boolean;
   elapsed: number;
 }
 

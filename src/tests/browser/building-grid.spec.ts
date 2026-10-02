@@ -98,6 +98,28 @@ test("wood and stone choices snap to adjacent tiles and remain single-tier", asy
   await expect(rows).toHaveCount(2);
 });
 
+test("Archer Tower upgrades through level three", async ({
+  page,
+}, testInfo) => {
+  const { activate, placeAt, rows } = await setup(page, testInfo.project.name);
+  await openBuild(page);
+  await activate(page.getByTestId("build-ArcherTower"));
+  await placeAt(2.3, 1.7);
+  await expect(page.getByTestId("placement-mode")).toBeHidden();
+
+  await openBuild(page);
+  const archer = rows.filter({ hasText: "Archer Tower" });
+  const upgrade = archer.getByRole("button", { name: "Upgrade", exact: true });
+  await expect(archer).toContainText("Archer Tower L1");
+  await expect(upgrade).toBeEnabled();
+  await activate(upgrade);
+  await expect(archer).toContainText("Archer Tower L2");
+  await expect(upgrade).toBeEnabled();
+  await activate(upgrade);
+  await expect(archer).toContainText("Archer Tower L3");
+  await expect(upgrade).toBeDisabled();
+});
+
 test("same-tile wall placement rejects overlap and cancels without adding a row", async ({
   page,
 }, testInfo) => {

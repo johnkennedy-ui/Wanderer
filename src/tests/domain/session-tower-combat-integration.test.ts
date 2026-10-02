@@ -115,6 +115,46 @@ describe("GameSession tower combat integration", () => {
     },
   );
 
+  it.each([
+    {
+      kind: "ArcherTower" as const,
+      visual: "tower-ballista" as const,
+      launchAfterSeconds: 1.2,
+    },
+    {
+      kind: "MageTower" as const,
+      visual: "tower-crystal" as const,
+      launchAfterSeconds: 1.4,
+    },
+  ])(
+    "fires a $visual projectile over a wall and applies $kind damage",
+    ({ kind, visual, launchAfterSeconds }) => {
+      const session = createSession([
+        enemySpawn("enemy:over-wall-target", { x: 3.5, y: 0 }),
+      ]);
+      const tower = place(session, kind, { x: 1, y: 0 });
+      place(session, "StoneWall", { x: 2, y: 0 });
+      const beforeImpact = enemy(session, "enemy:over-wall-target").hp;
+
+      advance(session, launchAfterSeconds);
+      expect(session.presentation().renderer.projectiles).toContainEqual(
+        expect.objectContaining({
+          origin: { x: 1, y: 0 },
+          targetId: "enemy:over-wall-target",
+          visual,
+        }),
+      );
+      expect(session.presentation().renderer.attackCues).toContainEqual(
+        expect.objectContaining({ actorId: tower.id }),
+      );
+
+      advance(session, 0.5);
+      expect(enemy(session, "enemy:over-wall-target").hp).toBeLessThan(
+        beforeImpact,
+      );
+    },
+  );
+
   it("damages every in-range enemy and projects a complete slash around Sword Tower", () => {
     const session = createSession([
       enemySpawn("enemy:sword-primary", { x: 2.5, y: 0 }),

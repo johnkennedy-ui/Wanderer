@@ -126,7 +126,7 @@ export const meleeCombatPhaseFor = ({
     floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
   });
 
-/** Runs every persistent tower through one shared terrain/wall line-of-sight policy. */
+/** Runs every persistent tower through its terrain-only line-of-sight policy. */
 export const towerCombatPhaseFor = ({
   delta,
   buildings,
@@ -136,6 +136,8 @@ export const towerCombatPhaseFor = ({
   nextProjectileSerial,
   nextAttackSequence,
   world,
+  upgrades,
+  classProgression,
   chunkRecipeSource,
 }: {
   readonly delta: number;
@@ -146,6 +148,8 @@ export const towerCombatPhaseFor = ({
   readonly nextProjectileSerial: number;
   readonly nextAttackSequence: number;
   readonly world: WorldIdentity;
+  readonly upgrades: ReadonlySet<UpgradeId>;
+  readonly classProgression: ClassProgression;
   readonly chunkRecipeSource: ChunkRecipeSource;
 }) =>
   advanceTowerCombatPhase({
@@ -156,8 +160,9 @@ export const towerCombatPhaseFor = ({
     elapsedByTowerId,
     nextProjectileSerial,
     nextAttackSequence,
+    playerDamage: combatStatsFor(buildings, upgrades, classProgression)
+      .attackDamage,
     isAttackBlocked: (from, to) =>
-      wallBlocksSegment(from, to, buildings) ||
       terrainBlocksProjectileSegment(world, from, to, chunkRecipeSource),
   });
 
@@ -209,8 +214,8 @@ export const projectileCombatPhaseFor = ({
     projectileTravelSeconds: gameplayTuning.basicProjectileTravelSeconds,
     floorDropOffsetDistance: gameplayTuning.floorDropOffsetDistance,
     isFlightBlocked: (from, to) =>
-      wallBlocksSegment(from, to, buildings) ||
       terrainBlocksProjectileSegment(world, from, to, chunkRecipeSource),
+    isWallFlightBlocked: (from, to) => wallBlocksSegment(from, to, buildings),
   });
 
 export const enemyCombatPhaseFor = ({

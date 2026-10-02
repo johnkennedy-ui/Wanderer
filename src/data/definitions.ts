@@ -48,7 +48,6 @@ export interface BuildingDefinition {
 /** Domain-owned tower tuning. Model clips never define damage or cooldowns. */
 export interface TowerCombatDefinition {
   readonly attackStyle: "arrow" | "magic" | "slash";
-  readonly damage: number;
   readonly range: number;
   readonly attackEverySeconds: number;
   readonly presentationSeconds: number;
@@ -156,6 +155,7 @@ const authoredGameplayTuning = {
   deathResourceLossRate: 0.25,
   campfireBuildRadiusByLevel: [6, 9, 12] as const,
   workshopDamageBonusByLevel: [4, 9, 15] as const,
+  towerDamageMultiplierByLevel: [0.1, 0.2, 0.3] as const,
   farmHarvestEverySeconds: 2,
   farmHarvestByLevel: [
     { wood: 2, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
@@ -336,33 +336,33 @@ const authoredBuildingDefinitions = {
     label: "Archer Tower",
     baseCost: { wood: 14, stone: 4, scrap: 4, essence: 0, bossCore: 0 },
     description:
-      "A single-tier ballista that fires at the nearest visible enemy from its snapped tile.",
+      "An upgradable ballista that fires over walls at the nearest enemy from its snapped tile.",
     levelEffects: [
-      "L1: 12 ballista damage, 6.5m range, every 1.1s.",
-      "L2: single-tier defensive tower.",
-      "L3: single-tier defensive tower.",
+      "L1: 10% of player damage, 6.5m range, every 1.1s.",
+      "L2: 20% of player damage, 6.5m range, every 1.1s.",
+      "L3: 30% of player damage, 6.5m range, every 1.1s.",
     ],
   },
   SwordTower: {
     label: "Sword Tower",
     baseCost: { wood: 8, stone: 8, scrap: 5, essence: 0, bossCore: 0 },
     description:
-      "A single-tier close defender whose rotating blades sweep every visible enemy in range.",
+      "An upgradable close defender whose rotating blades sweep every in-range enemy.",
     levelEffects: [
-      "L1: 14 sweep damage in 1.75m, every 1.2s.",
-      "L2: single-tier defensive tower.",
-      "L3: single-tier defensive tower.",
+      "L1: 10% of player damage in 1.75m, every 1.2s.",
+      "L2: 20% of player damage in 1.75m, every 1.2s.",
+      "L3: 30% of player damage in 1.75m, every 1.2s.",
     ],
   },
   MageTower: {
     label: "Mage Tower",
     baseCost: { wood: 4, stone: 10, scrap: 4, essence: 2, bossCore: 0 },
     description:
-      "A single-tier crystal tower whose visible bolt splashes nearby enemies at the impact point.",
+      "An upgradable crystal tower whose visible bolt flies over walls and splashes nearby enemies at impact.",
     levelEffects: [
-      "L1: 9 crystal damage plus two 60% splash targets in 5.5m, every 1.3s.",
-      "L2: single-tier defensive tower.",
-      "L3: single-tier defensive tower.",
+      "L1: 10% of player damage plus two 60% splash targets in 5.5m, every 1.3s.",
+      "L2: 20% of player damage plus two 60% splash targets in 5.5m, every 1.3s.",
+      "L3: 30% of player damage plus two 60% splash targets in 5.5m, every 1.3s.",
     ],
   },
 } satisfies Record<BuildingKind, BuildingDefinition>;
@@ -372,7 +372,6 @@ export const buildingDefinitions = deepFreeze(authoredBuildingDefinitions);
 const authoredTowerCombatDefinitions = {
   ArcherTower: {
     attackStyle: "arrow",
-    damage: 12,
     range: 6.5,
     attackEverySeconds: 1.1,
     presentationSeconds: 1.1,
@@ -380,14 +379,12 @@ const authoredTowerCombatDefinitions = {
   },
   SwordTower: {
     attackStyle: "slash",
-    damage: 14,
     range: 1.75,
     attackEverySeconds: 1.2,
     presentationSeconds: 1.12,
   },
   MageTower: {
     attackStyle: "magic",
-    damage: 9,
     range: 5.5,
     attackEverySeconds: 1.3,
     presentationSeconds: 1.3,

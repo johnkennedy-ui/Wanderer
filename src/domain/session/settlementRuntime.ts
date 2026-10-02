@@ -1,6 +1,6 @@
 import { buildingDefinitions, gameplayTuning } from "../../data/definitions";
 import { distance } from "../math";
-import { isSingleTierBuildingKind } from "../types";
+import { isTowerBuildingKind, isWallBuildingKind } from "../types";
 import type {
   BuildingKind,
   BuildingState,
@@ -192,7 +192,7 @@ export class SettlementRuntime {
       return this.rejected({ kind: "unknown-building" }, resources);
     if (building.kind === "Storage")
       return this.rejected({ kind: "unknown-building" }, resources);
-    if (isSingleTierBuildingKind(building.kind))
+    if (isWallBuildingKind(building.kind))
       return this.rejected({ kind: "building-not-upgradeable" }, resources);
     if (building.level === 3)
       return this.rejected({ kind: "already-level-3" }, resources);
@@ -374,7 +374,7 @@ export class SettlementRuntime {
         ),
       };
     if (
-      isSingleTierBuildingKind(kind) &&
+      (isWallBuildingKind(kind) || isTowerBuildingKind(kind)) &&
       input.occupiedActors?.some(
         (actor) =>
           Number.isFinite(actor.position.x) &&
