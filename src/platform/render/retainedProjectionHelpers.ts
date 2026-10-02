@@ -304,19 +304,26 @@ export class RetainedProjection {
           ? { x: attack.direction.x / length, y: attack.direction.y / length }
           : { x: 0, y: 1 };
       const slash = knightSlashAnimationFor(attack.progress);
+      const centered = attack.centered === true;
       const mesh = this.marker(
         this.crescents,
         attack.id,
         {
-          x: attack.origin.x + direction.x * attack.radius * slash.forward,
-          y: attack.origin.y + direction.y * attack.radius * slash.forward,
+          x: centered
+            ? attack.origin.x
+            : attack.origin.x + direction.x * attack.radius * slash.forward,
+          y: centered
+            ? attack.origin.y
+            : attack.origin.y + direction.y * attack.radius * slash.forward,
         },
         this.resources.crescent(attack.radius, attack.arcCosine),
         this.resources.knightCrescentMaterial(),
         slash.height,
       );
       mesh.rotation.x = -Math.PI / 2;
-      mesh.rotation.z = Math.atan2(direction.y, direction.x) + slash.turn;
+      mesh.rotation.z = centered
+        ? 0
+        : Math.atan2(direction.y, direction.x) + slash.turn;
       mesh.scale.setScalar(slash.scale);
     }
     this.removeMissing(this.crescents, crescents);

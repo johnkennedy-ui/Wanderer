@@ -77,13 +77,15 @@ export interface RuntimeProjectile {
   elapsed: number;
 }
 
-/** Runtime-only visible Knight attack. It applies its damage immediately. */
+/** Runtime-only visible close-range attack. It applies its damage immediately. */
 export interface RuntimeCrescentAttack {
   readonly id: string;
   readonly origin: Vector2;
   readonly direction: Vector2;
   readonly radius: number;
   readonly arcCosine: number;
+  /** A complete tower sweep remains centred rather than travelling forward. */
+  readonly centered?: boolean;
   elapsed: number;
 }
 

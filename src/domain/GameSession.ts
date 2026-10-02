@@ -627,6 +627,7 @@ export class GameSession {
     this.towerAttackElapsedById = result.elapsedByTowerId;
     this.nextProjectileSerial = result.nextProjectileSerial;
     this.nextTowerAttackSequence = result.nextAttackSequence;
+    this.crescentAttacks = [...this.crescentAttacks, ...result.sweepAttacks];
     this.recordPresentationAttacks(result.presentationAttacks);
     if (result.meleeImpacts.length > 0)
       this.updateMeleeCombat(result.meleeImpacts);

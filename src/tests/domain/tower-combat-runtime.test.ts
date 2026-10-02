@@ -124,6 +124,15 @@ describe("tower combat runtime", () => {
       isAttackBlocked: (_from, to) => to.y > 0,
     });
     expect(sword.projectiles).toEqual([]);
+    expect(sword.sweepAttacks).toEqual([
+      expect.objectContaining({
+        id: "tower-sweep:tower:sword:0011",
+        origin: { x: 0, y: 0 },
+        radius: 1.75,
+        arcCosine: -1,
+        centered: true,
+      }),
+    ]);
     expect(sword.meleeImpacts).toEqual([
       { targetId: "enemy:primary", damage: 14 },
       { targetId: "enemy:visible", damage: 14 },
