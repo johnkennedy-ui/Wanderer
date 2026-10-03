@@ -80,15 +80,22 @@ const setup = async (page: Page, project: string) => {
     const bounds = await canvas.boundingBox();
     if (bounds === null) throw new Error("World canvas has no visible bounds");
     await resolveIncidentalChoiceOverlays(page);
-    await page.mouse.move(
-      bounds.x + from.position.x,
-      bounds.y + from.position.y,
-    );
-    await page.mouse.down();
-    await page.mouse.move(bounds.x + to.position.x, bounds.y + to.position.y, {
+    // Guard pointer-down with normal canvas actionability. The target is a
+    // page coordinate, not an HTML drop target: canvas capture must retain
+    // the original eight-step move/up stream even if a live modal appears.
+    const body = page.locator("body");
+    const bodyOrigin = await body.evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      return { x: bounds.x + node.clientLeft, y: bounds.y + node.clientTop };
+    });
+    await canvas.dragTo(body, {
+      sourcePosition: from.position,
+      targetPosition: {
+        x: bounds.x + to.position.x - bodyOrigin.x,
+        y: bounds.y + to.position.y - bodyOrigin.y,
+      },
       steps: 8,
     });
-    await page.mouse.up();
   };
   const placeAt = async (x: number, y: number) => {
     await previewAt(x, y);
