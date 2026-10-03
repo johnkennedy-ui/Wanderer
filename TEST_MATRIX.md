@@ -102,9 +102,15 @@ See `Documentation~/CI_SECURITY_CONTRACT.md` for tool support and owner actions.
 - `src/tests/platform/wall-material.test.ts` and renderer/UI tests cover tile
   footprints, distinct plank/masonry materials, retained resource disposal,
   accessible choices and single-tier row actions.
-- `src/tests/browser/building-grid.spec.ts` adds real desktop click and touch
-  placement, adjoining walls, overlap rejection, negative relocation and cancel
-  to both canonical built base-path matrices. Independent combined-candidate
+- `src/tests/browser/building-grid.spec.ts` and `m5-rendering.spec.ts` exercise
+  desktop and touch-viewport preview-before-build/relocation, unchanged resources
+  and movement before confirmation, reposition-on-next-tap, Confirm, and X
+  cancellation. Pointer-drag cases cover horizontal/vertical/reverse/dominant-axis
+  wall lines in both viewport projects. Release leaves the inclusive line staged;
+  an invalid overlapping line is visibly rejected with no partial buildings or
+  spend. `terrain.spec.ts` retains a generated water fixture for the red invalid
+  footprint/reason and atomic rejection evidence. These cases run in both
+  canonical built base-path matrices. Independent combined-candidate
   gameplay QA remains a separate acceptance gate, not a claim made by this list.
 
 ## M4 deterministic runtime evidence
@@ -148,8 +154,9 @@ gates. See the M4 document for finite measurements and limitations.
   placement callbacks, removal/disposal, effect signatures and current HUD/class
   flow. Narrow DOM doubles complement, rather than replace, browser checks.
 - `src/tests/browser/m5-rendering.spec.ts`: **live built-app** trusted current
-  canvas placement, retained rows/buttons through upgrades and next-tap relocation,
-  whole unaffected row text (including all three controls), departed-row removal,
+  canvas preview-before-commit placement and relocation, retained rows/buttons
+  through upgrades and the separate relocation confirmation, whole unaffected row
+  text (including all three controls), departed-row removal,
   Healing Hut row/aura/listener identity and 3/4/5m presentation, maximum-level
   disabling, overlap rejection, cancellation, selected demolition, pending-action
   reset, stable canvas/health label and no implicit save. Whole-row comparisons

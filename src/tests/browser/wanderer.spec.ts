@@ -397,6 +397,24 @@ const tapCanvas = async (
   else await canvas.click({ position, timeout: 5_000 });
 };
 
+const placeFromCanvas = async (
+  page: Page,
+  xRatio: number,
+  yRatio: number,
+  useTouchPointer: boolean,
+): Promise<void> => {
+  await tapCanvas(page, xRatio, yRatio, useTouchPointer);
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "true");
+  await expect(preview).toHaveAttribute("data-count", "1");
+  await expect(preview).toContainText(/\b1\b/);
+  await expect(preview).toContainText(/cost/i);
+  await expect(preview).toContainText(/tap/i);
+  await expect(page.getByTestId("confirm-placement")).toBeEnabled();
+  await tapCanvas(page, xRatio, yRatio, useTouchPointer);
+};
+
 test("initial browser load uses compact circular actions with accessible hidden panels", async ({
   page,
 }) => {
@@ -767,7 +785,7 @@ test("a Healing Hut is selected and placed through the canvas without moving the
     "Healing Hut selected",
   );
   await expect(page.getByTestId("cancel-placement")).toBeVisible();
-  await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
+  await placeFromCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
 
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await expect(page.getByTestId("placement-message")).toContainText(
@@ -831,7 +849,7 @@ test("invalid canvas placement remains selected, non-mutating, and explains the 
     page,
     page.getByTestId("build-Workshop"),
   );
-  await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
+  await placeFromCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   const before = await resources.textContent();
   if (before === null)
@@ -844,15 +862,22 @@ test("invalid canvas placement remains selected, non-mutating, and explains the 
   );
   await expect(page.getByTestId("character-status-panel")).toBeHidden();
   await tapCanvas(page, 0.5, 0.5, testInfo.project.name === "touch");
-  await expect(page.getByTestId("placement-message")).toContainText(
-    "Building action rejected",
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "false");
+  await expect(preview).toHaveAttribute("data-count", "1");
+  await expect(preview).toContainText(/\b1\b/);
+  await expect(preview).toContainText(/cost/i);
+  await expect(preview).toContainText(/tap/i);
+  await expect(preview).toContainText(/overlap/i);
+  await expect(preview).toContainText(
+    /Rejected: overlaps an existing building/i,
   );
-  await expect(page.getByTestId("placement-message")).toContainText(
-    "overlaps an existing building",
-  );
+  await expect(page.getByTestId("confirm-placement")).toBeDisabled();
   await expect(page.getByTestId("placement-mode")).toContainText(
     "Healing Hut selected",
   );
+  await openBuildMenu(page);
   await expect(page.getByTestId("building-list")).toContainText("Workshop L1");
   await expect(page.getByTestId("building-list")).not.toContainText(
     "Healing Hut L1",

@@ -7,6 +7,10 @@ import {
 import { createGameUi, type UiIntents } from "../../ui/gameUi";
 import type { BuildingState } from "../../domain/types";
 import type { GameUiSnapshot, PlacementResult } from "../../domain/notices";
+import type {
+  PlacementPreview,
+  PlacementRequest,
+} from "../../domain/placement";
 
 /** Narrow DOM-operation double, not a browser substitute. Playwright covers layout,
  * accessibility, trusted canvas input and the actual parsed DOM. */
@@ -392,14 +396,52 @@ const snapshot = (
   savePointLabel: "Home",
   notice: { kind: "session.ready" },
 });
+const previewFor = (request: PlacementRequest): PlacementPreview => {
+  const buildingKind =
+    request.kind === "place" ? request.buildingKind : "Workshop";
+  const tiles =
+    request.kind === "place" && request.endPosition !== undefined
+      ? [
+          { position: request.position, valid: true, rejection: null },
+          { position: request.endPosition, valid: true, rejection: null },
+        ]
+      : [{ position: request.position, valid: true, rejection: null }];
+  return {
+    buildingKind,
+    level: 1,
+    tiles,
+    valid: true,
+    rejection: null,
+    cost: { wood: 3, stone: 2, scrap: 0, essence: 0, bossCore: 0 },
+  };
+};
+
+const resultFor = (request: PlacementRequest): PlacementResult =>
+  request.kind === "place"
+    ? {
+        ok: true,
+        outcome: "placed",
+        building: { ...building("placed"), kind: request.buildingKind },
+      }
+    : {
+        ok: true,
+        outcome: "relocated",
+        building: building(request.buildingId),
+      };
+
 const setupUi = () => {
   installDom();
   const root = new ElementDouble();
   const intents = {
     save: vi.fn(),
     reset: vi.fn(),
-    place: vi.fn<UiIntents["place"]>(),
-    relocate: vi.fn<UiIntents["relocate"]>(),
+    previewPlacement: vi.fn<UiIntents["previewPlacement"]>((request) =>
+      previewFor(request),
+    ),
+    confirmPlacement: vi.fn<UiIntents["confirmPlacement"]>((request) =>
+      resultFor(request),
+    ),
+    resetPlacementInput: vi.fn(),
     upgradeBuilding: vi.fn(),
     demolish: vi.fn(),
     chooseUpgrade: vi.fn(),
@@ -461,6 +503,81 @@ describe("current HUD placement port", () => {
     // already-cancelled placement state.
     cancel.click();
     expect(ui.isWorldPlacementEnabled()).toBe(false);
+    ui.dispose();
+  });
+
+  it("shows live wall ghosts, stages drag-release lines, and commits only on a preview tile tap", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render(snapshot());
+    const woodWall = get("build-buttons").children.find(
+      (button) => button.dataset.testid === "build-WoodWall",
+    );
+    if (woodWall === undefined) throw new Error("Missing Wood Wall choice");
+    woodWall.click();
+    expect(ui.isWallPlacementEnabled()).toBe(true);
+
+    const start = { x: 1, y: 1 };
+    const end = { x: 3, y: 1 };
+    ui.previewWorldPlacement(start, end);
+    expect(ui.hasStagedPlacementPreview()).toBe(false);
+    expect(get("placement-preview").hidden).toBe(true);
+    expect(ui.placementPreview()).not.toBeNull();
+
+    ui.applyWorldPlacement(start, end);
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: end,
+    });
+    expect(get("placement-preview").hidden).toBe(false);
+    expect(get("placement-preview").getAttribute("data-count")).toBe("2");
+    expect(get("placement-preview-message").textContent).toContain(
+      "Release staged this wall line",
+    );
+    expect(get("placement-preview-message").textContent).toContain(
+      "Tap any line tile",
+    );
+
+    ui.applyWorldPlacement(end);
+    expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: end,
+    });
+    expect(ui.isWorldPlacementEnabled()).toBe(false);
+    expect(ui.placementPreview()).toBeNull();
+    ui.dispose();
+  });
+
+  it("refreshes a staged preview only after placement context changes and the bounded refresh interval", () => {
+    let now = 0;
+    vi.stubGlobal("performance", { now: () => now });
+    const { ui, intents, get } = setupUi();
+    const initial = snapshot();
+    ui.render(initial);
+    get("build-buttons").children[0].click();
+    ui.applyWorldPlacement({ x: 2, y: 4 });
+    const afterStage = intents.previewPlacement.mock.calls.length;
+    ui.render(initial);
+    expect(intents.previewPlacement).toHaveBeenCalledTimes(afterStage);
+
+    const changed = {
+      ...initial,
+      resources: { ...initial.resources, wood: initial.resources.wood - 1 },
+    };
+    now = 60;
+    ui.render(changed);
+    expect(intents.previewPlacement).toHaveBeenCalledTimes(afterStage);
+    now = 120;
+    ui.render(changed);
+    expect(intents.previewPlacement).toHaveBeenCalledTimes(afterStage + 1);
+    now = 250;
+    ui.render(changed);
+    expect(intents.previewPlacement).toHaveBeenCalledTimes(afterStage + 1);
+    expect(get("placement-preview").hidden).toBe(false);
     ui.dispose();
   });
 
@@ -578,7 +695,7 @@ describe("current HUD placement port", () => {
     ui.dispose();
   });
 
-  it("retained relocation waits for the latest next tap, retains rejection, and cancels on success/demolition/reset", () => {
+  it("stages relocation previews, never commits a stale tap, and clears on cancel, success, demolition, and reset", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot([building("a"), building("b")]));
     const [a, b] = get("building-list").children;
@@ -593,33 +710,95 @@ describe("current HUD placement port", () => {
     expect(get("placement-mode").textContent).toContain(
       "Healing Hut relocation selected",
     );
-    expect(intents.relocate).not.toHaveBeenCalled();
     expect(ui.isWorldPlacementEnabled()).toBe(true);
-    intents.relocate.mockReturnValue({
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+
+    ui.applyWorldPlacement({ x: 9, y: -4 });
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "relocate",
+      buildingId: "a",
+      position: { x: 9, y: -4 },
+    });
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(get("placement-preview").hidden).toBe(false);
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("true");
+    expect(get("placement-preview").getAttribute("data-count")).toBe("1");
+    expect(get("placement-preview-message").textContent).toContain(
+      "Cost: Wood 3",
+    );
+    expect(get("placement-preview-message").textContent).toContain(
+      "tap elsewhere to reposition",
+    );
+
+    // An off-target tap is a fresh preview, never confirmation of the old tile.
+    ui.applyWorldPlacement({ x: -2, y: 7 });
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "relocate",
+      buildingId: "a",
+      position: { x: -2, y: 7 },
+    });
+    ui.applyWorldPlacement({ x: 9, y: -4 });
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+
+    intents.confirmPlacement.mockReturnValueOnce({
       ok: false,
       rejection: { kind: "overlaps-existing-building" },
     });
-    ui.applyWorldPlacement({ x: 9, y: -4 });
-    expect(intents.relocate).toHaveBeenLastCalledWith("a", { x: 9, y: -4 });
-    const rejected = get("placement-message").textContent;
-    expect(rejected).toContain("overlaps an existing building");
-    ui.render(
-      snapshot([{ ...building("a"), kind: "Healer" }, building("b", 5)]),
-    );
-    expect(get("placement-message").textContent).toBe(rejected);
-    expect(ui.isWorldPlacementEnabled()).toBe(true);
-    intents.relocate.mockReturnValue({
-      ok: true,
-      outcome: "relocated",
-      building: building("a"),
+    intents.previewPlacement.mockImplementationOnce((request) => {
+      const preview = previewFor(request);
+      const rejection = { kind: "overlaps-existing-building" } as const;
+      return {
+        ...preview,
+        valid: false,
+        rejection,
+        tiles: preview.tiles.map((tile) => ({
+          ...tile,
+          valid: false,
+          rejection,
+        })),
+      };
     });
-    ui.applyWorldPlacement({ x: -2, y: 7 });
-    expect(intents.relocate).toHaveBeenLastCalledWith("a", { x: -2, y: 7 });
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith({
+      kind: "relocate",
+      buildingId: "a",
+      position: { x: 9, y: -4 },
+    });
+    expect(get("placement-message").textContent).toContain(
+      "overlaps an existing building",
+    );
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("false");
+    expect(get("placement-preview-message").textContent).toContain(
+      "Rejected: overlaps an existing building",
+    );
+    expect(get("confirm-placement").disabled).toBe(true);
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).toHaveBeenCalledOnce();
+    expect(ui.isWorldPlacementEnabled()).toBe(true);
+
+    const cancel = get("cancel-placement");
+    expect(cancel.hidden).toBe(false);
+    expect(cancel.getAttribute("aria-label")).toBe("Cancel placement");
+    cancel.click();
     expect(ui.isWorldPlacementEnabled()).toBe(false);
-    move.click();
-    get("cancel-placement").click();
+    expect(get("placement-preview").hidden).toBe(true);
+    expect(ui.placementPreview()).toBeNull();
     ui.applyWorldPlacement({ x: 99, y: 99 });
-    expect(intents.relocate).toHaveBeenCalledTimes(2);
+    expect(intents.confirmPlacement).toHaveBeenCalledOnce();
+
+    move.click();
+    ui.applyWorldPlacement({ x: -2, y: 7 });
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).toHaveBeenCalledTimes(2);
+    expect(intents.confirmPlacement).toHaveBeenLastCalledWith({
+      kind: "relocate",
+      buildingId: "a",
+      position: { x: -2, y: 7 },
+    });
+    expect(ui.isWorldPlacementEnabled()).toBe(false);
+    expect(get("placement-preview").hidden).toBe(true);
+
     move.click();
     b.children[3].click();
     expect(ui.isWorldPlacementEnabled()).toBe(true);
@@ -633,7 +812,7 @@ describe("current HUD placement port", () => {
     get("new-world").click();
     expect(intents.reset).toHaveBeenCalledExactlyOnceWith("reset-seed");
     expect(ui.isWorldPlacementEnabled()).toBe(false);
-    expect(get("placement-message").textContent).toBe("");
+    expect(get("placement-preview").hidden).toBe(true);
     ui.render(snapshot());
     expect(get("building-list").children).toHaveLength(0);
     move.click();
@@ -664,7 +843,7 @@ describe("current HUD placement port", () => {
     get("build-menu-toggle").click();
     get("build-buttons").children[0].click();
     expect(ui.isWorldPlacementEnabled()).toBe(true);
-    expect(intents.place).not.toHaveBeenCalled();
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
     for (const name of [
       "build-menu",
       "character-status",
@@ -680,11 +859,15 @@ describe("current HUD placement port", () => {
       outcome: "placed",
       building: { ...building("c"), kind: "Campfire" },
     };
-    intents.place.mockReturnValue(placed);
+    intents.confirmPlacement.mockReturnValue(placed);
     ui.applyWorldPlacement({ x: 3, y: 8 });
-    expect(intents.place).toHaveBeenCalledExactlyOnceWith("Campfire", {
-      x: 3,
-      y: 8,
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(get("placement-preview").hidden).toBe(false);
+    ui.applyWorldPlacement({ x: 3, y: 8 });
+    expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith({
+      kind: "place",
+      buildingKind: "Campfire",
+      position: { x: 3, y: 8 },
     });
     expect(ui.isWorldPlacementEnabled()).toBe(false);
     expect(get("placement-message").textContent).toContain("Campfire placed");

@@ -6,27 +6,40 @@ import {
   openKnownClosedBuild,
   openM5World,
   openStatus,
+  placeWorldPosition,
   tapWorldPosition,
 } from "./m5-test-helpers";
 
 // Failure watchdog only; there are no sleep-based progression or retry loops.
 test.setTimeout(150_000);
 
-test("M5 live DOM retains rows through updates and current next-tap relocation, removing only departed rows", async ({
+test("M5 live DOM retains rows through updates and previewed relocation, removing only departed rows", async ({
   page,
-}) => {
+}, testInfo) => {
   await openM5World(page);
   const player = await captureFreshStationaryM5Projection(page);
   await openBuild(page);
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, player, 1, 1);
+  await placeWorldPosition(
+    page,
+    player,
+    1,
+    1,
+    testInfo.project.name === "touch",
+  );
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   const list = page.getByTestId("building-list");
   await expect(list.locator(".building-row")).toHaveCount(1);
   await expectRowPosition(list.locator(".building-row").nth(0), 1, 1);
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, player, 4, 0);
+  await placeWorldPosition(
+    page,
+    player,
+    4,
+    0,
+    testInfo.project.name === "touch",
+  );
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   const rows = list.locator(".building-row");
@@ -74,13 +87,28 @@ test("M5 live DOM retains rows through updates and current next-tap relocation, 
   await expect(page.getByTestId("placement-mode")).toContainText(
     "Campfire relocation selected",
   );
+  const relocationResources = await page.getByTestId("resources").textContent();
+  if (relocationResources === null)
+    throw new Error("Resources were not available before relocation");
   await expect(page.getByTestId("build-menu-panel")).toBeHidden();
-  // A different next tap, not the old build coordinate, is authoritative.
-  await tapWorldPosition(page, player, 1, 0);
+  // First tap stages relocation without changing the retained row; the
+  // subsequent tap on that preview tile is the separate commit action.
+  await tapWorldPosition(page, player, 1, 0, testInfo.project.name === "touch");
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "true");
+  await openBuild(page);
+  await expect(rows).toHaveCount(2);
+  await expectRowPosition(rows.nth(0), 1, 1);
+  await expect(page.getByTestId("resources")).toHaveText(relocationResources);
+  await page.getByTestId("close-build-menu").click();
+  await tapWorldPosition(page, player, 1, 0, testInfo.project.name === "touch");
   await expect(page.getByTestId("placement-mode")).toHaveAttribute(
     "hidden",
     "",
   );
+  await expect(page.getByTestId("placement-preview")).toBeHidden();
+  await expect(page.getByTestId("resources")).toHaveText(relocationResources);
   await expect(page.locator(".world-host")).toHaveAttribute(
     "data-placement-mode",
     "inactive",
@@ -198,12 +226,18 @@ test("M5 projects retained accessible enemy HP bars from live renderer snapshots
 
 test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancellation and selected demolition", async ({
   page,
-}) => {
+}, testInfo) => {
   await openM5World(page);
   const player = await captureFreshStationaryM5Projection(page);
   await openBuild(page);
   await page.getByTestId("build-Healer").click();
-  await tapWorldPosition(page, player, 1, 1);
+  await placeWorldPosition(
+    page,
+    player,
+    1,
+    1,
+    testInfo.project.name === "touch",
+  );
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openStatus(page);
   await expect(page.getByTestId("position")).toHaveText(player.positionText);
@@ -240,14 +274,34 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
     row.getByRole("button", { name: "Upgrade", exact: true }),
   ).toBeDisabled();
   await page.getByTestId("build-Campfire").click();
-  await tapWorldPosition(page, player, 4, 0);
+  await placeWorldPosition(
+    page,
+    player,
+    4,
+    0,
+    testInfo.project.name === "touch",
+  );
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
   await relocate.click();
-  await tapWorldPosition(page, player, 4, 0);
-  await expect(page.getByTestId("placement-message")).toContainText(
-    "overlaps an existing building",
+  await tapWorldPosition(page, player, 4, 0, testInfo.project.name === "touch");
+  await expect(page.getByTestId("placement-preview")).toBeVisible();
+  await expect(page.getByTestId("placement-preview")).toHaveAttribute(
+    "data-valid",
+    "false",
   );
+  await expect(page.getByTestId("placement-preview")).toHaveAttribute(
+    "data-count",
+    "1",
+  );
+  await expect(page.getByTestId("placement-preview")).toContainText(/\b1\b/);
+  await expect(page.getByTestId("placement-preview")).toContainText(/cost/i);
+  await expect(page.getByTestId("placement-preview")).toContainText(/tap/i);
+  await expect(page.getByTestId("placement-preview")).toContainText(/overlap/i);
+  await expect(page.getByTestId("placement-preview")).toContainText(
+    /Rejected: overlaps an existing building/i,
+  );
+  await expect(page.getByTestId("confirm-placement")).toBeDisabled();
   const placementMode = page.getByTestId("placement-mode");
   expect(await placementMode.textContent()).toContain(
     "Healing Hut relocation selected",
@@ -263,6 +317,7 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
   expect(await rowHandle.evaluate((node) => node.isConnected)).toBe(true);
   await page.getByTestId("cancel-placement").click();
   await expect(page.getByTestId("placement-mode")).toBeHidden();
+  await expect(page.getByTestId("placement-preview")).toBeHidden();
   await relocate.click();
   await openBuild(page);
   await row.getByRole("button", { name: "Demolish", exact: true }).click();
@@ -280,10 +335,11 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
 
 // This remains a live public reset assertion, isolated from the long retention
 // journey so incidental progression choices cannot consume its fixed watchdog.
-test("M5 reset cancels a pending next-tap operation and clears feedback without persistence", async ({
+test("M5 reset cancels a staged placement preview and clears feedback without persistence", async ({
   page,
-}) => {
+}, testInfo) => {
   await openM5World(page);
+  const player = await captureFreshStationaryM5Projection(page);
   await openBuild(page);
   await page.getByTestId("build-Campfire").click();
   const placementMode = page.getByTestId("placement-mode");
@@ -293,9 +349,19 @@ test("M5 reset cancels a pending next-tap operation and clears feedback without 
     "data-placement-mode",
     "active",
   );
+  await tapWorldPosition(page, player, 1, 1, testInfo.project.name === "touch");
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "true");
   await openStatus(page);
+  // Open HUD panels own their pointer surface even while a preview is staged.
+  // A real click catches feedback-layer occlusion across font/viewport layouts.
+  await page.getByTestId("seed").click({ timeout: 5_000 });
+  await expect(preview).toHaveAttribute("data-count", "1");
+  await expect(preview).toHaveAttribute("data-valid", "true");
   await page.getByTestId("new-world").click();
   await expect(placementMode).toBeHidden();
+  await expect(preview).toBeHidden();
   await expect(page.getByTestId("placement-message")).toBeEmpty();
   await expect(page.locator(".world-host")).toHaveAttribute(
     "data-placement-mode",

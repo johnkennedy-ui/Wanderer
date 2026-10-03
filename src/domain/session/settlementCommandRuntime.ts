@@ -26,7 +26,7 @@ export type SettlementCommand =
   | { readonly kind: "upgrade"; readonly id: string }
   | { readonly kind: "demolish"; readonly id: string };
 
-const placementInputsFor = ({
+export const placementInputsFor = ({
   settlement,
   world,
   position,

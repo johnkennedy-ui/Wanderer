@@ -1,12 +1,11 @@
 import { GameSession } from "../domain/GameSession";
 import type {
   AllocatablePlayerStatKind,
-  BuildingKind,
   ClassSkillId,
   PlayerClass,
   UpgradeId,
-  Vector2,
 } from "../domain/types";
+import type { PlacementRequest } from "../domain/placement";
 import { createBuildPlacementInput } from "../platform/input/buildPlacementInput";
 import { createKeyboardInput } from "../platform/input/keyboardInput";
 import { createTapToMoveInput } from "../platform/input/tapToMoveInput";
@@ -43,6 +42,7 @@ export const createGameApplication = async (
   let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
   const scheduler = createBrowserFrameScheduler();
   let disposed = false;
+  let resetPlacementInput = (): void => {};
 
   const saveIntent = createCampfireSaveIntent(
     session,
@@ -62,11 +62,14 @@ export const createGameApplication = async (
       platformMessage =
         "New deterministic runtime started. Existing browser saves are untouched until a fresh load; this action did not save.";
     },
-    place(kind: BuildingKind, position: Vector2) {
-      return session.placeBuilding(kind, position);
+    previewPlacement(request: PlacementRequest) {
+      return session.previewBuildingPlacement(request);
     },
-    relocate(id: string, position: Vector2) {
-      return session.relocateBuilding(id, position);
+    confirmPlacement(request: PlacementRequest) {
+      return session.commitBuildingPlacement(request);
+    },
+    resetPlacementInput(): void {
+      resetPlacementInput();
     },
     upgradeBuilding(id: string): void {
       session.upgradeBuilding(id);
@@ -102,8 +105,15 @@ export const createGameApplication = async (
     renderer.canvas,
     renderer.worldPositionFromClientPoint,
     ui.isWorldPlacementEnabled,
-    (position) => ui.applyWorldPlacement(position),
+    ui.isWallPlacementEnabled,
+    {
+      tap: (position) => ui.applyWorldPlacement(position),
+      previewWallDrag: (start, end) => ui.previewWorldPlacement(start, end),
+      stageWallDrag: (start, end) => ui.applyWorldPlacement(start, end),
+      clearWallDragPreview: () => ui.clearWorldPlacementDraft(),
+    },
   );
+  resetPlacementInput = buildPlacement.reset;
   const lifecycle = createBrowserLifecycle((message) => {
     platformMessage = message;
   });
@@ -118,8 +128,16 @@ export const createGameApplication = async (
         (stepSeconds) => session.tick(stepSeconds),
       );
       const presentation = session.presentation();
-      renderer.render(presentation.renderer);
-      ui.render(presentation.ui);
+      const placementValidationKey = ui.hasStagedPlacementPreview()
+        ? JSON.stringify([
+            presentation.renderer.presentationResetId,
+            presentation.renderer.enemies
+              .filter((enemy) => !enemy.defeated && enemy.hp > 0)
+              .map((enemy) => [enemy.id, enemy.position.x, enemy.position.y]),
+          ])
+        : undefined;
+      ui.render(presentation.ui, placementValidationKey);
+      renderer.render(presentation.renderer, ui.placementPreview());
       ui.showTransient(platformMessage);
     },
   );

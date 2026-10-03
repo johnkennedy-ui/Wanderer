@@ -79,8 +79,13 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
       chooseClassSkill() {},
       allocateStat() {},
       setSimulationSpeed() {},
-      place: () => ({ ok: false, rejection: { kind: "blocked-terrain" } }),
-      relocate: () => ({ ok: false, rejection: { kind: "unknown-building" } }),
+      previewPlacement() {
+        throw new Error("This HUD-only fixture must not preview placement.");
+      },
+      confirmPlacement() {
+        throw new Error("This HUD-only fixture must not commit placement.");
+      },
+      resetPlacementInput() {},
     };
     const ui = createGameUi(first, intents);
     const other = createGameUi(second, intents);

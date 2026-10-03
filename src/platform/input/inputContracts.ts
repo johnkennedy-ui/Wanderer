@@ -15,5 +15,10 @@ export type MoveSink = (command: MoveCommand) => void;
 /** Receives explicit destination commands without exposing session ownership. */
 export type DestinationSink = (command: DestinationCommand) => void;
 
-/** Receives a canvas-derived world position for a UI-owned placement mode. */
-export type WorldPlacementSink = (position: Vector2) => void;
+/** Receives explicit, disposable placement pointer gestures for the UI. */
+export interface WorldPlacementSink {
+  tap(position: Vector2): void;
+  previewWallDrag(start: Vector2, end: Vector2): void;
+  stageWallDrag(start: Vector2, end: Vector2): void;
+  clearWallDragPreview(): void;
+}

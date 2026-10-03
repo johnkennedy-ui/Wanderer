@@ -62,9 +62,12 @@ export const choosePendingClassChoicesIfOpen = async (
 /** Only opt in where modals are incidental. Predictable class/boss acceptance
  * tests keep their own selections. No visibility-check/action retry wrapper,
  * arbitrary global choice cap, hidden click or swallowed failure. */
+const pagesWithIncidentalChoiceHandlers = new WeakSet<Page>();
+
 export const installIncidentalChoiceHandlers = async (
   page: Page,
 ): Promise<void> => {
+  if (pagesWithIncidentalChoiceHandlers.has(page)) return;
   await page.addLocatorHandler(
     page.getByTestId("class-modal"),
     // The class modal remains visible through its sequential skill choices.
@@ -91,6 +94,17 @@ export const installIncidentalChoiceHandlers = async (
       // dedicated manual-choice acceptance scenarios instead.
     },
   );
+  pagesWithIncidentalChoiceHandlers.add(page);
+};
+
+/** Page.mouse gestures bypass locator auto-handlers, so drain any already-open
+ * incidental choice overlay immediately before a raw canvas interaction. */
+export const resolveIncidentalChoiceOverlays = async (
+  page: Page,
+): Promise<void> => {
+  await installIncidentalChoiceHandlers(page);
+  await expect(page.getByTestId("class-modal")).toBeHidden();
+  await expect(page.getByTestId("upgrade-modal")).toBeHidden();
 };
 
 export const openM5World = async (page: Page): Promise<void> => {
@@ -118,7 +132,7 @@ export const openM5World = async (page: Page): Promise<void> => {
   // exercised against the real DOM consumer, including an explicit XP value.
 };
 
-type FreshStationaryM5Projection = Readonly<{
+export type FreshStationaryM5Projection = Readonly<{
   x: number;
   y: number;
   positionText: string;
@@ -141,17 +155,17 @@ export const captureFreshStationaryM5Projection = async (
 /** Project a desired world point to a trusted canvas click using the released
  * camera constants and a fresh, visibly observed player position. This is not
  * a gameplay hook or coordinate-entry UI. */
-export const tapWorldPosition = async (
+const projectWorldPosition = async (
   page: Page,
   player: FreshStationaryM5Projection,
   x: number,
   y: number,
-): Promise<void> => {
-  await expect(page.getByTestId("placement-mode")).toBeVisible();
-  await expect(page.getByTestId("character-status-panel")).toBeHidden();
-  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+): Promise<{
+  canvas: Locator;
+  bounds: NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+  position: { x: number; y: number };
+}> => {
   const canvas = page.getByTestId("world-canvas");
-  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
   const bounds = await canvas.boundingBox();
   if (bounds === null) throw new Error("World canvas was not laid out");
   const tuning = defaultThreeCameraTuning;
@@ -177,7 +191,26 @@ export const tapWorldPosition = async (
   expect(position.x).toBeLessThan(bounds.width);
   expect(position.y).toBeGreaterThan(0);
   expect(position.y).toBeLessThan(bounds.height);
-  await canvas.click({ position });
+  return { canvas, bounds, position };
+};
+
+/** Send one ordinary canvas tap. In placement mode that only stages or repositions
+ * the public preview; confirmation is a separate user action. */
+export const tapWorldPosition = async (
+  page: Page,
+  player: FreshStationaryM5Projection,
+  x: number,
+  y: number,
+  touch = false,
+): Promise<void> => {
+  await expect(page.getByTestId("placement-mode")).toBeVisible();
+  await expect(page.getByTestId("character-status-panel")).toBeHidden();
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  const { canvas, position } = await projectWorldPosition(page, player, x, y);
+  await resolveIncidentalChoiceOverlays(page);
+  await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
+  if (touch) await canvas.tap({ position });
+  else await canvas.click({ position });
   await expect
     .poll(() =>
       page
@@ -186,6 +219,53 @@ export const tapWorldPosition = async (
     )
     .toBe(player.positionText);
   await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
+};
+
+/** A genuine pointer drag releases into a staged line; it never commits. */
+export const dragWorldLine = async (
+  page: Page,
+  player: FreshStationaryM5Projection,
+  start: Readonly<{ x: number; y: number }>,
+  end: Readonly<{ x: number; y: number }>,
+): Promise<void> => {
+  await expect(page.getByTestId("placement-mode")).toBeVisible();
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  const from = await projectWorldPosition(page, player, start.x, start.y);
+  const to = await projectWorldPosition(page, player, end.x, end.y);
+  await from.canvas.scrollIntoViewIfNeeded();
+  await resolveIncidentalChoiceOverlays(page);
+  await page.mouse.move(
+    from.bounds.x + from.position.x,
+    from.bounds.y + from.position.y,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    to.bounds.x + to.position.x,
+    to.bounds.y + to.position.y,
+    {
+      steps: 8,
+    },
+  );
+  await page.mouse.up();
+};
+
+/** The initial tap stages; the following tap is the distinct commit action. */
+export const placeWorldPosition = async (
+  page: Page,
+  player: FreshStationaryM5Projection,
+  x: number,
+  y: number,
+  touch = false,
+): Promise<void> => {
+  await tapWorldPosition(page, player, x, y, touch);
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "true");
+  await expect(preview).toHaveAttribute("data-count", "1");
+  await expect(preview).toContainText(/\b1\b/);
+  await expect(preview).toContainText(/cost/i);
+  await expect(preview).toContainText(/tap/i);
+  await tapWorldPosition(page, player, x, y, touch);
 };
 
 export const expectRowPosition = async (

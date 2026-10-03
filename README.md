@@ -82,7 +82,11 @@ for current schema-4 storage and frozen schema-2/schema-3 compatibility, and
 - normal, elite, and boss drops; ten boss upgrades including additive,
   multiplicative, and Chain Strike hit-resolution behavior;
 - exactly Campfire, Workshop, Farm, Storage, and Healer, each with real L1-L3
-  effects, placement, relocation, upgrades, and demolition/refunds; and
+  effects, placement, relocation, upgrades, and demolition/refunds;
+- preview-first building placement and relocation: the first tap shows a
+  translucent footprint, a second tap on the preview or Confirm commits, and X
+  cancels; wall drags stage one straight grid line, with invalid cells shown red
+  and the whole line rejected atomically; and
 - explicit campfire-only schema-4 browser saves (with schema-2/schema-3 recovery) plus
   save-point respawn, 25% carried-resource death loss,
   temporary/primary/backup recovery, and no automatic persistence.

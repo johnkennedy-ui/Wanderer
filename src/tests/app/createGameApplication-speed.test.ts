@@ -90,6 +90,11 @@ const setup = async () => {
   const ui = {
     worldHost: {} as HTMLElement,
     isWorldPlacementEnabled: vi.fn(() => false),
+    isWallPlacementEnabled: vi.fn(() => false),
+    hasStagedPlacementPreview: vi.fn(() => false),
+    placementPreview: vi.fn(() => null),
+    previewWorldPlacement: vi.fn(),
+    clearWorldPlacementDraft: vi.fn(),
     applyWorldPlacement: vi.fn(),
     render: vi.fn<GameUi["render"]>(),
     showTransient: vi.fn(),
@@ -104,7 +109,7 @@ const setup = async () => {
   } satisfies ThreeRenderer;
   const keyboard = { dispose: vi.fn() };
   const tap = { dispose: vi.fn() };
-  const placement = { dispose: vi.fn() };
+  const placement = { reset: vi.fn(), dispose: vi.fn() };
   vi.mocked(createAsyncBrowserSaveStorage).mockReturnValue(storage);
   vi.mocked(createBrowserFrameScheduler).mockReturnValue(scheduler);
   vi.mocked(createBrowserLifecycle).mockReturnValue(lifecycle);

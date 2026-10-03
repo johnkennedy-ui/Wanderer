@@ -6,7 +6,12 @@ import {
   upgradeDefinitionFor,
   weaponRelicDefinitionFor,
 } from "../data/definitions";
-import type { GameUiSnapshot, PlacementResult } from "../domain/notices";
+import type {
+  GameUiSnapshot,
+  PlacementRejection,
+  PlacementResult,
+} from "../domain/notices";
+import type { PlacementPreview, PlacementRequest } from "../domain/placement";
 import { buildingKinds, maximumClassSkillTier } from "../domain/types";
 import type {
   AllocatablePlayerStatKind,
@@ -19,6 +24,7 @@ import type {
 import {
   presentGameNotice,
   presentPlacementNotice,
+  presentPlacementRejection,
   presentPlacementResult,
 } from "./noticePresentation";
 import {
@@ -32,8 +38,9 @@ import { attachTouchSafeActivation } from "./touchActivation";
 export interface UiIntents {
   save(): void;
   reset(seed: string): void;
-  place(kind: BuildingKind, position: Vector2): PlacementResult;
-  relocate(id: string, position: Vector2): PlacementResult;
+  previewPlacement(request: PlacementRequest): PlacementPreview;
+  confirmPlacement(request: PlacementRequest): PlacementResult;
+  resetPlacementInput(): void;
   upgradeBuilding(id: string): void;
   demolish(id: string): void;
   chooseUpgrade(id: UpgradeId): void;
@@ -61,8 +68,13 @@ type PlacementMode =
 export interface GameUi {
   readonly worldHost: HTMLElement;
   isWorldPlacementEnabled(): boolean;
-  applyWorldPlacement(position: Vector2): void;
-  render(snapshot: GameUiSnapshot): void;
+  isWallPlacementEnabled(): boolean;
+  hasStagedPlacementPreview(): boolean;
+  placementPreview(): PlacementPreview | null;
+  previewWorldPlacement(start: Vector2, end: Vector2): void;
+  clearWorldPlacementDraft(): void;
+  applyWorldPlacement(position: Vector2, endPosition?: Vector2): void;
+  render(snapshot: GameUiSnapshot, placementValidationKey?: string): void;
   showTransient(message: string): void;
   dispose(): void;
 }
@@ -92,10 +104,103 @@ const resourcePlaceholderIcons = {
 const placementModeDescription = (mode: PlacementMode): string => {
   if (mode === null) return "Placement mode inactive.";
   const label = buildingDefinitions[mode.buildingKind].label;
+  const interaction =
+    mode.kind === "place" &&
+    (mode.buildingKind === "WoodWall" || mode.buildingKind === "StoneWall")
+      ? "Drag to preview a straight wall line, release to stage it, then tap a line tile or Confirm."
+      : "Tap once to stage a preview; tap its tile again or Confirm to place. Tap elsewhere to reposition.";
   return mode.kind === "place"
-    ? `${label} selected. Tap an open location in the world to place it; placement snaps to the nearest 1m tile centre.`
-    : `${label} relocation selected. Tap an open location in the world to move it; placement snaps to the nearest 1m tile centre.`;
+    ? `${label} selected. ${interaction} Placement snaps to 1m tile centres.`
+    : `${label} relocation selected. ${interaction} Placement snaps to 1m tile centres.`;
 };
+
+const placementRefreshIntervalMs = 120;
+
+const samePosition = (left: Vector2, right: Vector2): boolean =>
+  Math.abs(left.x - right.x) < 1e-4 && Math.abs(left.y - right.y) < 1e-4;
+
+const formatPlacementCost = (cost: PlacementPreview["cost"]): string => {
+  const labels = [
+    ["wood", "Wood"],
+    ["stone", "Stone"],
+    ["scrap", "Metal / Scrap"],
+    ["essence", "Essence"],
+    ["bossCore", "Boss Core"],
+  ] as const;
+  const entries = labels
+    .filter(([kind]) => cost[kind] > 0)
+    .map(([kind, label]) => label + " " + cost[kind]);
+  return entries.length === 0 ? "none" : entries.join(" · ");
+};
+
+const rejectionForPreview = (
+  preview: PlacementPreview,
+): PlacementRejection | null =>
+  preview.rejection ??
+  preview.tiles.find((tile) => !tile.valid)?.rejection ??
+  null;
+
+const hasPreviewTile = (
+  preview: PlacementPreview,
+  position: Vector2,
+): boolean =>
+  preview.tiles.some((tile) => samePosition(tile.position, position));
+
+const previewsOverlap = (
+  left: PlacementPreview,
+  right: PlacementPreview,
+): boolean => left.tiles.some((tile) => hasPreviewTile(right, tile.position));
+
+const previewMessage = (
+  request: PlacementRequest,
+  preview: PlacementPreview,
+): string => {
+  const rejection = rejectionForPreview(preview);
+  const draggedLine =
+    request.kind === "place" && request.endPosition !== undefined;
+  const action = draggedLine
+    ? "Release staged this wall line."
+    : "Preview staged.";
+  const instructions = draggedLine
+    ? "Tap any line tile or Confirm to build; tap elsewhere to reposition."
+    : "Tap a preview tile again or Confirm to place; tap elsewhere to reposition.";
+  const result =
+    (preview.valid ? "Valid" : "Invalid") +
+    " · " +
+    preview.tiles.length +
+    " tile" +
+    (preview.tiles.length === 1 ? "" : "s") +
+    " · Cost: " +
+    formatPlacementCost(preview.cost) +
+    ". ";
+  return (
+    result +
+    (rejection === null
+      ? action
+      : "Rejected: " + presentPlacementRejection(rejection) + ".") +
+    " " +
+    instructions
+  );
+};
+
+const placementClock = (): number =>
+  typeof performance === "undefined" ? Date.now() : performance.now();
+
+const placementRequestFor = (
+  mode: Exclude<PlacementMode, null>,
+  position: Vector2,
+  endPosition?: Vector2,
+): PlacementRequest =>
+  mode.kind === "relocate"
+    ? { kind: "relocate", buildingId: mode.buildingId, position }
+    : endPosition === undefined
+      ? { kind: "place", buildingKind: mode.buildingKind, position }
+      : {
+          kind: "place",
+          buildingKind: mode.buildingKind,
+          position,
+          endPosition,
+        };
 
 export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   root.replaceChildren();
@@ -185,7 +290,11 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     </section>
     <section class="placement-feedback" data-testid="placement-feedback" aria-label="Building placement feedback">
       <p data-testid="placement-mode" class="placement-mode" role="status" aria-live="polite">Placement mode inactive.</p>
-      <button type="button" data-testid="cancel-placement" class="placement-cancel" hidden>Cancel placement</button>
+      <button type="button" data-testid="cancel-placement" class="placement-cancel" aria-label="Cancel placement" title="Cancel placement" hidden>×</button>
+      <div data-testid="placement-preview" class="placement-preview" data-valid="false" data-count="0" role="status" aria-live="polite" hidden>
+        <p data-testid="placement-preview-message"></p>
+        <button type="button" data-testid="confirm-placement" aria-label="Confirm placement" disabled>Confirm</button>
+      </div>
       <p data-testid="placement-message" class="subtle" aria-live="polite"></p>
     </section>
     <section class="upgrade-modal" data-testid="upgrade-modal" hidden aria-live="assertive">
@@ -218,6 +327,11 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const placementMessage = byTestId<HTMLParagraphElement>("placement-message");
   const placementModeElement = byTestId<HTMLParagraphElement>("placement-mode");
   const cancelPlacement = byTestId<HTMLButtonElement>("cancel-placement");
+  const placementPreviewElement = byTestId<HTMLDivElement>("placement-preview");
+  const placementPreviewMessage = byTestId<HTMLParagraphElement>(
+    "placement-preview-message",
+  );
+  const confirmPlacement = byTestId<HTMLButtonElement>("confirm-placement");
   const upgradeModal = byTestId<HTMLElement>("upgrade-modal");
   const upgradeChoices = byTestId<HTMLDivElement>("upgrade-choices");
   const classModal = byTestId<HTMLElement>("class-modal");
@@ -270,12 +384,128 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let settingsVisible = false;
   let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
   let placementMode: PlacementMode = null;
+  let stagedPlacement: {
+    readonly request: PlacementRequest;
+    readonly preview: PlacementPreview;
+    readonly contextKey: string;
+  } | null = null;
+  let draftPlacement: {
+    readonly request: PlacementRequest;
+    readonly preview: PlacementPreview;
+  } | null = null;
+  let currentPlacementContextKey = "";
+  let lastPreviewRefreshAt = Number.NEGATIVE_INFINITY;
   let placementFeedback = "";
   let disposed = false;
 
   const setPlacementFeedback = (message: string): void => {
     placementFeedback = message;
     text(placementMessage, message);
+  };
+
+  const renderPlacementPreview = (): void => {
+    const staged = stagedPlacement;
+    placementPreviewElement.hidden = staged === null || placementMode === null;
+    if (staged === null || placementMode === null) {
+      setAttribute(placementPreviewElement, "data-valid", "false");
+      setAttribute(placementPreviewElement, "data-count", "0");
+      confirmPlacement.disabled = true;
+      text(placementPreviewMessage, "");
+      return;
+    }
+    setAttribute(
+      placementPreviewElement,
+      "data-valid",
+      String(staged.preview.valid),
+    );
+    setAttribute(
+      placementPreviewElement,
+      "data-count",
+      String(staged.preview.tiles.length),
+    );
+    confirmPlacement.disabled = !staged.preview.valid;
+    text(
+      placementPreviewMessage,
+      previewMessage(staged.request, staged.preview),
+    );
+  };
+
+  const clearPlacementPreview = (): void => {
+    stagedPlacement = null;
+    draftPlacement = null;
+    renderPlacementPreview();
+  };
+
+  const stagePlacement = (
+    request: PlacementRequest,
+    preview: PlacementPreview,
+  ): void => {
+    stagedPlacement = {
+      request,
+      preview,
+      contextKey: currentPlacementContextKey,
+    };
+    draftPlacement = null;
+    lastPreviewRefreshAt = placementClock();
+    setPlacementFeedback("");
+    renderPlacementPreview();
+  };
+
+  const confirmStagedPlacement = (): void => {
+    const staged = stagedPlacement;
+    if (disposed || staged === null || !staged.preview.valid) return;
+    const result = intents.confirmPlacement(staged.request);
+    setPlacementFeedback(presentPlacementResult(result));
+    if (result.ok) {
+      setPlacementMode(null);
+      return;
+    }
+    stagedPlacement = {
+      request: staged.request,
+      preview: intents.previewPlacement(staged.request),
+      contextKey: currentPlacementContextKey,
+    };
+    lastPreviewRefreshAt = placementClock();
+    renderPlacementPreview();
+  };
+
+  const refreshStagedPlacement = (
+    snapshot: GameUiSnapshot,
+    validationKey?: string,
+  ): void => {
+    currentPlacementContextKey = JSON.stringify([
+      snapshot.world.seed,
+      snapshot.world.generatorVersion,
+      snapshot.player.position.x,
+      snapshot.player.position.y,
+      snapshot.resources.wood,
+      snapshot.resources.stone,
+      snapshot.resources.scrap,
+      snapshot.resources.essence,
+      snapshot.resources.bossCore,
+      snapshot.buildRadius,
+      snapshot.buildings.map((building) => [
+        building.id,
+        building.kind,
+        building.level,
+        building.position.x,
+        building.position.y,
+      ]),
+      validationKey ?? null,
+    ]);
+    const staged = stagedPlacement;
+    if (staged === null || staged.contextKey === currentPlacementContextKey)
+      return;
+    const now = placementClock();
+    if (now - lastPreviewRefreshAt < placementRefreshIntervalMs) return;
+    stagedPlacement = {
+      request: staged.request,
+      preview: intents.previewPlacement(staged.request),
+      contextKey: currentPlacementContextKey,
+    };
+    lastPreviewRefreshAt = now;
+    setPlacementFeedback("");
+    renderPlacementPreview();
   };
 
   const setStatusPanelVisible = (visible: boolean): void => {
@@ -312,6 +542,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     intents.setSimulationSpeed(multiplier);
   };
   const setPlacementMode = (mode: PlacementMode): void => {
+    intents.resetPlacementInput();
+    clearPlacementPreview();
     placementMode = mode;
     worldHost.dataset.placementMode = mode === null ? "inactive" : "active";
     placementModeElement.hidden = mode === null;
@@ -327,6 +559,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
             button.dataset.testid === `build-${mode.buildingKind}`,
         ),
       );
+    renderPlacementPreview();
   };
   statusPanelToggle.addEventListener("click", () => {
     setSettingsVisible(false);
@@ -401,6 +634,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setSettingsVisible(false);
   };
   attachTouchSafeActivation(cancelPlacement, () => setPlacementMode(null));
+  attachTouchSafeActivation(confirmPlacement, confirmStagedPlacement);
   const attachBuildChoiceActivation = (
     button: HTMLButtonElement,
     kind: BuildingKind,
@@ -505,21 +739,62 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     isWorldPlacementEnabled(): boolean {
       return placementMode !== null;
     },
-    applyWorldPlacement(position: Vector2): void {
+    isWallPlacementEnabled(): boolean {
+      return (
+        placementMode?.kind === "place" &&
+        (placementMode.buildingKind === "WoodWall" ||
+          placementMode.buildingKind === "StoneWall")
+      );
+    },
+    hasStagedPlacementPreview(): boolean {
+      return stagedPlacement !== null;
+    },
+    placementPreview(): PlacementPreview | null {
+      return draftPlacement?.preview ?? stagedPlacement?.preview ?? null;
+    },
+    previewWorldPlacement(start: Vector2, end: Vector2): void {
+      const mode = placementMode;
+      if (disposed || mode?.kind !== "place" || !this.isWallPlacementEnabled())
+        return;
+      const request = placementRequestFor(mode, start, end);
+      draftPlacement = { request, preview: intents.previewPlacement(request) };
+    },
+    clearWorldPlacementDraft(): void {
+      draftPlacement = null;
+    },
+    applyWorldPlacement(position: Vector2, endPosition?: Vector2): void {
       const mode = placementMode;
       if (disposed || mode === null) return;
-      const result =
-        mode.kind === "place"
-          ? intents.place(mode.buildingKind, position)
-          : intents.relocate(mode.buildingId, position);
-      setPlacementFeedback(presentPlacementResult(result));
-      if (result.ok) setPlacementMode(null);
+      const isWallLine =
+        endPosition !== undefined && this.isWallPlacementEnabled();
+      const request = placementRequestFor(
+        mode,
+        position,
+        isWallLine ? endPosition : undefined,
+      );
+      const candidatePreview = intents.previewPlacement(request);
+      if (isWallLine) {
+        stagePlacement(request, candidatePreview);
+        return;
+      }
+      const staged = stagedPlacement;
+      if (
+        staged !== null &&
+        staged.preview.valid &&
+        candidatePreview.valid &&
+        previewsOverlap(staged.preview, candidatePreview)
+      ) {
+        confirmStagedPlacement();
+        return;
+      }
+      stagePlacement(request, candidatePreview);
     },
     showTransient(message: string): void {
       text(saveMessage, message);
     },
-    render(snapshot: GameUiSnapshot): void {
+    render(snapshot: GameUiSnapshot, placementValidationKey?: string): void {
       if (disposed) return;
+      refreshStagedPlacement(snapshot, placementValidationKey);
       text(
         byTestId("seed"),
         `Seed: ${snapshot.world.seed} · generator ${snapshot.world.generatorVersion}`,
