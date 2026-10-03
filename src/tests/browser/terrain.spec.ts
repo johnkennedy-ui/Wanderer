@@ -117,6 +117,12 @@ test("water terrain rejects canvas placement and touch tap movement stops at its
   await page.goto(applicationPath, { waitUntil: "commit" });
   await page.getByTestId("character-status-toggle").click();
   const player = await visiblePosition(page);
+  const positionText = await page.getByTestId("position").innerText();
+  const resources = page.getByTestId("resources");
+  const beforeResources = await resources.textContent();
+  if (beforeResources === null)
+    throw new Error("Initial resources were not available");
+  const rows = page.getByTestId("building-list").locator(".building-row");
   await page.getByTestId("build-menu-toggle").click();
   await page.getByTestId("build-Workshop").click();
   await tapWorldPosition(
@@ -125,11 +131,36 @@ test("water terrain rejects canvas placement and touch tap movement stops at its
     fixture.obstacle.position,
     testInfo.project.name === "touch",
   );
-  await expect(page.getByTestId("placement-message")).toContainText("terrain");
+  const preview = page.getByTestId("placement-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-valid", "false");
+  await expect(preview).toHaveAttribute("data-count", "1");
+  await expect(preview).toContainText(/\b1\b/);
+  await expect(preview).toContainText(/terrain/i);
+  await expect(preview).toContainText(/cost/i);
+  await expect(preview).toContainText(/tap/i);
+  await expect(page.getByTestId("confirm-placement")).toBeDisabled();
+  await expect(preview).toContainText(/Rejected: blocked terrain/i);
   await expect(page.getByTestId("placement-mode")).toContainText(
     "Workshop selected",
   );
-  await page.getByTestId("cancel-placement").click();
+  await expect(rows).toHaveCount(0);
+  await expect(resources).toHaveText(beforeResources);
+  await expect(page.getByTestId("position")).toHaveText(positionText);
+  const screenshot = testInfo.outputPath(
+    "invalid-terrain-placement-preview.png",
+  );
+  await page.screenshot({ path: screenshot });
+  await testInfo.attach("invalid-terrain-placement-preview", {
+    path: screenshot,
+    contentType: "image/png",
+  });
+  const cancel = page.getByTestId("cancel-placement");
+  await expect(cancel).toHaveAccessibleName("Cancel placement");
+  if (testInfo.project.name === "touch") await cancel.tap();
+  else await cancel.click();
+  await expect(preview).toBeHidden();
+  await expect(resources).toHaveText(beforeResources);
   await tapWorldPosition(
     page,
     player,

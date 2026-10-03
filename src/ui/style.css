@@ -69,6 +69,10 @@ input {
   border-radius: 9px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
 }
+.panel {
+  /* Open menus receive input above the transient placement feedback. */
+  z-index: 2;
+}
 .panel[hidden] {
   display: none;
 }
@@ -270,10 +274,42 @@ input {
   left: max(0.75rem, env(safe-area-inset-left));
   width: min(23rem, calc(100vw - 1.5rem));
   pointer-events: auto;
-  z-index: 2;
+  z-index: 1;
 }
 .placement-cancel {
   margin-top: 0.2rem;
+  min-width: 2.3rem;
+  min-height: 2.3rem;
+  border-radius: 999px;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.placement-preview {
+  margin-top: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #45e4ee;
+  border-left-width: 0.3rem;
+  border-radius: 0.55rem;
+  background: rgb(8 25 34 / 94%);
+  color: #d9fbff;
+  box-shadow: 0 0.3rem 1.1rem rgb(0 0 0 / 32%);
+}
+.placement-preview[data-valid="false"] {
+  border-color: #ff5263;
+  color: #ffe2e5;
+}
+.placement-preview[hidden] {
+  display: none;
+}
+.placement-preview p {
+  margin: 0 0 0.45rem;
+}
+.placement-preview button {
+  min-height: 2.2rem;
+}
+.placement-preview button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 .building-list {
   display: grid;

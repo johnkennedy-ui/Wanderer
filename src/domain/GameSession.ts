@@ -1,7 +1,13 @@
 import { gameplayTuning } from "../data/definitions";
 import { add, roundVector, scale } from "./math";
 import { isMeaningfulMovement } from "./inputPolicy";
-import type { GamePresentation, GameNotice, PlacementResult } from "./notices";
+import type {
+  GamePresentation,
+  GameNotice,
+  PlacementRejection,
+  PlacementResult,
+} from "./notices";
+import type { PlacementPreview, PlacementRequest } from "./placement";
 import type {
   BuildingKind,
   AllocatablePlayerStatKind,
@@ -18,6 +24,7 @@ import type {
   WeaponRelicDropState,
   WorldIdentity,
 } from "./types";
+import { emptyResources } from "./types";
 import {
   createFreshSessionState,
   DEFAULT_WORLD,
@@ -78,9 +85,11 @@ import {
   worldResetStateFor,
 } from "./session/worldLifecycleRuntime";
 import {
+  placementInputsFor,
   settlementCommandOutcomeFor,
   type SettlementCommand,
 } from "./session/settlementCommandRuntime";
+import { placementPositionsFor } from "./session/placementRuntime";
 import {
   campfireSaveRequestFor,
   saveCommitResultFor,
@@ -101,6 +110,29 @@ interface SessionOptions {
   /** Test-only recipe source; production sessions retain the released generator. */
   readonly chunkRecipeSource?: ChunkRecipeSource;
 }
+
+const placementPreviewFor = (
+  buildingKind: BuildingKind,
+  level: 1 | 2 | 3,
+  positions: readonly Vector2[],
+  tileRejections: readonly (PlacementRejection | null)[],
+  cost: PlacementPreview["cost"],
+  rejection: PlacementRejection | null = tileRejections.find(
+    (candidate) => candidate !== null,
+  ) ?? null,
+): PlacementPreview => ({
+  buildingKind,
+  level,
+  tiles: positions.map((position, index) => ({
+    position: { ...position },
+    valid: (tileRejections[index] ?? null) === null,
+    rejection: tileRejections[index] ?? null,
+  })),
+  valid: rejection === null,
+  rejection,
+  cost,
+});
+
 export class GameSession {
   private readonly chunkRecipes: ChunkRecipeCache;
   private world!: WorldIdentity;
@@ -281,15 +313,148 @@ export class GameSession {
     this.clampPlayerState();
   }
 
+  previewBuildingPlacement(request: PlacementRequest): PlacementPreview {
+    if (request.kind === "relocate") {
+      const building = this.settlement.buildingState.find(
+        (candidate) => candidate.id === request.buildingId,
+      );
+      const normalized = placementPositionsFor(request);
+      const emptyCost = emptyResources();
+      if (building === undefined || building.kind === "Storage") {
+        const rejection: PlacementRejection = { kind: "unknown-building" };
+        return placementPreviewFor(
+          building?.kind ?? "Campfire",
+          building?.level ?? 1,
+          normalized.positions,
+          [rejection],
+          emptyCost,
+          rejection,
+        );
+      }
+      if (normalized.rejection !== null)
+        return placementPreviewFor(
+          building.kind,
+          building.level,
+          normalized.positions,
+          [normalized.rejection],
+          emptyCost,
+          normalized.rejection,
+        );
+      const position = normalized.positions[0]!;
+      const rejection = this.settlement.placementRejectionFor(
+        building.kind,
+        position,
+        this.placementInputsAt(position),
+        building.id,
+      );
+      return placementPreviewFor(
+        building.kind,
+        building.level,
+        normalized.positions,
+        [rejection],
+        emptyCost,
+        rejection,
+      );
+    }
+
+    const normalized = placementPositionsFor(request);
+    if (request.buildingKind === "Storage") {
+      const validation = this.settlement.validatePlacementTiles(
+        request.buildingKind,
+        normalized.positions,
+        this.resources,
+        [],
+      );
+      return placementPreviewFor(
+        request.buildingKind,
+        1,
+        normalized.positions,
+        validation.tileRejections,
+        validation.cost,
+        validation.rejection,
+      );
+    }
+    if (normalized.rejection !== null) {
+      const cost = this.settlement.placementCost(
+        request.buildingKind,
+        normalized.positions.length,
+      );
+      return placementPreviewFor(
+        request.buildingKind,
+        1,
+        normalized.positions,
+        [normalized.rejection],
+        cost,
+        normalized.rejection,
+      );
+    }
+    const inputs = normalized.positions.map((position) =>
+      this.placementInputsAt(position),
+    );
+    const validation = this.settlement.validatePlacementTiles(
+      request.buildingKind,
+      normalized.positions,
+      this.resources,
+      inputs,
+    );
+    return placementPreviewFor(
+      request.buildingKind,
+      1,
+      normalized.positions,
+      validation.tileRejections,
+      validation.cost,
+      validation.rejection,
+    );
+  }
+
+  commitBuildingPlacement(request: PlacementRequest): PlacementResult {
+    if (request.kind === "relocate") {
+      const building = this.settlement.buildingState.find(
+        (candidate) => candidate.id === request.buildingId,
+      );
+      if (building === undefined || building.kind === "Storage")
+        return this.rejectBuildingPlacement({ kind: "unknown-building" });
+      const normalized = placementPositionsFor(request);
+      if (normalized.rejection !== null)
+        return this.rejectBuildingPlacement(normalized.rejection);
+      return this.runSettlementCommand({
+        kind: "relocate",
+        id: request.buildingId,
+        position: normalized.positions[0]!,
+      });
+    }
+    if (request.buildingKind === "Storage")
+      return this.rejectBuildingPlacement({ kind: "unknown-building" });
+    const normalized = placementPositionsFor(request);
+    if (normalized.rejection !== null)
+      return this.rejectBuildingPlacement(normalized.rejection);
+    const inputs = normalized.positions.map((position) =>
+      this.placementInputsAt(position),
+    );
+    return this.applySettlementOutcome(
+      this.settlement.placeMany(
+        request.buildingKind,
+        normalized.positions,
+        this.resources,
+        this.world.seed,
+        inputs,
+      ),
+    );
+  }
+
   placeBuilding(kind: BuildingKind, position: Vector2): PlacementResult {
-    return this.runSettlementCommand({
+    return this.commitBuildingPlacement({
       kind: "place",
       buildingKind: kind,
       position,
     });
   }
   relocateBuilding(id: string, position: Vector2): PlacementResult {
-    return this.runSettlementCommand({ kind: "relocate", id, position });
+    return this.commitBuildingPlacement({
+      kind: "relocate",
+      buildingId: id,
+      position,
+    });
   }
   upgradeBuilding(id: string): PlacementResult {
     return this.runSettlementCommand({ kind: "upgrade", id });
@@ -742,6 +907,22 @@ export class GameSession {
         enemies: this.enemies,
       }),
     );
+  }
+  private placementInputsAt(position: Vector2) {
+    return placementInputsFor({
+      settlement: this.settlement,
+      world: this.world,
+      position,
+      playerPosition: this.player.position,
+      committedSavePoint: this.committedSavePoint,
+      enemies: this.enemies,
+    });
+  }
+  private rejectBuildingPlacement(
+    rejection: PlacementRejection,
+  ): PlacementResult {
+    this.notice = { kind: "building.rejected", rejection };
+    return { ok: false, rejection };
   }
   /** Applies XP and the identical next-level base-stat grant exactly once. */
   private grantExperience(amount: number): void {

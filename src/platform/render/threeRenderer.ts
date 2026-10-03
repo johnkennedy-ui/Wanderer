@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { gameplayTuning } from "../../data/definitions";
 import type { GameRendererSnapshot } from "../../domain/notices";
+import type { PlacementPreview } from "../../domain/placement";
 import type { Vector2 } from "../../domain/types";
 import { EnemyHealthOverlay } from "./enemyHealthOverlayHelpers";
 import {
@@ -9,17 +10,29 @@ import {
 } from "./modelPresentationHelpers";
 import { EnvironmentProjection } from "./environmentPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
+import { PlacementPreviewProjection } from "./placementPreviewHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
 
+export type ThreeRendererDiagnostics = ReturnType<
+  RetainedProjection["diagnostics"]
+> & {
+  readonly placementPreview: ReturnType<
+    PlacementPreviewProjection["diagnostics"]
+  >;
+};
+
 export interface ThreeRenderer {
   readonly canvas: HTMLCanvasElement;
-  render(snapshot: GameRendererSnapshot): void;
+  render(
+    snapshot: GameRendererSnapshot,
+    placementPreview?: PlacementPreview | null,
+  ): void;
   worldPositionFromClientPoint(
     clientX: number,
     clientY: number,
   ): Vector2 | null;
-  diagnostics(): ReturnType<RetainedProjection["diagnostics"]>;
+  diagnostics(): ThreeRendererDiagnostics;
   dispose(): void;
 }
 
@@ -64,7 +77,9 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
   const projection = new RetainedProjection();
-  scene.add(projection.group);
+  const placementGhosts = new PlacementPreviewProjection();
+  placementGhosts.group.renderOrder = 2;
+  scene.add(projection.group, placementGhosts.group);
   const playerHealthLabel = document.createElement("div");
   playerHealthLabel.dataset.testid = "world-player-hp";
   playerHealthLabel.className = "world-player-hp";
@@ -167,10 +182,31 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   return {
     canvas,
     worldPositionFromClientPoint,
-    diagnostics: () => projection.diagnostics(),
-    render(snapshot: GameRendererSnapshot): void {
+    diagnostics: () => ({
+      ...projection.diagnostics(),
+      placementPreview: placementGhosts.diagnostics(),
+    }),
+    render(
+      snapshot: GameRendererSnapshot,
+      placementPreview: PlacementPreview | null = null,
+    ): void {
       if (disposed) return;
       projection.render(snapshot);
+      placementGhosts.render(placementPreview);
+      const placementDiagnostics = placementGhosts.diagnostics();
+      setDataset(
+        "placementPreviewCount",
+        String(placementDiagnostics.renderedTileCount),
+      );
+      setDataset(
+        "placementPreviewInvalidCount",
+        String(placementDiagnostics.renderedInvalidTileCount),
+      );
+      setDataset("placementPreviewValid", String(placementDiagnostics.valid));
+      setDataset(
+        "placementPreviewVisible",
+        String(placementDiagnostics.visible),
+      );
       floor.position.set(
         snapshot.player.position.x,
         0,
@@ -248,6 +284,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
       models.dispose();
       templates.dispose();
       projection.dispose();
+      placementGhosts.dispose();
       enemyHealthOverlay.dispose();
       floor.geometry.dispose();
       floor.material.dispose();

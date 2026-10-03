@@ -60,6 +60,14 @@ export interface SettlementCommandOutcome {
   readonly noticeDraft: GameNotice;
 }
 
+export interface SettlementPlacementValidation {
+  readonly cost: ReadonlyResourceBag;
+  readonly tileRejections: readonly (PlacementRejection | null)[];
+  readonly rejection: PlacementRejection | null;
+}
+
+const MAX_PLACEMENT_CELLS = 64;
+
 const placementNoticeFor = (result: PlacementResult): GameNotice => {
   if (!result.ok)
     return { kind: "building.rejected", rejection: result.rejection };
@@ -159,6 +167,113 @@ export class SettlementRuntime {
     return this.outcome(
       { ok: true, outcome: "placed", building },
       subtractResourceBags(resources, cost),
+    );
+  }
+
+  placementCost(kind: BuildingKind, cellCount: number): ResourceBag {
+    return resourcesForLevel(buildingDefinitions[kind].baseCost, cellCount);
+  }
+
+  validatePlacementTiles(
+    kind: BuildingKind,
+    positions: readonly Vector2[],
+    resources: ReadonlyResourceBag,
+    inputs: readonly SettlementInputs[],
+    ignoredId?: string,
+  ): SettlementPlacementValidation {
+    const cost = this.placementCost(kind, positions.length);
+    if (kind === "Storage") {
+      const tileRejections = positions.map((): PlacementRejection => ({
+        kind: "unknown-building",
+      }));
+      return {
+        cost,
+        tileRejections,
+        rejection: { kind: "unknown-building" },
+      };
+    }
+    if (
+      positions.length === 0 ||
+      positions.length > MAX_PLACEMENT_CELLS ||
+      inputs.length !== positions.length
+    )
+      return {
+        cost,
+        tileRejections: [],
+        rejection: { kind: "invalid-coordinates" },
+      };
+
+    const tileRejections = positions.map((position, index) =>
+      this.validate(
+        kind,
+        snapBuildingPosition(position),
+        inputs[index]!,
+        ignoredId,
+      ),
+    );
+    const placementRejection =
+      tileRejections.find((rejection) => rejection !== null) ?? null;
+    if (placementRejection !== null)
+      return { cost, tileRejections, rejection: placementRejection };
+    if (!canAffordResources(resources, cost)) {
+      const rejection: PlacementRejection = { kind: "insufficient-resources" };
+      return {
+        cost,
+        tileRejections: positions.map(() => rejection),
+        rejection,
+      };
+    }
+    return { cost, tileRejections, rejection: null };
+  }
+
+  placementRejectionFor(
+    kind: BuildingKind,
+    position: Vector2,
+    input: SettlementInputs,
+    ignoredId?: string,
+  ): PlacementRejection | null {
+    if (kind === "Storage") return { kind: "unknown-building" };
+    return this.validate(
+      kind,
+      snapBuildingPosition(position),
+      input,
+      ignoredId,
+    );
+  }
+
+  placeMany(
+    kind: BuildingKind,
+    positions: readonly Vector2[],
+    resources: ResourceBag,
+    seed: string,
+    inputs: readonly SettlementInputs[],
+  ): SettlementCommandOutcome {
+    const validation = this.validatePlacementTiles(
+      kind,
+      positions,
+      resources,
+      inputs,
+    );
+    if (validation.rejection !== null)
+      return this.rejected(validation.rejection, resources);
+
+    const seedHash = hashText(seed).toString(16);
+    const firstSerial = this.nextBuildingSerial;
+    const placed = positions.map((position, index): BuildingState => {
+      const serial = (firstSerial + index).toString().padStart(4, "0");
+      return {
+        id: "building:" + seedHash + ":" + serial,
+        kind,
+        position: snapBuildingPosition(position),
+        level: 1,
+      };
+    });
+    const lastPlaced = placed[placed.length - 1]!;
+    this.nextBuildingSerial += placed.length;
+    this.buildings = [...this.buildings, ...placed];
+    return this.outcome(
+      { ok: true, outcome: "placed", building: lastPlaced },
+      subtractResourceBags(resources, validation.cost),
     );
   }
 

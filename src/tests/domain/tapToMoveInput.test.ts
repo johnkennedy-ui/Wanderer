@@ -63,7 +63,13 @@ describe("tap-to-move input", () => {
       canvas,
       toWorld,
       () => placementEnabled,
-      (position) => placements.push(position),
+      () => false,
+      {
+        tap: (position) => placements.push(position),
+        previewWallDrag: () => {},
+        stageWallDrag: () => {},
+        clearWallDragPreview: () => {},
+      },
     );
 
     canvas.dispatchEvent(primaryPointerEvent("pointerdown", 1, 10, 20));
