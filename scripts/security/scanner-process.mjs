@@ -207,6 +207,7 @@ export const executeScanner = (
     let forceSettleTimer = null;
     let stdinError = null;
     let fallbackStarted = false;
+    let guardianClose = null;
     const child = spawn(
       "python3",
       [
@@ -307,6 +308,13 @@ export const executeScanner = (
         stderr: stderr.text,
         stdoutBytes: stdout.bytes,
         stderrBytes: stderr.bytes,
+        // Raw outer-process evidence only. This cannot establish scanner
+        // cleanup or replace the fail-closed settlement classification below.
+        guardian: {
+          closeObserved: guardianClose !== null,
+          exitCode: guardianClose?.exitCode ?? null,
+          signal: guardianClose?.signal ?? null,
+        },
         supervisor: {
           exitCode: supervisorExitCode,
           signal: supervisorSignal,
@@ -375,6 +383,7 @@ export const executeScanner = (
       settle(null, null, error.code || "SCANNER_SUPERVISOR_SPAWN_ERROR"),
     );
     child.on("close", (code, childSignal) => {
+      guardianClose = { exitCode: code, signal: childSignal };
       if (fallbackStarted) return;
       if (
         (code !== 0 || childSignal !== null) &&

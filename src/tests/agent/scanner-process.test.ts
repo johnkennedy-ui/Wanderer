@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import {
   existsSync,
   mkdtempSync,
@@ -693,6 +695,140 @@ assert set(opened) == {200,201}`;
     }
   });
 
+  it.each([
+    {
+      label: "owned nonzero close",
+      code: 7,
+      signal: null,
+      abort: false,
+      close: true,
+      late: false,
+    },
+    {
+      label: "caller-directed signal close",
+      code: null,
+      signal: "SIGKILL",
+      abort: true,
+      close: true,
+      late: false,
+    },
+    {
+      label: "normal close",
+      code: 0,
+      signal: null,
+      abort: false,
+      close: true,
+      late: false,
+    },
+    {
+      label: "exit without close",
+      code: 7,
+      signal: null,
+      abort: true,
+      close: false,
+      late: false,
+    },
+    {
+      label: "close during deadline fallback",
+      code: 7,
+      signal: null,
+      abort: true,
+      close: true,
+      late: true,
+    },
+  ])(
+    "retains guardian close diagnostics without changing settlement: $label",
+    async ({ code, signal, abort, close, late }) => {
+      // Drive the real wrapper with inert streams and fake time. No processes or
+      // signals are created, and no guardian scheduling logic is reimplemented.
+      vi.useFakeTimers();
+      vi.resetModules();
+      const status = new PassThrough();
+      const ownership = new PassThrough();
+      const child = Object.assign(new EventEmitter(), {
+        stdin: new PassThrough(),
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        stdio: [null, null, null, status, ownership],
+        unref: vi.fn(),
+      });
+      vi.doMock("node:child_process", () => ({ spawn: () => child }));
+      try {
+        const { executeScanner: executeWithChild } =
+          // @ts-expect-error Repository-native ESM helper intentionally has no TS declarations.
+          await import("../../../scripts/security/scanner-process.mjs");
+        const controller = new AbortController();
+        const pending = executeWithChild(
+          "inert-scanner",
+          [],
+          process.cwd(),
+          1_000,
+          {
+            signal: controller.signal,
+            graceMs: 25,
+            cleanupDeadlineMs: 500,
+          },
+        );
+        if (abort) controller.abort();
+        else
+          ownership.write(
+            JSON.stringify({
+              version: 1,
+              root: { pid: 101, startTime: "123" },
+              descendants: [],
+            }) + "\n",
+          );
+        status.write(
+          JSON.stringify({
+            version: 1,
+            exitCode: 0,
+            signal: null,
+            termination: abort ? "interrupted" : "none",
+            reaping: "reaped",
+            error: null,
+          }) + "\n",
+        );
+        if (late) await vi.advanceTimersByTimeAsync(800);
+        child.emit("exit", code, signal);
+        if (close) child.emit("close", code, signal);
+        await vi.advanceTimersByTimeAsync(close ? 100 : 900);
+        const result = await pending;
+        const normal = close && code === 0 && signal === null;
+        expect(result, JSON.stringify(result)).toMatchObject({
+          guardian: {
+            closeObserved: close,
+            exitCode: close ? code : null,
+            signal: close ? signal : null,
+          },
+          cleanup: normal ? "reaped" : "unknown",
+          termination: normal ? "none" : "unknown",
+          error: normal
+            ? null
+            : !close || late
+              ? "SCANNER_CLEANUP_DEADLINE"
+              : "SCANNER_SUPERVISOR_EXIT_INVALID",
+          // Preserve the pre-existing fail-closed settlement result. The raw
+          // guardian close is diagnostic, never a substitute for cleanup proof.
+          supervisor: { exitCode: normal ? 0 : null, signal: null, normal },
+        });
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        for (const stream of [
+          child.stdin,
+          child.stdout,
+          child.stderr,
+          status,
+          ownership,
+        ])
+          stream.destroy();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+        vi.doUnmock("node:child_process");
+        vi.resetModules();
+      }
+    },
+  );
+
   it("reaps a SIGTERM-ignoring orphan with bounded settlement", async () => {
     const { directory, path } = fixture(
       (directory) =>
@@ -708,8 +844,8 @@ assert set(opened) == {200,201}`;
     const started = Date.now();
     controller.abort();
     const result = await pending;
-    expect(Date.now() - started).toBeLessThan(1_000);
-    expect(result).toMatchObject({
+    expect(Date.now() - started, JSON.stringify(result)).toBeLessThan(1_000);
+    expect(result, JSON.stringify(result)).toMatchObject({
       interrupted: true,
       cleanup: "reaped",
       error: "SCANNER_INTERRUPTED",
@@ -750,8 +886,8 @@ open(ready,'w').write('ready')`,
     });
     await waitFor(() => existsSync(join(directory, "timeout-ready")));
     const result = await pending;
-    expect(Date.now() - started).toBeLessThan(1_000);
-    expect(result).toMatchObject({
+    expect(Date.now() - started, JSON.stringify(result)).toBeLessThan(1_000);
+    expect(result, JSON.stringify(result)).toMatchObject({
       timedOut: true,
       cleanup: "reaped",
       error: "SCANNER_TIMEOUT",
