@@ -91,7 +91,22 @@ export function expectedWorkflow(pins) {
             run: "node node_modules/playwright/cli.js install --with-deps chromium",
           },
           { run: "npm run verify" },
-          { run: "npm run test:browser -- --reuse-root-build" },
+          {
+            id: "browser-tests",
+            run: "npm run test:browser -- --reuse-root-build",
+          },
+          {
+            id: "browser-failure-evidence",
+            if: "${{ failure() && steps.browser-tests.outcome == 'failure' }}",
+            uses: action("actions/upload-artifact"),
+            with: {
+              name: "browser-failure-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}",
+              path: "test-results/**/trace.zip\ntest-results/**/test-failed-*.png\ntest-results/**/error-context.md",
+              "if-no-files-found": "error",
+              "include-hidden-files": false,
+              "retention-days": 14,
+            },
+          },
           {
             run: "node scripts/security/artifact.mjs verify --base /Wanderer/",
           },

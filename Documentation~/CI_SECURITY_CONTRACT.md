@@ -71,6 +71,29 @@ included. This audit artifact stays outside `dist`; deploy neither downloads nor
 executes it and gains no new permissions. Actual remote retention remains
 unverified until an authorized workflow run is observed.
 
+If the browser step fails, the same read-only job separately retains
+`test-results/**/trace.zip`, `test-results/**/test-failed-*.png` and
+`test-results/**/error-context.md` for 14 days as
+`browser-failure-${run_id}-${run_attempt}-${sha}`. The full-SHA-pinned upload
+runs only when `failure()` is true and `browser-tests.outcome` is `failure`;
+success, skipped browser work and unrelated earlier failures do not trigger it.
+Missing files are an error. Hidden files, broad output directories, arbitrary
+agent/scanner logs and deployment payloads are not selected. Existing Playwright
+traces can contain test source, DOM/network snapshots and test attachments: treat
+them as untrusted diagnostic data, use only synthetic test data and never place
+credentials or production data in the browser fixture. This retention is not a
+sanitizer or a proof that all expected diagnostics were produced. Cancellation
+or runner loss can prevent upload; actual remote retention needs run-specific
+evidence.
+
+The failure upload neither swallows the browser failure nor creates a successful
+browser witness. All verification/security commands, retries, timeouts,
+permissions, required-job aggregation, success-only artifact verification/uploads
+and deployment conditions remain unchanged. Deploy cannot select or execute
+the failure artifact; it is distinct from Pages bytes and successful verification
+evidence. Workflow/contract mutation tests reject widened paths, changed
+conditions, missing/repinned uploads, artifact-name collisions and bypasses.
+
 The membership policy is the reviewed original `public/` asset list in
 `scripts/security/public-assets.json`, plus the actual hashed entry JS/CSS and
 HTML. New public files are not silently authorized. Unexpected payloads, empty
