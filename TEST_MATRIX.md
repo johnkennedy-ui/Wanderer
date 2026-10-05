@@ -104,9 +104,12 @@ See `Documentation~/CI_SECURITY_CONTRACT.md` for tool support and owner actions.
   accessible choices and single-tier row actions.
 - `src/tests/browser/building-grid.spec.ts` and `m5-rendering.spec.ts` exercise
   desktop and touch-viewport preview-before-build/relocation, unchanged resources
-  and movement before confirmation, reposition-on-next-tap, Confirm, and X
-  cancellation. Pointer-drag cases cover horizontal/vertical/reverse/dominant-axis
-  wall lines in both viewport projects. Release leaves the inclusive line staged;
+  and movement before confirmation, building reposition-on-next-tap, Confirm, and X
+  cancellation. Separate start/end taps and pointer drags cover horizontal/vertical/
+  reverse/dominant-axis wall lines in both viewport projects; two-tap endpoints
+  retain the first tile, with no building or cost before a later confirmation.
+  Planned wall silhouettes are cyan with bright overlay outlines; screenshots
+  and browser error/request-failure diagnostics are retained. Release leaves the inclusive line staged;
   an invalid overlapping line is visibly rejected with no partial buildings or
   spend. `terrain.spec.ts` retains a generated water fixture for the red invalid
   footprint/reason and atomic rejection evidence. These cases run in both

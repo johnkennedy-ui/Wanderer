@@ -121,7 +121,12 @@ export class PlacementPreviewProjection {
     );
     this.outlineMaterials.set(
       true,
-      new THREE.LineBasicMaterial({ color: validColor }),
+      new THREE.LineBasicMaterial({
+        color: validColor,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      }),
     );
     this.outlineMaterials.set(
       false,
@@ -235,10 +240,13 @@ export class PlacementPreviewProjection {
       cell.outline.material = this.outlineMaterials.get(valid)!;
       cell.building.material = this.buildingMaterials.get(valid)!;
       // A rejected tile must stay visible over the object causing rejection.
-      // Valid ghosts stay depth-tested; rejected feedback never writes depth.
+      // Valid silhouettes stay depth-tested; the bright outlines overlay them.
+      // Rejected feedback never writes depth.
       cell.fill.renderOrder = valid ? 0 : 1;
       cell.building.renderOrder = valid ? 0 : 2;
-      cell.outline.renderOrder = valid ? 0 : 3;
+      // Keep the bright footprint readable over the translucent silhouette.
+      // This planning overlay never obscures later geometry through depth writes.
+      cell.outline.renderOrder = 3;
       cell.building.geometry = shape.geometry;
       cell.fill.userData.placementValid = valid;
       cell.outline.userData.placementValid = valid;

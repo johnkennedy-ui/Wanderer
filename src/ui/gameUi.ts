@@ -107,7 +107,7 @@ const placementModeDescription = (mode: PlacementMode): string => {
   const interaction =
     mode.kind === "place" &&
     (mode.buildingKind === "WoodWall" || mode.buildingKind === "StoneWall")
-      ? "Drag to preview a straight wall line, release to stage it, then tap a line tile or Confirm."
+      ? "Tap a start tile, then tap an end tile to preview a straight wall line. Tap a line tile or Confirm to build; X cancels. Dragging also previews a line."
       : "Tap once to stage a preview; tap its tile again or Confirm to place. Tap elsewhere to reposition.";
   return mode.kind === "place"
     ? `${label} selected. ${interaction} Placement snaps to 1m tile centres.`
@@ -156,14 +156,21 @@ const previewMessage = (
   preview: PlacementPreview,
 ): string => {
   const rejection = rejectionForPreview(preview);
-  const draggedLine =
-    request.kind === "place" && request.endPosition !== undefined;
-  const action = draggedLine
-    ? "Release staged this wall line."
-    : "Preview staged.";
-  const instructions = draggedLine
-    ? "Tap any line tile or Confirm to build; tap elsewhere to reposition."
-    : "Tap a preview tile again or Confirm to place; tap elsewhere to reposition.";
+  const wall =
+    request.kind === "place" &&
+    (request.buildingKind === "WoodWall" ||
+      request.buildingKind === "StoneWall");
+  const wallLine = wall && request.endPosition !== undefined;
+  const action = wallLine
+    ? "Wall line staged."
+    : wall
+      ? "Wall start selected."
+      : "Preview staged.";
+  const instructions = wallLine
+    ? "Tap any line tile or Confirm to build; tap elsewhere to adjust the end. X cancels."
+    : wall
+      ? "Tap another tile to choose the end; Confirm builds one brick. X cancels."
+      : "Tap a preview tile again or Confirm to place; tap elsewhere to reposition.";
   const result =
     (preview.valid ? "Valid" : "Invalid") +
     " · " +
@@ -778,6 +785,27 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         return;
       }
       const staged = stagedPlacement;
+      // A wall's first tap is an anchor, not a complete placement. The second
+      // tap selects its endpoint even when both taps snap to the same tile.
+      // Only a subsequent tap on the staged line (or Confirm) may build it.
+      if (this.isWallPlacementEnabled() && staged?.request.kind === "place") {
+        if (
+          staged.request.endPosition !== undefined &&
+          staged.preview.valid &&
+          candidatePreview.valid &&
+          previewsOverlap(staged.preview, candidatePreview)
+        ) {
+          confirmStagedPlacement();
+          return;
+        }
+        const line = placementRequestFor(
+          mode,
+          staged.request.position,
+          position,
+        );
+        stagePlacement(line, intents.previewPlacement(line));
+        return;
+      }
       if (
         staged !== null &&
         staged.preview.valid &&

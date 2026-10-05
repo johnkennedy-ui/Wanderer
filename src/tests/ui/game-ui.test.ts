@@ -534,7 +534,7 @@ describe("current HUD placement port", () => {
     expect(get("placement-preview").hidden).toBe(false);
     expect(get("placement-preview").getAttribute("data-count")).toBe("2");
     expect(get("placement-preview-message").textContent).toContain(
-      "Release staged this wall line",
+      "Wall line staged",
     );
     expect(get("placement-preview-message").textContent).toContain(
       "Tap any line tile",
@@ -549,6 +549,135 @@ describe("current HUD placement port", () => {
     });
     expect(ui.isWorldPlacementEnabled()).toBe(false);
     expect(ui.placementPreview()).toBeNull();
+    ui.dispose();
+  });
+
+  it.each(["WoodWall", "StoneWall"] as const)(
+    "plans %s from two separate taps without placing either endpoint",
+    (kind) => {
+      const { ui, intents, get } = setupUi();
+      ui.render(snapshot());
+      const choice = get("build-buttons").children.find(
+        (button) => button.dataset.testid === "build-" + kind,
+      );
+      if (choice === undefined) throw new Error("Missing wall choice");
+      choice.click();
+      const start = { x: 1, y: 1 };
+      const end = { x: 3, y: 1 };
+      ui.applyWorldPlacement(start);
+      expect(intents.confirmPlacement).not.toHaveBeenCalled();
+      expect(ui.placementPreview()?.tiles).toHaveLength(1);
+      expect(get("placement-preview-message").textContent).toContain(
+        "Tap another tile to choose the end",
+      );
+      ui.applyWorldPlacement(end);
+      const line = {
+        kind: "place",
+        buildingKind: kind,
+        position: start,
+        endPosition: end,
+      };
+      expect(intents.previewPlacement).toHaveBeenLastCalledWith(line);
+      expect(intents.confirmPlacement).not.toHaveBeenCalled();
+      expect(ui.placementPreview()?.tiles).toHaveLength(2);
+      expect(get("placement-preview-message").textContent).toContain(
+        "Wall line staged",
+      );
+      get("confirm-placement").click();
+      expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith(line);
+      expect(ui.placementPreview()).toBeNull();
+      ui.dispose();
+    },
+  );
+
+  it("adjusts the second endpoint without moving the wall anchor or prematurely building", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render(snapshot());
+    get("build-buttons")
+      .children.find((button) => button.dataset.testid === "build-WoodWall")!
+      .click();
+    const start = { x: 1, y: 1 };
+    const end = { x: 3, y: 1 };
+    const changedEnd = { x: 1, y: 4 };
+    ui.applyWorldPlacement(start);
+    ui.applyWorldPlacement(end);
+    ui.applyWorldPlacement(changedEnd);
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: changedEnd,
+    });
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    ui.applyWorldPlacement(changedEnd);
+    expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: changedEnd,
+    });
+    ui.dispose();
+  });
+
+  it("treats a repeated start tap as a one-tile line preview, not automatic placement", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render(snapshot());
+    get("build-buttons")
+      .children.find((button) => button.dataset.testid === "build-WoodWall")!
+      .click();
+    const start = { x: 2, y: 2 };
+    ui.applyWorldPlacement(start);
+    ui.applyWorldPlacement(start);
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: start,
+    });
+    get("cancel-placement").click();
+    expect(ui.placementPreview()).toBeNull();
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    ui.dispose();
+  });
+
+  it("keeps a rejected two-tap line uncommitted and forgets its anchor on cancellation", () => {
+    const { ui, intents, get } = setupUi();
+    ui.render(snapshot());
+    const wall = get("build-buttons").children.find(
+      (button) => button.dataset.testid === "build-WoodWall",
+    )!;
+    wall.click();
+    const start = { x: 1, y: 1 };
+    const end = { x: 3, y: 1 };
+    ui.applyWorldPlacement(start);
+    intents.previewPlacement.mockImplementation((request) => ({
+      ...previewFor(request),
+      valid: false,
+      rejection: { kind: "occupied-by-actor" },
+    }));
+    ui.applyWorldPlacement(end);
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: end,
+    });
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("false");
+    expect(get("confirm-placement").disabled).toBe(true);
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    get("cancel-placement").click();
+    wall.click();
+    intents.previewPlacement.mockImplementation(previewFor);
+    const fresh = { x: 4, y: 2 };
+    ui.applyWorldPlacement(fresh);
+    expect(intents.previewPlacement).toHaveBeenLastCalledWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: fresh,
+    });
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
     ui.dispose();
   });
 
