@@ -27,6 +27,8 @@ const verifyAction = (workflow: any, name: string) =>
   workflow.jobs.verify.steps.find((step: any) =>
     step.uses?.startsWith(`${name}@`),
   );
+const verifyStep = (workflow: any, id: string) =>
+  workflow.jobs.verify.steps.find((step: any) => step.id === id);
 const packageJson = () => JSON.parse(readFileSync("package.json", "utf8"));
 const vitestSource = readFileSync("vitest.config.ts", "utf8");
 const nodeVersion = readFileSync(".nvmrc", "utf8");
@@ -295,7 +297,7 @@ describe("actual repository workflow mutation tests", () => {
     [
       "retention artifact collides with Pages payload",
       (w: any) => {
-        verifyAction(w, "actions/upload-artifact").with.name = verifyAction(
+        verifyStep(w, "verification-evidence").with.name = verifyAction(
           w,
           "actions/upload-pages-artifact",
         ).with.name;
@@ -304,29 +306,29 @@ describe("actual repository workflow mutation tests", () => {
     [
       "retention includes arbitrary agent records",
       (w: any) => {
-        verifyAction(w, "actions/upload-artifact").with.path = ".agent/**";
+        verifyStep(w, "verification-evidence").with.path = ".agent/**";
       },
     ],
     [
       "retention omits browser witness",
       (w: any) => {
-        verifyAction(w, "actions/upload-artifact").with.path =
+        verifyStep(w, "verification-evidence").with.path =
           ".agent/artifacts/pages.json";
       },
     ],
     [
       "retention silently ignores missing files",
       (w: any) => {
-        verifyAction(w, "actions/upload-artifact").with["if-no-files-found"] =
+        verifyStep(w, "verification-evidence").with["if-no-files-found"] =
           "ignore";
       },
     ],
     [
       "deploy selects evidence instead of Pages payload",
       (w: any) => {
-        w.jobs.deploy.steps[1].with.artifact_name = verifyAction(
+        w.jobs.deploy.steps[1].with.artifact_name = verifyStep(
           w,
-          "actions/upload-artifact",
+          "verification-evidence",
         ).with.name;
       },
     ],
@@ -449,6 +451,189 @@ describe("actual repository workflow mutation tests", () => {
     );
     expect(() => loadPins(directory)).toThrow("provenance");
   });
+});
+
+describe("failure-only browser diagnostics contract", () => {
+  it("keeps diagnostic artifacts separate without changing the browser gate", () => {
+    const workflow = good();
+    const browser = verifyStep(workflow, "browser-tests");
+    const upload = verifyStep(workflow, "browser-failure-evidence");
+    expect(browser).toEqual({
+      id: "browser-tests",
+      run: "npm run test:browser -- --reuse-root-build",
+    });
+    expect(upload).toEqual({
+      id: "browser-failure-evidence",
+      if: "${{ failure() && steps.browser-tests.outcome == 'failure' }}",
+      uses: `actions/upload-artifact@${pins["actions/upload-artifact"].sha}`,
+      with: {
+        name: "browser-failure-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}",
+        path: "test-results/**/trace.zip\ntest-results/**/test-failed-*.png\ntest-results/**/error-context.md",
+        "if-no-files-found": "error",
+        "include-hidden-files": false,
+        "retention-days": 14,
+      },
+    });
+    expect(workflow.jobs.verify.steps.indexOf(upload)).toBe(
+      workflow.jobs.verify.steps.indexOf(browser) + 1,
+    );
+    const pages = verifyAction(workflow, "actions/upload-pages-artifact");
+    const evidence = verifyStep(workflow, "verification-evidence");
+    expect(
+      new Set([upload.with.name, pages.with.name, evidence.with.name]).size,
+    ).toBe(3);
+    expect(pages.if).toBeUndefined();
+    expect(evidence.if).toBeUndefined();
+    expect(workflow.jobs.deploy.steps.at(-1).with.artifact_name).toBe(
+      pages.with.name,
+    );
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.verify.permissions).toBeUndefined();
+    expect(
+      requiredResultsPass({
+        verify: { result: "failure" },
+        security: { result: "success" },
+      }),
+    ).toBe(false);
+    expect(
+      publicationAllowed({
+        ref: "refs/heads/main",
+        event: "push",
+        aggregate: "failure",
+        producer: "failure",
+        successful: false,
+      }),
+    ).toBe(false);
+  });
+  it.each([
+    [
+      "missing browser step identity",
+      (w: any) => {
+        delete verifyStep(w, "browser-tests").id;
+      },
+    ],
+    [
+      "missing failure uploader",
+      (w: any) => {
+        w.jobs.verify.steps = w.jobs.verify.steps.filter(
+          (s: any) => s.id !== "browser-failure-evidence",
+        );
+      },
+    ],
+    [
+      "always upload",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").if = "${{ always() }}";
+      },
+    ],
+    [
+      "unrelated failure upload",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").if = "${{ failure() }}";
+      },
+    ],
+    [
+      "implicit success-only upload",
+      (w: any) => {
+        delete verifyStep(w, "browser-failure-evidence").if;
+      },
+    ],
+    [
+      "unpinned failure action",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").uses =
+          "actions/upload-artifact@main";
+      },
+    ],
+    [
+      "whole results directory",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.path = "test-results/**";
+      },
+    ],
+    [
+      "raw agent logs",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.path += "\n.agent/**";
+      },
+    ],
+    [
+      "missing trace",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.path =
+          "test-results/**/error-context.md";
+      },
+    ],
+    [
+      "hidden files",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with["include-hidden-files"] =
+          true;
+      },
+    ],
+    [
+      "missing artifacts ignored",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with["if-no-files-found"] =
+          "ignore";
+      },
+    ],
+    [
+      "longer retention",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with["retention-days"] = 90;
+      },
+    ],
+    [
+      "Pages name collision",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.name = verifyAction(
+          w,
+          "actions/upload-pages-artifact",
+        ).with.name;
+      },
+    ],
+    [
+      "success evidence name collision",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.name = verifyStep(
+          w,
+          "verification-evidence",
+        ).with.name;
+      },
+    ],
+    [
+      "unbound artifact identity",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence").with.name =
+          "browser-failure-latest";
+      },
+    ],
+    [
+      "browser failure swallowed",
+      (w: any) => {
+        verifyStep(w, "browser-tests")["continue-on-error"] = true;
+      },
+    ],
+    [
+      "failure upload softened",
+      (w: any) => {
+        verifyStep(w, "browser-failure-evidence")["continue-on-error"] = true;
+      },
+    ],
+    [
+      "deployment selects diagnostic",
+      (w: any) => {
+        w.jobs.deploy.steps.at(-1).with.artifact_name = verifyStep(
+          w,
+          "browser-failure-evidence",
+        ).with.name;
+      },
+    ],
+  ] as Array<[string, (workflow: any) => void]>)(
+    "rejects %s",
+    (_name, mutate) => reject(mutate),
+  );
 });
 
 describe("actual aggregate and publication decision programs", () => {

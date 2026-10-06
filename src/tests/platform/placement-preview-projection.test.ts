@@ -115,10 +115,17 @@ describe("retained placement ghost projection", () => {
       })),
     });
     for (const child of projection.group.children) {
-      expect(child.renderOrder).toBe(0);
-      expect(((child as THREE.Mesh).material as THREE.Material).depthTest).toBe(
-        true,
-      );
+      const material = (child as THREE.Mesh).material as THREE.Material;
+      const isOutline = child.name.includes("cell-outline");
+      expect(child.renderOrder).toBe(isOutline ? 3 : 0);
+      expect(material.depthTest).toBe(!isOutline);
+      if (isOutline) {
+        expect(material.depthWrite).toBe(false);
+        expect(material.transparent).toBe(true);
+        expect((material as THREE.LineBasicMaterial).color.getHex()).toBe(
+          0x35e7ee,
+        );
+      }
     }
     projection.dispose();
   });
