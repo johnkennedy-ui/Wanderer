@@ -363,6 +363,95 @@ describe("GameSession building placement preview and commit", () => {
     );
   });
 
+  it("keeps the horizontal fixture clear before the first wave and rejects later occupants", () => {
+    const session = new GameSession();
+    const originalLane = wallLine({ x: 1, y: 1 }, { x: 3, y: 1 });
+    const successLane = wallLine({ x: 1, y: 3 }, { x: 3, y: 3 });
+    expect(session.previewBuildingPlacement(originalLane).valid).toBe(true);
+    let observedLiveOccupancy = false;
+    let observedWaveOccupancy = false;
+
+    // Match the fresh browser world and ordinary incidental choice selections.
+    // No actor removal, paused combat, saved fixture rewrite or placement retry.
+    // 3,000 normal 50 ms simulation steps cover the 150 s browser watchdog.
+    for (let step = 0; step <= 3_000; step += 1) {
+      let ui = session.presentation().ui;
+      if (ui.pendingClassChoices.length > 0) {
+        expect(session.chooseClass("wizard")).toBe(true);
+        ui = session.presentation().ui;
+      }
+      const choiceKeys = new Set<string>();
+      while (ui.pendingClassSkillChoices.length > 0) {
+        const key = ui.pendingClassSkillChoices.join("|");
+        expect(choiceKeys.has(key)).toBe(false);
+        choiceKeys.add(key);
+        expect(session.chooseClassSkill(ui.pendingClassSkillChoices[0])).toBe(
+          true,
+        );
+        ui = session.presentation().ui;
+      }
+      if (ui.pendingUpgradeChoices.length > 0) {
+        expect(session.chooseUpgrade(ui.pendingUpgradeChoices[0])).toBe(true);
+      }
+
+      const success = session.previewBuildingPlacement(successLane);
+      if (session.presentation().ui.wave.waveIndex === 0) {
+        expect(success, "pre-wave corridor at step " + step).toMatchObject({
+          valid: true,
+          rejection: null,
+          cost: { wood: 18, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+        });
+      } else if (
+        !observedWaveOccupancy &&
+        success.rejection?.kind === "occupied-by-actor"
+      ) {
+        const before = session.presentation().ui;
+        const savedBefore =
+          session.createValidCampfireSaveRequest(31)?.document;
+        expect(savedBefore).toBeDefined();
+        expect(session.commitBuildingPlacement(successLane)).toEqual({
+          ok: false,
+          rejection: { kind: "occupied-by-actor" },
+        });
+        expect(session.presentation().ui.resources).toEqual(before.resources);
+        expect(session.presentation().ui.buildings).toEqual(before.buildings);
+        expect(session.createValidCampfireSaveRequest(31)?.document).toEqual(
+          savedBefore,
+        );
+        observedWaveOccupancy = true;
+      }
+      expect(positionsOf(success)).toEqual([
+        { x: 1, y: 3 },
+        { x: 2, y: 3 },
+        { x: 3, y: 3 },
+      ]);
+
+      if (
+        !observedLiveOccupancy &&
+        session.previewBuildingPlacement(originalLane).rejection?.kind ===
+          "occupied-by-actor"
+      ) {
+        const before = session.presentation().ui;
+        const savedBefore =
+          session.createValidCampfireSaveRequest(31)?.document;
+        expect(savedBefore).toBeDefined();
+        expect(session.commitBuildingPlacement(originalLane)).toEqual({
+          ok: false,
+          rejection: { kind: "occupied-by-actor" },
+        });
+        expect(session.presentation().ui.resources).toEqual(before.resources);
+        expect(session.presentation().ui.buildings).toEqual(before.buildings);
+        expect(session.createValidCampfireSaveRequest(31)?.document).toEqual(
+          savedBefore,
+        );
+        observedLiveOccupancy = true;
+      }
+      if (step < 3_000) session.tick(0.05);
+    }
+    expect(observedLiveOccupancy).toBe(true);
+    expect(observedWaveOccupancy).toBe(true);
+  });
+
   it("revalidates both occupancy and aggregate resources when confirming", () => {
     const session = sessionWithResources(18);
     const request = wallLine({ x: 1, y: 2 }, { x: 3, y: 2 });

@@ -681,6 +681,63 @@ describe("current HUD placement port", () => {
     ui.dispose();
   });
 
+  it("disables a previously valid wall line when an actor enters and recovers without committing", () => {
+    let now = 0;
+    vi.stubGlobal("performance", { now: () => now });
+    const { ui, intents, get } = setupUi();
+    const initial = snapshot();
+    ui.render(initial, "actor-outside");
+    get("build-buttons")
+      .children.find((button) => button.dataset.testid === "build-WoodWall")!
+      .click();
+    const start = { x: 1, y: 1 };
+    const end = { x: 3, y: 1 };
+    ui.applyWorldPlacement(start);
+    ui.applyWorldPlacement(end);
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("true");
+    expect(get("confirm-placement").disabled).toBe(false);
+
+    intents.previewPlacement.mockImplementation((request) => {
+      const valid = previewFor(request);
+      const rejection = { kind: "occupied-by-actor" } as const;
+      return {
+        ...valid,
+        valid: false,
+        rejection,
+        tiles: valid.tiles.map((tile, index) =>
+          index === 0 ? { ...tile, valid: false, rejection } : tile,
+        ),
+      };
+    });
+    now = 120;
+    ui.render(initial, "actor-inside");
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("false");
+    expect(get("placement-preview-message").textContent).toContain(
+      "blocks a character",
+    );
+    expect(get("confirm-placement").disabled).toBe(true);
+    expect(ui.placementPreview()?.tiles[0].valid).toBe(false);
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    expect(intents.save).not.toHaveBeenCalled();
+
+    intents.previewPlacement.mockImplementation(previewFor);
+    now = 240;
+    ui.render(initial, "actor-outside-again");
+    expect(get("placement-preview").getAttribute("data-valid")).toBe("true");
+    expect(get("confirm-placement").disabled).toBe(false);
+    expect(intents.confirmPlacement).not.toHaveBeenCalled();
+    get("confirm-placement").click();
+    expect(intents.confirmPlacement).toHaveBeenCalledExactlyOnceWith({
+      kind: "place",
+      buildingKind: "WoodWall",
+      position: start,
+      endPosition: end,
+    });
+    expect(intents.save).not.toHaveBeenCalled();
+    ui.dispose();
+  });
+
   it("refreshes a staged preview only after placement context changes and the bounded refresh interval", () => {
     let now = 0;
     vi.stubGlobal("performance", { now: () => now });

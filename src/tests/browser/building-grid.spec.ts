@@ -155,13 +155,16 @@ const setup = async (page: Page, project: string) => {
 const wallDragCases = [
   {
     name: "horizontal",
-    start: { x: 1, y: 1 },
-    end: { x: 3, y: 1 },
-    confirm: { x: 2, y: 1 },
+    // y=1 intersects a live starter actor's clearance. This fixed pre-wave
+    // corridor preserves the three-cell geometry without suppressing combat;
+    // session-placement tests cover its live routes and later wave rejection.
+    start: { x: 1, y: 3 },
+    end: { x: 3, y: 3 },
+    confirm: { x: 2, y: 3 },
     tiles: [
-      { x: 1, y: 1 },
-      { x: 2, y: 1 },
-      { x: 3, y: 1 },
+      { x: 1, y: 3 },
+      { x: 2, y: 3 },
+      { x: 3, y: 3 },
     ],
   },
   {
@@ -326,6 +329,9 @@ for (const gesture of ["drag", "two-tap"] as const) {
       if (beforeResources === null)
         throw new Error("Resources were not available");
 
+      await expect(page.getByTestId("wave-status")).toHaveText(
+        /^Next wave in \d+s$/,
+      );
       await openBuild(page);
       const kind =
         gesture === "two-tap" && line.name === "vertical"
@@ -394,6 +400,9 @@ for (const gesture of ["drag", "two-tap"] as const) {
       await expect(resources).not.toHaveText(beforeResources);
       await expect(page.getByTestId("position")).toHaveText(
         player.positionText,
+      );
+      await expect(page.getByTestId("wave-status")).toHaveText(
+        /^Next wave in \d+s$/,
       );
     });
   }
