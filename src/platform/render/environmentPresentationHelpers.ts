@@ -15,6 +15,10 @@ export type EnvironmentAssetKey =
   | "environment-tree-broadleaf-b"
   | "environment-tree-dead-a"
   | "environment-water-pond-small"
+  | "environment-world-river"
+  | "environment-world-lake"
+  | "environment-world-mountain"
+  | "environment-world-cave"
   | "environment-bush-a"
   | "environment-reeds-a"
   | "environment-fallen-log-a";
@@ -33,6 +37,10 @@ export const environmentFilenames: Readonly<
   "environment-tree-broadleaf-b": "expansion-v1/tree_broadleaf_b.glb",
   "environment-tree-dead-a": "expansion-v1/tree_dead_a.glb",
   "environment-water-pond-small": "expansion-v1/water_pond_small.glb",
+  "environment-world-river": "world-map-v1/world_river_tile.glb",
+  "environment-world-lake": "world-map-v1/world_lake.glb",
+  "environment-world-mountain": "world-map-v1/world_mountain.glb",
+  "environment-world-cave": "world-map-v1/world_cave.glb",
   "environment-bush-a": "expansion-v1/bush_a.glb",
   "environment-reeds-a": "expansion-v1/reeds_a.glb",
   "environment-fallen-log-a": "expansion-v1/fallen_log_a.glb",
@@ -204,11 +212,37 @@ const obstacleDescriptor = (
   chunk: ChunkRecipe,
   obstacle: ChunkObstacle,
 ): Descriptor | undefined => {
-  // Only the existing markers are replaced. Water and mountains keep their V3 primitives.
-  if (obstacle.kind === "water" || obstacle.kind === "mountain")
-    return undefined;
-  const kind = obstacle.kind === "tree" ? "tree" : "rock";
   const seed = `visual-v1|${chunk.domainSeeds.cosmetic ?? 0}|${obstacle.id}`;
+  if (obstacle.kind === "water") {
+    return {
+      id: obstacle.id,
+      asset:
+        obstacle.waterKind === "river"
+          ? "environment-world-river"
+          : "environment-world-lake",
+      position: obstacle.position,
+      footprint: obstacle.waterKind === "river" ? 1.65 : 1.85,
+      yaw: 0,
+      scale: 1,
+      fallback: true,
+    };
+  }
+  if (obstacle.kind === "mountain") {
+    const asset =
+      hash(`${seed}|cave`) % 5 === 0
+        ? "environment-world-cave"
+        : "environment-world-mountain";
+    return {
+      id: obstacle.id,
+      asset,
+      position: obstacle.position,
+      footprint: obstacle.radius ?? 1.35,
+      yaw: unit(`${seed}|yaw`) * Math.PI * 2,
+      scale: 1,
+      fallback: true,
+    };
+  }
+  const kind = obstacle.kind === "tree" ? "tree" : "rock";
   const footprint = obstacle.radius ?? 0.9; // Legacy obstacle collision is 0.9, never its 0.38 marker.
   return {
     id: obstacle.id,
@@ -263,6 +297,7 @@ export const environmentDescriptorInputKeyFor = (
       chunk.obstacles.map((obstacle) => [
         obstacle.id,
         obstacle.kind ?? null,
+        obstacle.waterKind ?? null,
         obstacle.radius ?? null,
         obstacle.position.x,
         obstacle.position.y,

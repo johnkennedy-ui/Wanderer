@@ -8,6 +8,7 @@ import {
   modelAssetUrlFor,
   modelFilenameFor,
   projectileModelFor,
+  towerLevelModelFor,
 } from "../../platform/render/modelPresentationHelpers";
 import { RetainedProjection } from "../../platform/render/retainedProjectionHelpers";
 import { meshFor, rendererSnapshot } from "./renderer-test-helpers";
@@ -108,6 +109,12 @@ describe("model presentation assets", () => {
       ["building-ArcherTower", "tower-expansion-v1/tower_archer.glb"],
       ["building-SwordTower", "tower-expansion-v1/tower_sword.glb"],
       ["building-MageTower", "tower-expansion-v1/tower_mage.glb"],
+      ["tower-ArcherTower-level-2", "tower-levels-v1/tower_archer_level_2.glb"],
+      ["tower-ArcherTower-level-3", "tower-levels-v1/tower_archer_level_3.glb"],
+      ["tower-SwordTower-level-2", "tower-levels-v1/tower_sword_level_2.glb"],
+      ["tower-SwordTower-level-3", "tower-levels-v1/tower_sword_level_3.glb"],
+      ["tower-MageTower-level-2", "tower-levels-v1/tower_mage_level_2.glb"],
+      ["tower-MageTower-level-3", "tower-levels-v1/tower_mage_level_3.glb"],
     ];
     expect(expected.map(([key]) => modelFilenameFor(key))).toEqual(
       expected.map(([, filename]) => filename),
@@ -125,6 +132,15 @@ describe("model presentation assets", () => {
     expect(projectileModelFor("magic", "tower-crystal")).toBe(
       "projectile-tower-crystal",
     );
+    expect(towerLevelModelFor("ArcherTower", 1)).toBe("building-ArcherTower");
+    expect(towerLevelModelFor("ArcherTower", 2)).toBe(
+      "tower-ArcherTower-level-2",
+    );
+    expect(towerLevelModelFor("ArcherTower", 3)).toBe(
+      "tower-ArcherTower-level-3",
+    );
+    expect(towerLevelModelFor("MageTower", 4)).toBe("tower-MageTower-level-3");
+    expect(towerLevelModelFor("Farm", 3)).toBe("building-Farm");
   });
 
   it("plays a tower attack clip and rotates only its named aim pivot", async () => {

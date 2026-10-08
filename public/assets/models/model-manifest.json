@@ -28,6 +28,17 @@
       "Farm": "building_farm.glb",
       "Storage": "building_storage.glb",
       "Healer": "building_healing_hut.glb"
+    },
+    "towerLevels": {
+      "ArcherTower": {"2": "tower-levels-v1/tower_archer_level_2.glb", "3": "tower-levels-v1/tower_archer_level_3.glb"},
+      "SwordTower": {"2": "tower-levels-v1/tower_sword_level_2.glb", "3": "tower-levels-v1/tower_sword_level_3.glb"},
+      "MageTower": {"2": "tower-levels-v1/tower_mage_level_2.glb", "3": "tower-levels-v1/tower_mage_level_3.glb"}
+    },
+    "worldMap": {
+      "river": "world-map-v1/world_river_tile.glb",
+      "lake": "world-map-v1/world_lake.glb",
+      "cave": "world-map-v1/world_cave.glb",
+      "mountain": "world-map-v1/world_mountain.glb"
     }
   }
 }
