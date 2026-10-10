@@ -1,0 +1,95 @@
+{
+  "format": "wanderer-tower-levels-v1",
+  "levels": [
+    1,
+    2,
+    3
+  ],
+  "levelOne": "Original tower-expansion-v1 model; levels 2 and 3 are recolours.",
+  "assets": [
+    {
+      "kind": "ArcherTower",
+      "level": 2,
+      "file": "tower_archer_level_2.glb",
+      "sourceSha256": "9328e4d281e132698f6cfb58b5c13f79b6313ed51af736e6e660d71e7fdef3bc",
+      "sha256": "4758a840362b325404ee19d064a0028abdb61402b86c4e4e67d383c7016d8315",
+      "bytes": 1039592,
+      "tint": [
+        0.42,
+        0.76,
+        1.0
+      ],
+      "geometry": "unchanged source tower skin"
+    },
+    {
+      "kind": "ArcherTower",
+      "level": 3,
+      "file": "tower_archer_level_3.glb",
+      "sourceSha256": "9328e4d281e132698f6cfb58b5c13f79b6313ed51af736e6e660d71e7fdef3bc",
+      "sha256": "b36616a872ca8e42fe5bf24179a088b103afc9a8252f38499f466422eb405d22",
+      "bytes": 1039592,
+      "tint": [
+        1.0,
+        0.69,
+        0.26
+      ],
+      "geometry": "unchanged source tower skin"
+    },
+    {
+      "kind": "SwordTower",
+      "level": 2,
+      "file": "tower_sword_level_2.glb",
+      "sourceSha256": "a17e1d75f6e92546347e32dadd72dadf977c08827a656a3c83063bd6dcc90861",
+      "sha256": "1913eab1e671dc63c4d942d8045fcf8cb97c5ded8c7ca4f6252cd411c72f078c",
+      "bytes": 957780,
+      "tint": [
+        0.42,
+        0.76,
+        1.0
+      ],
+      "geometry": "unchanged source tower skin"
+    },
+    {
+      "kind": "SwordTower",
+      "level": 3,
+      "file": "tower_sword_level_3.glb",
+      "sourceSha256": "a17e1d75f6e92546347e32dadd72dadf977c08827a656a3c83063bd6dcc90861",
+      "sha256": "15b439afafd5e7238d67b6b23e114119e1e4395279352bf122051adc54e21755",
+      "bytes": 957776,
+      "tint": [
+        1.0,
+        0.69,
+        0.26
+      ],
+      "geometry": "unchanged source tower skin"
+    },
+    {
+      "kind": "MageTower",
+      "level": 2,
+      "file": "tower_mage_level_2.glb",
+      "sourceSha256": "7d5cb2e705a87576c8d759eb44688a8988b94a0227413891f431d09e827d54e2",
+      "sha256": "d87c4e59b38cfbc1ff9931f9dcdaa722a92070512ca102f073a089471cb651da",
+      "bytes": 1074868,
+      "tint": [
+        0.42,
+        0.76,
+        1.0
+      ],
+      "geometry": "unchanged source tower skin"
+    },
+    {
+      "kind": "MageTower",
+      "level": 3,
+      "file": "tower_mage_level_3.glb",
+      "sourceSha256": "7d5cb2e705a87576c8d759eb44688a8988b94a0227413891f431d09e827d54e2",
+      "sha256": "4ea3aab47fdab7f299a538f2ce6413b6f837ed152c450001a300506bd5a65416",
+      "bytes": 1074868,
+      "tint": [
+        1.0,
+        0.69,
+        0.26
+      ],
+      "geometry": "unchanged source tower skin"
+    }
+  ]
+}

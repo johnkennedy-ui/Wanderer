@@ -79,19 +79,30 @@ const parseGlb = (
 const manifest = JSON.parse(
   readFileSync(join(modelsDirectory, "model-manifest.json"), "utf8"),
 ) as {
-  readonly assets: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  readonly assets: Readonly<Record<string, unknown>> & {
+    readonly buildings: { readonly Healer: string };
+  };
 };
-const mappedAssets = Object.values(manifest.assets)
-  .flatMap(Object.values)
-  .sort();
+const collectAssetPaths = (value: unknown): string[] => {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectAssetPaths);
+  if (value !== null && typeof value === "object")
+    return Object.values(value).flatMap(collectAssetPaths);
+  return [];
+};
+const mappedAssets = collectAssetPaths(manifest.assets).sort();
 
 describe("Wanderer model pack", () => {
   it("maps every supplied GLB exactly once, including Healer to the healing hut", () => {
-    const files = readdirSync(modelsDirectory)
+    const rootFiles = readdirSync(modelsDirectory)
       .filter((file) => file.endsWith(".glb"))
       .sort();
-    expect(files).toEqual(mappedAssets);
-    expect(mappedAssets).toHaveLength(16);
+    const rootMappedAssets = mappedAssets.filter(
+      (asset) => !asset.includes("/"),
+    );
+    expect(new Set(mappedAssets).size).toBe(mappedAssets.length);
+    expect(rootFiles).toEqual(rootMappedAssets);
+    expect(mappedAssets).toHaveLength(26);
     expect(manifest.assets.buildings.Healer).toBe("building_healing_hut.glb");
   });
 
@@ -121,13 +132,17 @@ describe("Wanderer model pack", () => {
           (accessor.byteOffset ?? 0) + accessor.count * bytes,
         ).toBeLessThanOrEqual(view.byteLength);
         if (accessor.min !== undefined || accessor.max !== undefined) {
-          expect(accessor.type).toBe("VEC3");
-          expect(accessor.min).toHaveLength(3);
-          expect(accessor.max).toHaveLength(3);
-          for (let index = 0; index < 3; index += 1)
-            expect(accessor.min![index]).toBeLessThanOrEqual(
-              accessor.max![index],
-            );
+          const componentCount = typeComponents[accessor.type];
+          expect(componentCount).toBeGreaterThan(0);
+          if (accessor.min !== undefined)
+            expect(accessor.min).toHaveLength(componentCount);
+          if (accessor.max !== undefined)
+            expect(accessor.max).toHaveLength(componentCount);
+          if (accessor.min !== undefined && accessor.max !== undefined)
+            for (let index = 0; index < componentCount; index += 1)
+              expect(accessor.min[index]).toBeLessThanOrEqual(
+                accessor.max[index],
+              );
         }
       }
       for (const primitive of gltf.meshes.flatMap((mesh) => mesh.primitives)) {

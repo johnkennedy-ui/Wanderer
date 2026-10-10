@@ -1,0 +1,109 @@
+{
+  "format": "wanderer-world-map-v1",
+  "upAxis": "+Y",
+  "units": "metres",
+  "static": true,
+  "collision": "presentation only; existing deterministic terrain owns collision",
+  "assets": [
+    {
+      "id": "world_river_tile",
+      "file": "world_river_tile.glb",
+      "category": "world-map-water",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -2.02,
+          -0.0125,
+          -2.0
+        ],
+        "max": [
+          2.02,
+          0.057999999999999996,
+          2.0
+        ]
+      },
+      "triangles": 62,
+      "meshCount": 6,
+      "sha256": "8109e9822e6ddec12548f25ad6a9a0eb0a0f0ad247099ac8fdbf850162dd2d31",
+      "bytes": 10020,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "world_lake",
+      "file": "world_lake.glb",
+      "category": "world-map-water",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -2.1196009952521497,
+          0.018,
+          -1.505918488628914
+        ],
+        "max": [
+          2.1009847487845668,
+          0.055,
+          1.5666674041117272
+        ]
+      },
+      "triangles": 180,
+      "meshCount": 5,
+      "sha256": "cd99829b7c0949a2eea7ff310ff8aa8a3a6ee6bb6f1e188902bc0fb2e977ab6d",
+      "bytes": 19432,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "world_mountain",
+      "file": "world_mountain.glb",
+      "category": "world-map-landmark",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -1.57016531794494,
+          -1.3608533607647861,
+          -0.9440094252076694
+        ],
+        "max": [
+          1.8577087749104106,
+          3.8473121975384803,
+          1.0514321620851168
+        ]
+      },
+      "triangles": 120,
+      "meshCount": 6,
+      "sha256": "10f48ae09d94e9b8a2cfcef592c73c162413373490557be2aa7998ad4f97edfe",
+      "bytes": 15312,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    },
+    {
+      "id": "world_cave",
+      "file": "world_cave.glb",
+      "category": "world-map-landmark",
+      "forward": null,
+      "bounds": {
+        "min": [
+          -1.7961648893674091,
+          -0.4419497657033321,
+          -1.4552683942917481
+        ],
+        "max": [
+          1.8302031637457208,
+          1.8679010523033628,
+          1.2849757957340935
+        ]
+      },
+      "triangles": 108,
+      "meshCount": 7,
+      "sha256": "4af6b4be956cd961fcfbbf309ecaebdc76b48fe633661342fdd93d22c8e1805d",
+      "bytes": 15028,
+      "static": true,
+      "animationClips": [],
+      "collision": "presentation-only; inherit existing domain obstacle or none"
+    }
+  ]
+}
