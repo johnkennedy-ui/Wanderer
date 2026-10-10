@@ -59,6 +59,12 @@ const loadAsset = async (file: string): Promise<THREE.Group> => {
     .scene;
 };
 
+const loadWorldAsset = async (file: string): Promise<THREE.Group> => {
+  const bytes = readFileSync(`public/assets/models/world-map-v1/${file}.glb`);
+  return (await new GLTFLoader().parseAsync(new Uint8Array(bytes).buffer, ""))
+    .scene;
+};
+
 const horizontalRadius = (
   object: THREE.Object3D,
   center: THREE.Vector3,
@@ -124,14 +130,26 @@ describe("environment presentation", () => {
     projection.render(snapshot([chunk(0, 0)]), fallback);
     await Promise.resolve();
     expect(projection.diagnostics().pendingInstances).toBe(0);
-    expect(projection.diagnostics().fallbackInstances).toBe(2);
+    expect(projection.diagnostics().fallbackInstances).toBe(3);
     expect(fallback).not.toHaveBeenCalledWith(expect.any(String), true);
     projection.dispose();
   });
 
-  it("maps expansion keys and deterministically describes legacy/V3 obstacles without replacing water", () => {
+  it("maps expansion assets and deterministically describes legacy/V3 water and terrain", () => {
     expect(environmentFilenameFor("environment-tree-pine-a")).toBe(
       "expansion-v1/tree_pine_a.glb",
+    );
+    expect(environmentFilenameFor("environment-world-river")).toBe(
+      "world-map-v1/world_river_tile.glb",
+    );
+    expect(environmentFilenameFor("environment-world-lake")).toBe(
+      "world-map-v1/world_lake.glb",
+    );
+    expect(environmentFilenameFor("environment-world-mountain")).toBe(
+      "world-map-v1/world_mountain.glb",
+    );
+    expect(environmentFilenameFor("environment-world-cave")).toBe(
+      "world-map-v1/world_cave.glb",
     );
     const normal = environmentDescriptorsFor(snapshot([chunk(1, -2)]));
     const reversed = environmentDescriptorsFor(
@@ -140,11 +158,74 @@ describe("environment presentation", () => {
     expect(normal.filter((item) => item.id.includes("1:-2"))).toEqual(reversed);
     expect(normal.map((item) => item.id)).toContain("rock:1:-2");
     expect(normal.map((item) => item.id)).toContain("tree:1:-2");
-    expect(normal.map((item) => item.id)).not.toContain("water:1:-2");
+    expect(normal.map((item) => item.id)).toContain("water:1:-2");
+    expect(normal.find((item) => item.id === "water:1:-2")?.asset).toBe(
+      "environment-world-lake",
+    );
     expect(normal.find((item) => item.id === "rock:1:-2")?.footprint).toBe(0.9);
     expect(
       normal.filter((item) => item.id.startsWith("environment:1:-2")).length,
     ).toBeLessThanOrEqual(2);
+  });
+
+  it.each([
+    ["world_river_tile", "river tile"],
+    ["world_lake", "lake"],
+    ["world_cave", "cave"],
+    ["world_mountain", "mountain"],
+  ])("loads the generated %s GLB for the %s map feature", async (file) => {
+    const model = await loadWorldAsset(file);
+    let meshes = 0;
+    model.traverse((object) => {
+      if (object instanceof THREE.Mesh) meshes += 1;
+    });
+    expect(meshes).toBeGreaterThan(0);
+  });
+
+  it("selects river/lake art by terrain kind and derives caves deterministically from mountains", () => {
+    const terrain = (cosmetic: number): ChunkRecipe => ({
+      ...chunk(1, 1, cosmetic),
+      obstacles: [
+        {
+          id: "river",
+          kind: "water",
+          waterKind: "river",
+          radius: 1.5,
+          position: { x: 18, y: 18 },
+        },
+        {
+          id: "lake",
+          kind: "water",
+          waterKind: "lake",
+          radius: 1.05,
+          position: { x: 20, y: 18 },
+        },
+        {
+          id: "peak",
+          kind: "mountain",
+          radius: 1.35,
+          position: { x: 22, y: 18 },
+        },
+      ],
+    });
+    const descriptors = (cosmetic: number) =>
+      environmentDescriptorsFor(snapshot([terrain(cosmetic)]));
+    expect(descriptors(12).find((item) => item.id === "river")?.asset).toBe(
+      "environment-world-river",
+    );
+    expect(descriptors(12).find((item) => item.id === "lake")?.asset).toBe(
+      "environment-world-lake",
+    );
+    expect(descriptors(12)).toEqual(descriptors(12));
+    const mountainAssets = new Set(
+      Array.from(
+        { length: 40 },
+        (_, seed) =>
+          descriptors(seed).find((item) => item.id === "peak")?.asset,
+      ),
+    );
+    expect(mountainAssets).toContain("environment-world-cave");
+    expect(mountainAssets).toContain("environment-world-mountain");
   });
 
   it("caps cosmetic decoration, preserves it during player travel and excludes interaction footprints", () => {
@@ -442,7 +523,7 @@ describe("environment presentation", () => {
     projection.render(frame, fallback);
     await Promise.resolve();
     projection.render(frame, fallback);
-    expect(cache.acquire).toHaveBeenCalledTimes(2);
+    expect(cache.acquire).toHaveBeenCalledTimes(3);
     expect(fallback).not.toHaveBeenCalledWith("rock:0:1", true);
     projection.dispose();
   });

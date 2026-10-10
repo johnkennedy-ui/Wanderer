@@ -10,6 +10,7 @@ export interface BoundActorAnimation {
 const animatedAsset = (asset: string): boolean =>
   asset.startsWith("player-") ||
   asset.startsWith("enemy-") ||
+  asset.startsWith("tower-") ||
   asset === "building-ArcherTower" ||
   asset === "building-SwordTower" ||
   asset === "building-MageTower";

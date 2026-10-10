@@ -90,11 +90,26 @@ export type ModelAssetKey =
   | "building-Healer"
   | "building-ArcherTower"
   | "building-SwordTower"
-  | "building-MageTower";
+  | "building-MageTower"
+  | "tower-ArcherTower-level-2"
+  | "tower-ArcherTower-level-3"
+  | "tower-SwordTower-level-2"
+  | "tower-SwordTower-level-3"
+  | "tower-MageTower-level-2"
+  | "tower-MageTower-level-3";
 
 export const modelFilenameFor = (key: ModelAssetKey): string => {
   if (key.startsWith("environment-"))
     return environmentFilenameFor(key as EnvironmentAssetKey);
+  if (key.startsWith("tower-")) {
+    const [, kind, , level] = key.split("-");
+    const stem = {
+      ArcherTower: "tower_archer",
+      SwordTower: "tower_sword",
+      MageTower: "tower_mage",
+    }[kind as "ArcherTower" | "SwordTower" | "MageTower"];
+    return "tower-levels-v1/" + stem + "_level_" + level + ".glb";
+  }
   const separator = key.indexOf("-");
   const category = key.slice(0, separator);
   const kind = key.slice(separator + 1);
@@ -120,6 +135,15 @@ export const modelAssetUrlFor = (
   if (/^[a-z][a-z\d+.-]*:/i.test(basePath))
     return new URL(filename, basePath).toString();
   return `${basePath.endsWith("/") ? basePath : `${basePath}/`}${filename}`;
+};
+
+export const towerLevelModelFor = (
+  kind: BuildingKind,
+  level: number,
+): ModelAssetKey => {
+  if (!isTowerBuildingKind(kind) || level <= 1)
+    return ("building-" + kind) as ModelAssetKey;
+  return ("tower-" + kind + "-level-" + (level >= 3 ? 3 : 2)) as ModelAssetKey;
 };
 
 export const projectileModelFor = (
@@ -373,7 +397,7 @@ export class ModelProjection {
               }
             : {}),
           id: building.id,
-          asset: `building-${building.kind}` as ModelAssetKey,
+          asset: towerLevelModelFor(building.kind, building.level),
           position: building.position,
           height: 0,
           scale: 0.76 + building.level * 0.06,
