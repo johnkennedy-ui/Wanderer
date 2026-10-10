@@ -350,7 +350,14 @@ describe("terrain collision", () => {
       delta: 0.1,
       elapsed: 1,
       player: { position: { x: 18, y: 0 }, hp: 100, maxHp: 100 },
-      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      resources: {
+        wood: 0,
+        stone: 0,
+        scrap: 0,
+        essence: 0,
+        iron: 0,
+        bossCore: 0,
+      },
       enemies: new Map([[boss.id, boss]]),
       committedSavePoint: {
         id: "campfire:test",

@@ -11,6 +11,7 @@ import {
 import { EnvironmentProjection } from "./environmentPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 import { PlacementPreviewProjection } from "./placementPreviewHelpers";
+import { harvestableNodeIdFromIntersections } from "./harvestRaycastHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
 
@@ -32,6 +33,10 @@ export interface ThreeRenderer {
     clientX: number,
     clientY: number,
   ): Vector2 | null;
+  harvestableNodeIdFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ): string | null;
   diagnostics(): ThreeRendererDiagnostics;
   dispose(): void;
 }
@@ -123,6 +128,24 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     return { x: worldIntersection.x, y: -worldIntersection.z };
   };
 
+  const harvestableNodeIdFromClientPoint = (
+    clientX: number,
+    clientY: number,
+  ): string | null => {
+    if (disposed) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    pointer.set(
+      ((clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera(pointer, camera);
+    return harvestableNodeIdFromIntersections(
+      raycaster.intersectObjects([projection.group, environment.group], true),
+    );
+  };
+
   const positionPlayerHealthLabel = (snapshot: GameRendererSnapshot): void => {
     projectedHealth
       .set(snapshot.player.position.x, 1.75, -snapshot.player.position.y)
@@ -182,6 +205,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
   return {
     canvas,
     worldPositionFromClientPoint,
+    harvestableNodeIdFromClientPoint,
     diagnostics: () => ({
       ...projection.diagnostics(),
       placementPreview: placementGhosts.diagnostics(),

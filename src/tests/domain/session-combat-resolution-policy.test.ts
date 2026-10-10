@@ -117,6 +117,7 @@ describe("session combat resolution policy", () => {
       stone: 1,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 0,
     };
     const input = {
@@ -155,6 +156,7 @@ describe("session combat resolution policy", () => {
       stone: 1,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 0,
     });
   });

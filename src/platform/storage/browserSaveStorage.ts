@@ -10,6 +10,7 @@ import type {
   SaveCommitResult,
   SaveStoragePort,
 } from "../../app/ports/saveStorage";
+import { MAX_SAVE_DOCUMENT_CODE_UNITS } from "../../domain/persistence/saveLimits";
 
 export const SAVE_KEYS = Object.freeze({
   temporary: "wanderer.save.temporary",
@@ -35,108 +36,148 @@ export interface BrowserSaveStorage {
  */
 export const createBrowserSaveStorage = (
   store: KeyValueStore = window.localStorage,
-): BrowserSaveStorage => ({
-  load(): LoadedSave {
-    const primary = decodeSave(store.getItem(SAVE_KEYS.primary));
-    if (primary.ok)
-      return {
-        ok: true,
-        document: primary.document,
-        source: "primary",
-        warning: null,
-        primaryFailure: null,
-      };
-
-    const backup = decodeSave(store.getItem(SAVE_KEYS.backup));
-    if (backup.ok) {
-      return {
-        ok: true,
-        document: backup.document,
-        source: "backup",
-        warning:
-          "Primary save was absent or invalid; recovered the last valid backup.",
-        primaryFailure: primary.failure === "absent" ? null : primary.failure,
-      };
-    }
-
-    const failure =
-      primary.failure === "absent" ? backup.failure : primary.failure;
-    const failedResult = primary.failure === "absent" ? backup : primary;
-    return {
-      ok: false,
-      document: null,
-      source: null,
-      warning: null,
-      failure,
-      message: failedResult.message,
+): BrowserSaveStorage => {
+  let rememberedPrimary:
+    { readonly serialized: string; readonly document: CurrentSave } | undefined;
+  const rememberPrimary = (serialized: string, document: CurrentSave): void => {
+    // Keep a private owned snapshot; callers may mutate the loaded document.
+    rememberedPrimary = {
+      serialized,
+      document: toCurrentSaveStorageDocument(document) as CurrentSave,
     };
-  },
-  commit(document: CurrentSave): SaveCommitResult {
-    if (!isCurrentSave(document))
+  };
+  return {
+    load(): LoadedSave {
+      const primarySerialized = store.getItem(SAVE_KEYS.primary);
+      const primary = decodeSave(primarySerialized);
+      if (primary.ok)
+        if (primarySerialized !== null)
+          rememberPrimary(primarySerialized, primary.document);
+      if (primary.ok)
+        return {
+          ok: true,
+          document: primary.document,
+          source: "primary",
+          warning: null,
+          primaryFailure: null,
+        };
+
+      const backup = decodeSave(store.getItem(SAVE_KEYS.backup));
+      if (backup.ok) {
+        return {
+          ok: true,
+          document: backup.document,
+          source: "backup",
+          warning:
+            "Primary save was absent or invalid; recovered the last valid backup.",
+          primaryFailure: primary.failure === "absent" ? null : primary.failure,
+        };
+      }
+
+      const failure =
+        primary.failure === "absent" ? backup.failure : primary.failure;
+      const failedResult = primary.failure === "absent" ? backup : primary;
       return {
         ok: false,
-        message: "Save rejected: invalid document.",
-        cleanupWarning: null,
+        document: null,
+        source: null,
+        warning: null,
+        failure,
+        message: failedResult.message,
       };
-    try {
-      const serialized = JSON.stringify(toCurrentSaveStorageDocument(document));
-      store.setItem(SAVE_KEYS.temporary, serialized);
-      const verifiedTemporary = decodeSave(store.getItem(SAVE_KEYS.temporary));
-      if (!verifiedTemporary.ok)
+    },
+    commit(document: CurrentSave): SaveCommitResult {
+      if (!isCurrentSave(document))
         return {
           ok: false,
-          message: "Save rejected: temporary validation failed.",
-          cleanupWarning: null,
-        };
-
-      const previousPrimary = decodeSave(store.getItem(SAVE_KEYS.primary));
-      const backupCandidate = previousPrimary.ok
-        ? previousPrimary.document
-        : verifiedTemporary.document;
-      store.setItem(
-        SAVE_KEYS.backup,
-        JSON.stringify(toCurrentSaveStorageDocument(backupCandidate)),
-      );
-      if (!decodeSave(store.getItem(SAVE_KEYS.backup)).ok)
-        return {
-          ok: false,
-          message:
-            "Save rejected: backup validation failed before primary write.",
-          cleanupWarning: null,
-        };
-      store.setItem(SAVE_KEYS.primary, serialized);
-      if (!decodeSave(store.getItem(SAVE_KEYS.primary)).ok)
-        return {
-          ok: false,
-          message: "Save rejected: primary validation failed.",
+          message: "Save rejected: invalid document.",
           cleanupWarning: null,
         };
       try {
-        store.removeItem(SAVE_KEYS.temporary);
-      } catch {
+        const serialized = JSON.stringify(
+          toCurrentSaveStorageDocument(document),
+        );
+        if (serialized.length > MAX_SAVE_DOCUMENT_CODE_UNITS)
+          return {
+            ok: false,
+            message:
+              "Save rejected: document exceeds the supported size limit.",
+            cleanupWarning: null,
+          };
+        store.setItem(SAVE_KEYS.temporary, serialized);
+        if (store.getItem(SAVE_KEYS.temporary) !== serialized)
+          return {
+            ok: false,
+            message: "Save rejected: temporary validation failed.",
+            cleanupWarning: null,
+          };
+
+        const previousPrimarySerialized = store.getItem(SAVE_KEYS.primary);
+        const remembered =
+          previousPrimarySerialized !== null &&
+          rememberedPrimary?.serialized === previousPrimarySerialized
+            ? rememberedPrimary.document
+            : undefined;
+        const previousPrimary =
+          remembered === undefined
+            ? decodeSave(previousPrimarySerialized)
+            : undefined;
+        const previousDocument =
+          remembered ??
+          (previousPrimary?.ok ? previousPrimary.document : undefined);
+        if (
+          previousDocument !== undefined &&
+          previousPrimary?.ok === true &&
+          previousPrimarySerialized !== null
+        )
+          rememberPrimary(previousPrimarySerialized, previousDocument);
+        const backupCandidate = previousDocument ?? document;
+        const backupSerialized = JSON.stringify(
+          toCurrentSaveStorageDocument(backupCandidate),
+        );
+        store.setItem(SAVE_KEYS.backup, backupSerialized);
+        if (store.getItem(SAVE_KEYS.backup) !== backupSerialized)
+          return {
+            ok: false,
+            message:
+              "Save rejected: backup validation failed before primary write.",
+            cleanupWarning: null,
+          };
+        store.setItem(SAVE_KEYS.primary, serialized);
+        if (store.getItem(SAVE_KEYS.primary) !== serialized)
+          return {
+            ok: false,
+            message: "Save rejected: primary validation failed.",
+            cleanupWarning: null,
+          };
+        rememberPrimary(serialized, document);
+        try {
+          store.removeItem(SAVE_KEYS.temporary);
+        } catch {
+          return {
+            ok: true,
+            message:
+              "Saved explicitly to temporary, primary, and backup recovery slots.",
+            cleanupWarning:
+              "Primary save committed, but temporary cleanup could not be completed.",
+          };
+        }
         return {
           ok: true,
           message:
             "Saved explicitly to temporary, primary, and backup recovery slots.",
-          cleanupWarning:
-            "Primary save committed, but temporary cleanup could not be completed.",
+          cleanupWarning: null,
+        };
+      } catch {
+        return {
+          ok: false,
+          message: "Save failed safely: browser storage was unavailable.",
+          cleanupWarning: null,
         };
       }
-      return {
-        ok: true,
-        message:
-          "Saved explicitly to temporary, primary, and backup recovery slots.",
-        cleanupWarning: null,
-      };
-    } catch {
-      return {
-        ok: false,
-        message: "Save failed safely: browser storage was unavailable.",
-        cleanupWarning: null,
-      };
-    }
-  },
-});
+    },
+  };
+};
 
 /** Async application boundary; the storage protocol remains the legacy synchronous browser operation. */
 export const createAsyncBrowserSaveStorage = (

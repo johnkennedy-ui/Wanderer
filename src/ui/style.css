@@ -387,6 +387,12 @@ h2 {
   margin: 0.45rem 0;
 }
 @media (max-width: 700px) {
+  /* Keep the two upper-corner HUD groups from colliding on narrow touch screens. */
+  .hud-quick-stats {
+    top: auto;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    left: max(0.75rem, env(safe-area-inset-left));
+  }
   .hud-settings-stack {
     top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
   }

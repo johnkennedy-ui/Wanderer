@@ -3,13 +3,13 @@ import {
   addResourceBags,
   canAffordResources,
   clampResourcesToCapacity,
-  collectResourcesWithinCapacity,
   materialCapacityFor,
   resourcesForLevel,
   scaleResourceBag,
   subtractResourceBags,
 } from "../../domain/session/economy";
 import { resourceKinds } from "../../domain/types";
+import { tryAddResourceBags } from "../../domain/resourceBalances";
 import type {
   BuildingState,
   ReadonlyResourceBag,
@@ -21,6 +21,7 @@ const resources = (values: Partial<ResourceBag> = {}): ResourceBag => ({
   stone: 0,
   scrap: 0,
   essence: 0,
+  iron: 0,
   bossCore: 0,
   ...values,
 });
@@ -54,7 +55,7 @@ describe("session economy policy", () => {
       subtractResourceBags(left, right),
       scaleResourceBag(left, 0.5),
       clampResourcesToCapacity(left),
-      collectResourcesWithinCapacity(left, right),
+      tryAddResourceBags(left, right),
     ];
 
     for (const output of outputs) {
@@ -77,6 +78,7 @@ describe("session economy policy", () => {
       stone: 2,
       scrap: 1,
       essence: 4,
+      iron: 0,
       bossCore: 1,
     });
 
@@ -86,6 +88,7 @@ describe("session economy policy", () => {
       stone: 4,
       scrap: 2,
       essence: 8,
+      iron: 0,
       bossCore: 2,
     });
     expect(resourcesForLevel(base, 3)).toEqual({
@@ -93,6 +96,7 @@ describe("session economy policy", () => {
       stone: 6,
       scrap: 3,
       essence: 12,
+      iron: 0,
       bossCore: 3,
     });
   });
@@ -103,6 +107,7 @@ describe("session economy policy", () => {
       stone: 7,
       scrap: 6,
       essence: 5,
+      iron: 0,
       bossCore: 4,
     });
     const right = resources({
@@ -110,6 +115,7 @@ describe("session economy policy", () => {
       stone: 2,
       scrap: 1,
       essence: 6,
+      iron: 0,
       bossCore: 5,
     });
 
@@ -118,6 +124,7 @@ describe("session economy policy", () => {
       stone: 9,
       scrap: 7,
       essence: 11,
+      iron: 0,
       bossCore: 9,
     });
     expect(subtractResourceBags(left, right)).toEqual({
@@ -125,6 +132,7 @@ describe("session economy policy", () => {
       stone: 5,
       scrap: 5,
       essence: -1,
+      iron: 0,
       bossCore: -1,
     });
   });
@@ -135,6 +143,7 @@ describe("session economy policy", () => {
       stone: 2,
       scrap: 3,
       essence: 4,
+      iron: 0,
       bossCore: 5,
     });
     expect(canAffordResources(cost, cost)).toBe(true);
@@ -154,6 +163,7 @@ describe("session economy policy", () => {
       stone: 7,
       scrap: 1,
       essence: 0,
+      iron: 0,
       bossCore: 3,
     });
     expect(scaleResourceBag(input, 0.5)).toEqual({
@@ -161,6 +171,7 @@ describe("session economy policy", () => {
       stone: 3,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 1,
     });
   });
@@ -180,6 +191,7 @@ describe("session economy policy", () => {
           stone: 121,
           scrap: 120,
           essence: 119,
+          iron: 0,
           bossCore: 999,
         }),
       ),
@@ -188,6 +200,7 @@ describe("session economy policy", () => {
       stone: 121,
       scrap: 120,
       essence: 119,
+      iron: 0,
       bossCore: 999,
     });
     expect(
@@ -197,10 +210,10 @@ describe("session economy policy", () => {
 
   it("adds incoming resources without a Storage-derived cap", () => {
     expect(
-      collectResourcesWithinCapacity(
-        resources({ wood: 119, stone: -2, bossCore: 3 }),
+      tryAddResourceBags(
+        resources({ wood: 119, stone: 2, bossCore: 3 }),
         resources({ wood: 4, stone: 1, bossCore: 5 }),
       ),
-    ).toEqual(resources({ wood: 123, stone: 0, bossCore: 8 }));
+    ).toEqual(resources({ wood: 123, stone: 3, bossCore: 8 }));
   });
 });

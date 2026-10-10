@@ -78,7 +78,14 @@ const respawnPhase = (
     delta: 0,
     elapsed: 1,
     player: { position: { x: -10, y: 0 }, hp: 100, maxHp: 100 },
-    resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+    resources: {
+      wood: 0,
+      stone: 0,
+      scrap: 0,
+      essence: 0,
+      iron: 0,
+      bossCore: 0,
+    },
     enemies: new Map([[enemy.id, enemy]]),
     committedSavePoint: {
       id: "campfire:test",

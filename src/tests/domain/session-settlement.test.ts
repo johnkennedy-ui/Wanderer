@@ -16,6 +16,7 @@ const emptyResources = (): ResourceBag => ({
   stone: 0,
   scrap: 0,
   essence: 0,
+  iron: 0,
   bossCore: 0,
 });
 
@@ -215,6 +216,7 @@ describe("GameSession settlement", () => {
           stone: 180,
           scrap: 180,
           essence: 180,
+          iron: 0,
           bossCore: 4,
         },
         buildings: [
@@ -257,6 +259,7 @@ describe("GameSession settlement", () => {
       stone: 183,
       scrap: 182,
       essence: 181,
+      iron: 0,
       bossCore: 4,
     });
     expect(session.demolishBuilding("storage:l1")).toMatchObject({
@@ -269,6 +272,7 @@ describe("GameSession settlement", () => {
       stone: 187,
       scrap: 183,
       essence: 181,
+      iron: 0,
       bossCore: 4,
     });
   });

@@ -358,7 +358,14 @@ const snapshot = (
     defense: 0,
     magicDefense: 0,
   },
-  resources: { wood: 120, stone: 120, scrap: 120, essence: 120, bossCore: 1 },
+  resources: {
+    wood: 120,
+    stone: 120,
+    scrap: 120,
+    essence: 120,
+    iron: 0,
+    bossCore: 1,
+  },
   buildRadius: 6,
   inputSource: "system",
   combatStatus: "Ready",
@@ -412,7 +419,7 @@ const previewFor = (request: PlacementRequest): PlacementPreview => {
     tiles,
     valid: true,
     rejection: null,
-    cost: { wood: 3, stone: 2, scrap: 0, essence: 0, bossCore: 0 },
+    cost: { wood: 3, stone: 2, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
   };
 };
 
@@ -1066,9 +1073,10 @@ describe("current HUD placement port", () => {
       "Stone: 120",
       "Metal / Scrap: 120",
       "Essence: 120",
+      "Iron: 0",
       "Boss Core: 1",
     ]);
-    expect(get("resources").children[4].textContent).toBe("◉ 1");
+    expect(get("resources").children[5].textContent).toBe("◉ 1");
     expect(get("build-buttons").children).toHaveLength(9);
     expect(get("build-buttons").children[3].textContent).toBe("✚ Healing Hut");
     expect(get("build-buttons").children[3].getAttribute("aria-label")).toBe(

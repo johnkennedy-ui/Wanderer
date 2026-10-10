@@ -16,7 +16,7 @@ const mixedWallPreview: PlacementPreview = {
   ],
   valid: false,
   rejection: { kind: "occupied-by-actor" },
-  cost: { wood: 8, stone: 4, scrap: 0, essence: 0, bossCore: 0 },
+  cost: { wood: 8, stone: 4, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
 };
 
 describe("retained placement ghost projection", () => {

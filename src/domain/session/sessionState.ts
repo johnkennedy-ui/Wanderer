@@ -18,6 +18,7 @@ import type {
   WorldIdentity,
 } from "../types";
 import { emptyPlayerStatAllocations } from "../types";
+import { isSafeResourceBag } from "../resourceBalances";
 
 /** Immutable default identity used only when a caller did not supply a world. */
 export const DEFAULT_WORLD = Object.freeze({
@@ -127,6 +128,7 @@ export interface SessionState {
   world: WorldIdentity;
   player: RuntimePlayerState;
   resources: ResourceBag;
+  harvestedNodeIds: Set<string>;
   buildings: BuildingState[];
   enemies: Map<string, RuntimeEnemy>;
   projectiles: RuntimeProjectile[];
@@ -170,6 +172,12 @@ export const cloneResources = (
   ...resources,
 });
 
+const cloneSafeResources = (resources: ReadonlyResourceBag): ResourceBag => {
+  if (!isSafeResourceBag(resources))
+    throw new TypeError("Current session resources must be safe integers.");
+  return cloneResources(resources);
+};
+
 export const cloneClassProgression = (
   progression: ClassProgression | undefined,
 ): ClassProgression => ({
@@ -200,6 +208,7 @@ const initialResources = (): ResourceBag => ({
   stone: 120,
   scrap: 120,
   essence: 20,
+  iron: 0,
   bossCore: 0,
 });
 
@@ -234,6 +243,7 @@ export const createFreshSessionState = (
     world: copyWorldIdentity(options.world ?? DEFAULT_WORLD),
     player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
     resources: initialResources(),
+    harvestedNodeIds: new Set(),
     buildings: [],
     enemies: new Map(),
     projectiles: [],
@@ -272,7 +282,8 @@ export const hydrateSessionState = (saved: CurrentSave): SessionState => ({
     hp: saved.player.hp,
     maxHp: saved.player.maxHp,
   },
-  resources: cloneResources(saved.resources),
+  resources: cloneSafeResources(saved.resources),
+  harvestedNodeIds: new Set(saved.harvestedNodeIds),
   buildings: cloneBuildings(saved.buildings),
   enemies: new Map(),
   projectiles: [],

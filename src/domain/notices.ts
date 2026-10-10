@@ -8,6 +8,7 @@ import type {
   EnemyKind,
   EnemyState,
   FloorDropState,
+  HarvestRewards,
   InputSource,
   PlayerState,
   PlayerStats,
@@ -28,6 +29,7 @@ export type PlacementRejection =
   | { readonly kind: "overlaps-existing-building" }
   | { readonly kind: "outside-settlement-radius"; readonly radius: number }
   | { readonly kind: "insufficient-resources" }
+  | { readonly kind: "resource-overflow" }
   | { readonly kind: "unknown-building" }
   | { readonly kind: "occupied-by-actor" }
   | { readonly kind: "building-not-upgradeable" }
@@ -121,7 +123,21 @@ export type GameNotice =
       readonly bossName: string;
     }
   | { readonly kind: "drop.collected" }
-  | { readonly kind: "farm.harvested" };
+  | { readonly kind: "farm.harvested" }
+  | {
+      readonly kind: "resource-node.harvested";
+      readonly rewards: HarvestRewards;
+    }
+  | {
+      readonly kind: "resource-node.rejected";
+      readonly reason:
+        | "unknown-node"
+        | "out-of-reach"
+        | "already-harvested"
+        | "depletion-limit"
+        | "depletion-size-limit"
+        | "inventory-limit";
+    };
 
 /** The DOM UI receives only the fields it presents and the latest typed outcome. */
 export interface GameUiSnapshot {

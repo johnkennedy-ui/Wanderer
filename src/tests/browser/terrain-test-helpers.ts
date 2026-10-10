@@ -3,6 +3,7 @@ import { PerspectiveCamera, Vector3 } from "three";
 import { decodeSave } from "../../domain/save";
 import type { ChunkObstacle, Vector2 } from "../../domain/types";
 import { generateChunk, WANDERER_WEB_V3 } from "../../domain/world";
+import { HARVEST_INTERACTION_DISTANCE } from "../../domain/resourceHarvesting";
 import {
   sweepTerrainMovement,
   terrainBlocksPosition,
@@ -68,6 +69,46 @@ export const terrainFixtureFor = (kind: TerrainKind): TerrainFixture => {
         }
       }
   throw new Error(`No safe generated ${kind} fixture was found`);
+};
+
+/** Find a generated node and a collision-safe player start inside harvest reach. */
+export const harvestableFixtureFor = (
+  kind: "tree" | "rock",
+): {
+  obstacle: ChunkObstacle & {
+    readonly kind: "tree" | "rock";
+    readonly radius: number;
+  };
+  start: Vector2;
+} => {
+  for (let y = -8; y <= 8; y += 1)
+    for (let x = -8; x <= 8; x += 1)
+      for (const obstacle of generateChunk(terrainWorld, { x, y }).obstacles) {
+        if (obstacle.kind !== kind || obstacle.radius === undefined) continue;
+        for (const direction of directions) {
+          const start = {
+            x: obstacle.position.x + direction.x * (obstacle.radius + 0.82),
+            y: obstacle.position.y + direction.y * (obstacle.radius + 0.82),
+          };
+          if (
+            Math.hypot(
+              start.x - obstacle.position.x,
+              start.y - obstacle.position.y,
+            ) <= HARVEST_INTERACTION_DISTANCE &&
+            !terrainBlocksPosition(terrainWorld, start)
+          )
+            return {
+              obstacle: obstacle as ChunkObstacle & {
+                readonly kind: "tree" | "rock";
+                readonly radius: number;
+              },
+              start,
+            };
+        }
+      }
+  throw new Error(
+    "No safe generated " + kind + " harvesting fixture was found",
+  );
 };
 
 export const terrainFordFixture = (): {

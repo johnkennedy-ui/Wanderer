@@ -98,6 +98,7 @@ const resourcePlaceholderIcons = {
   stone: "◆",
   scrap: "⛓",
   essence: "✦",
+  iron: "⛏",
   bossCore: "◉",
 } as const;
 
@@ -267,7 +268,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <button data-testid="new-world">New / reset world</button>
         <button data-testid="save-button">Save at campfire</button>
       </div>
-      <p class="subtle">WASD / arrows move. Tap an open part of the world to travel there; a selected building placement takes priority for its next tap.</p>
+      <p class="subtle">WASD / arrows move. Tap open ground to travel; click trees, rocks, or ore to harvest when in reach. Building placement takes priority over world taps.</p>
       <p data-testid="save-message" class="subtle">No automatic save. Reload restores only the last explicit campfire commit.</p>
       <hr />
       <h2>Passive effects</h2>
@@ -489,6 +490,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       snapshot.resources.stone,
       snapshot.resources.scrap,
       snapshot.resources.essence,
+      snapshot.resources.iron,
       snapshot.resources.bossCore,
       snapshot.buildRadius,
       snapshot.buildings.map((building) => [
@@ -692,6 +694,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       ["stone", "Stone"],
       ["scrap", "Metal / Scrap"],
       ["essence", "Essence"],
+      ["iron", "Iron"],
       ["bossCore", "Boss Core"],
     ] as const
   ).map(([kind, label]) => {

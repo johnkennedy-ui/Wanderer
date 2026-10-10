@@ -158,6 +158,7 @@ describe("session combat tick runtime", () => {
       stone: 4,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 1,
     };
     const input = {
@@ -195,6 +196,7 @@ describe("session combat tick runtime", () => {
       stone: 3,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 1,
     });
     expect(result.enemies.get(respawning.id)).toMatchObject({
@@ -235,6 +237,7 @@ describe("session combat tick runtime", () => {
       stone: 4,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 1,
     });
     expect(input).toEqual({
@@ -260,7 +263,14 @@ describe("session combat tick runtime", () => {
     const input = { intent: { x: 0, y: 0 }, source: "system" as const, at: 2 };
     const base = {
       delta: 0.1,
-      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      resources: {
+        wood: 0,
+        stone: 0,
+        scrap: 0,
+        essence: 0,
+        iron: 0,
+        bossCore: 0,
+      },
       committedSavePoint: {
         id: "campfire:home",
         label: "home",

@@ -48,6 +48,7 @@ describe("GameSession combat-resolution consumer coverage", () => {
       stone: 0,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 2,
     });
     expect(result.floorDrops).toEqual([

@@ -66,9 +66,3 @@ export const clampResourcesToCapacity = (
     clamped[kind] = Math.max(0, resources[kind]);
   return clamped;
 };
-
-/** Adds an incoming bag without applying a Storage-derived cap. */
-export const collectResourcesWithinCapacity = (
-  current: ReadonlyResourceBag,
-  delta: ReadonlyResourceBag,
-): ResourceBag => clampResourcesToCapacity(addResourceBags(current, delta));

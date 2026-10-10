@@ -104,6 +104,7 @@ const setup = async () => {
     canvas: {} as HTMLCanvasElement,
     render: vi.fn<ThreeRenderer["render"]>(),
     worldPositionFromClientPoint: vi.fn(() => null),
+    harvestableNodeIdFromClientPoint: vi.fn(() => null),
     diagnostics: vi.fn<ThreeRenderer["diagnostics"]>(),
     dispose: vi.fn(),
   } satisfies ThreeRenderer;

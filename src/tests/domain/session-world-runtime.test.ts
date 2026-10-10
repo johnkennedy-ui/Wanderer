@@ -90,7 +90,14 @@ describe("session world runtime coordination", () => {
       delta: 0.1,
       elapsed: 10,
       player: { position: playerPosition, hp: 100, maxHp: 100 },
-      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      resources: {
+        wood: 0,
+        stone: 0,
+        scrap: 0,
+        essence: 0,
+        iron: 0,
+        bossCore: 0,
+      },
       enemies: new Map([[scout.id, scout]]),
       committedSavePoint: {
         id: "campfire:home",

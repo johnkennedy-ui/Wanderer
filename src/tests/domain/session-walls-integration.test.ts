@@ -62,6 +62,7 @@ const createSession = (
         stone: 1000,
         scrap: 1000,
         essence: 1000,
+        iron: 0,
         bossCore: 0,
       },
       ...savedChanges,
