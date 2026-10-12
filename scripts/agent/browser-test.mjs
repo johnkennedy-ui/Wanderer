@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { verifyArtifact, markBrowserVerified } from "../security/artifact.mjs";
+import { choosePlaywrightPort } from "./playwright-port.mjs";
 
 export const PAGES_SMOKE_GREP = [
   "environment clones load through the existing model cache at the deployment base",
@@ -140,6 +141,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
+    process.env.PLAYWRIGHT_PORT = String(await choosePlaywrightPort());
     runBrowserMatrix({ argv: process.argv.slice(2) });
   } catch (error) {
     console.error(error.message);

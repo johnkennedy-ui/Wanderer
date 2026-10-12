@@ -27,6 +27,42 @@ export const openKnownClosedBuild = async (page: Page): Promise<void> => {
   );
 };
 
+/** Click only a visible, enabled, topmost public choice with real pointer input.
+ * Locator clicks here re-enter the same locator handler that is resolving its
+ * own modal; page.mouse preserves browser hit-testing without that recursion. */
+const clickVisiblePublicChoice = async (
+  page: Page,
+  choiceId: string,
+): Promise<void> => {
+  // Resolve the current public choice without Locator.evaluate auto-waiting: the
+  // locator handler may be running because that same modal intercepted a query.
+  const point = await page.evaluate((testId) => {
+    const matches = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-testid]"),
+    ).filter((candidate) => candidate.dataset.testid === testId);
+    const node = matches.length === 1 ? matches[0] : null;
+    if (!(node instanceof HTMLButtonElement)) return null;
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(x, y);
+    if (
+      node.matches(":disabled") ||
+      node.getAttribute("aria-disabled") === "true" ||
+      target === null ||
+      (target !== node && !node.contains(target))
+    )
+      return null;
+    return { x, y };
+  }, choiceId);
+  if (point === null)
+    throw new Error(
+      "Public modal choice is not an enabled, topmost hit target",
+    );
+  await page.mouse.click(point.x, point.y);
+};
+
 /** Resolve distinct public choices, never retry a failed selection. The class
  * container is reused for consecutive skill tiers, so identity/key progress,
  * not container disappearance, is the completion witness. */
@@ -35,25 +71,96 @@ export const choosePendingClassChoicesIfOpen = async (
   options: Readonly<{ observeEffects?: boolean }> = {},
 ): Promise<void> => {
   const observeEffects = options.observeEffects ?? true;
-  const modal = page.getByTestId("class-modal");
-  const choices = page.getByTestId("class-choices");
   const seen = new Set<string>();
-  while (await modal.isVisible()) {
-    const key = await choices.getAttribute("data-choice-key");
+  while (
+    await page.evaluate(() => {
+      const currentModal = document.querySelector<HTMLElement>(
+        "[data-testid=class-modal]",
+      );
+      return currentModal !== null && !currentModal.hidden;
+    })
+  ) {
+    await page.waitForFunction(
+      () => {
+        const currentModal = document.querySelector<HTMLElement>(
+          '[data-testid="class-modal"]',
+        );
+        const currentChoices = document.querySelector<HTMLElement>(
+          '[data-testid="class-choices"]',
+        );
+        const key = currentChoices?.getAttribute("data-choice-key");
+        const button =
+          currentModal?.querySelector<HTMLButtonElement>(
+            '[data-testid="class-wizard"]',
+          ) ??
+          currentModal?.querySelector<HTMLButtonElement>("button[data-testid]");
+        return (
+          currentModal !== null &&
+          currentModal !== undefined &&
+          !currentModal.hidden &&
+          key !== null &&
+          key !== undefined &&
+          key.length > 0 &&
+          button !== null &&
+          button !== undefined
+        );
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
+    const choice = await page.evaluate(() => {
+      const currentModal = document.querySelector<HTMLElement>(
+        '[data-testid="class-modal"]',
+      );
+      const currentChoices = document.querySelector<HTMLElement>(
+        '[data-testid="class-choices"]',
+      );
+      const key = currentChoices?.getAttribute("data-choice-key") ?? null;
+      const button =
+        currentModal?.querySelector<HTMLButtonElement>(
+          '[data-testid="class-wizard"]',
+        ) ??
+        currentModal?.querySelector<HTMLButtonElement>("button[data-testid]");
+      return {
+        key,
+        id: button?.dataset.testid ?? null,
+        label: button?.innerText.split(":")[0] ?? null,
+      };
+    });
+    const { key, id, label } = choice;
     if (!key || seen.has(key))
       throw new Error("Class choice did not progress to a distinct public key");
     seen.add(key);
-    const wizard = modal.getByTestId("class-wizard");
-    const button =
-      (await wizard.count()) === 1 ? wizard : modal.getByRole("button").first();
-    const { id, label } = await button.evaluate((node) => ({
-      id: node.getAttribute("data-testid"),
-      label: (node as HTMLElement).innerText.split(":")[0],
-    }));
     if (!id || !label) throw new Error("Class choice lacks public identity");
-    await button.click();
-    await expect(modal.getByTestId(id)).toHaveCount(0);
-    await expect(choices).not.toHaveAttribute("data-choice-key", key);
+    await clickVisiblePublicChoice(page, id);
+    // Locator assertions on this still-open modal can re-enter its own
+    // Playwright locator handler. Observe the same UI progress without a
+    // locator action: either the modal closes or a distinct choice key appears.
+    await page.waitForFunction(
+      ({ choiceId, previousKey }) => {
+        const currentModal = document.querySelector<HTMLElement>(
+          '[data-testid="class-modal"]',
+        );
+        if (currentModal === null) return false;
+        if (currentModal.hidden) return true;
+        const selectedChoiceStillExists = Array.from(
+          currentModal.querySelectorAll<HTMLElement>("[data-testid]"),
+        ).some((candidate) => candidate.dataset.testid === choiceId);
+        if (selectedChoiceStillExists) return false;
+        const currentChoices = document.querySelector<HTMLElement>(
+          '[data-testid="class-choices"]',
+        );
+        const nextKey = currentChoices?.getAttribute("data-choice-key");
+        return (
+          nextKey !== null &&
+          nextKey !== undefined &&
+          nextKey.length > 0 &&
+          nextKey !== previousKey
+        );
+      },
+      { choiceId: id, previousKey: key },
+      { timeout: 5_000 },
+    );
     if (observeEffects)
       await expect(page.getByTestId("effects")).toContainText(label);
   }
@@ -77,23 +184,50 @@ export const installIncidentalChoiceHandlers = async (
       choosePendingClassChoicesIfOpen(page, { observeEffects: false }),
     { noWaitAfter: true },
   );
-  await page.addLocatorHandler(
-    page.getByTestId("upgrade-modal"),
-    async (modal) => {
-      const choices = page.getByTestId("upgrade-choices");
-      const key = await choices.getAttribute("data-choice-key");
-      if (!key) throw new Error("Boss choice lacks public key");
-      await expect(modal.getByRole("button")).toHaveCount(3);
-      const button = modal.getByRole("button").first();
-      const id = await button.getAttribute("data-testid");
-      if (!id) throw new Error("Boss choice lacks public identity");
-      await button.click();
-      // Returning lets Playwright wait for its intercepted overlay to close.
-      // Post-click locators here would re-enter this same handler while the
-      // modal remains visible, so behavior-specific assertions live in their
-      // dedicated manual-choice acceptance scenarios instead.
-    },
-  );
+  await page.addLocatorHandler(page.getByTestId("upgrade-modal"), async () => {
+    // A just-opened upgrade overlay can be observed before its three choices
+    // are projected. Wait on DOM state directly to avoid re-entering this
+    // locator handler while its own overlay is visible.
+    await page.waitForFunction(
+      () => {
+        const modal = document.querySelector<HTMLElement>(
+          '[data-testid="upgrade-modal"]',
+        );
+        if (modal === null) return false;
+        if (modal.hidden) return true;
+        const choices = document.querySelector<HTMLElement>(
+          '[data-testid="upgrade-choices"]',
+        );
+        const key = choices?.getAttribute("data-choice-key");
+        return (
+          key !== null &&
+          key !== undefined &&
+          key.length > 0 &&
+          modal.querySelectorAll("button").length === 3
+        );
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
+    const choice = await page.evaluate(() => {
+      const modal = document.querySelector<HTMLElement>(
+        '[data-testid="upgrade-modal"]',
+      );
+      if (modal === null || modal.hidden) return { visible: false, id: null };
+      return {
+        visible: true,
+        id:
+          modal.querySelector<HTMLButtonElement>("button")?.dataset.testid ??
+          null,
+      };
+    });
+    if (!choice.visible) return;
+    if (choice.id === null)
+      throw new Error("Boss choice lacks public identity");
+    await clickVisiblePublicChoice(page, choice.id);
+    // Returning lets Playwright wait for its intercepted overlay to close.
+    // Do not perform locator assertions against the still-visible overlay.
+  });
   pagesWithIncidentalChoiceHandlers.add(page);
 };
 
@@ -111,9 +245,18 @@ export const openM5World = async (page: Page): Promise<void> => {
   await installIncidentalChoiceHandlers(page);
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? "/");
   const canvas = page.getByTestId("world-canvas");
-  // This diagnostic is populated by the renderer's first projection, not by
-  // page navigation; allow a slow initial frame while preserving the exact
-  // inactive-state assertion.
+  // Use the first public player-state projection as the startup signal;
+  // the destination marker is input state, not a page-load signal.
+  await page.waitForFunction(
+    () => {
+      const currentPosition = document.querySelector<HTMLElement>(
+        '[data-testid="position"]',
+      );
+      return currentPosition?.textContent?.startsWith("Position: ") === true;
+    },
+    undefined,
+    { timeout: 15_000 },
+  );
   await expect(canvas).toHaveAttribute("data-destination-marker", "inactive", {
     timeout: 15_000,
   });

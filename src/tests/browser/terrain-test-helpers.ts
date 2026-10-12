@@ -205,7 +205,8 @@ export const tapWorldPosition = async (
   touch: boolean,
 ): Promise<void> => {
   const canvas = page.getByTestId("world-canvas");
-  const bounds = await canvas.boundingBox();
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox({ timeout: 5_000 });
   if (bounds === null) throw new Error("World canvas was not laid out");
   const tuning = defaultThreeCameraTuning;
   const camera = new PerspectiveCamera(

@@ -4,7 +4,12 @@ import { extname, join, normalize, resolve } from "node:path";
 
 const root = resolve("dist");
 const host = "127.0.0.1";
-const port = Number.parseInt(process.env.PLAYWRIGHT_PORT ?? "4173", 10);
+const portArgumentIndex = process.argv.indexOf("--port");
+const portArgument =
+  portArgumentIndex < 0 ? undefined : process.argv[portArgumentIndex + 1];
+const port = Number(process.env.PLAYWRIGHT_PORT ?? portArgument ?? "4173");
+if (!Number.isInteger(port) || port < 1 || port > 65_535)
+  throw new Error(`Invalid browser preview port: ${port}`);
 const mimeByExtension = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",

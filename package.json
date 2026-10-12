@@ -18,6 +18,7 @@
     "preview": "node scripts/agent/browser-preview.mjs",
     "verify": "npm run format:check && npm run typecheck && npm run test && npm run check:architecture && npm run check:ci-policy && npm run build",
     "test:browser": "node scripts/agent/browser-test.mjs",
+    "test:browser:harvest": "npm run build && node scripts/agent/playwright-test.mjs test src/tests/browser/resource-harvesting.spec.ts --project=desktop --project=touch",
     "format": "node scripts/agent/format.mjs --write",
     "agent:mission-start": "node scripts/agent/mission-start.mjs",
     "agent:status": "node scripts/agent/status.mjs",

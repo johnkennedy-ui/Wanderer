@@ -131,18 +131,37 @@ export const createBrowserSaveStorage = (
           previousPrimarySerialized !== null
         )
           rememberPrimary(previousPrimarySerialized, previousDocument);
-        const backupCandidate = previousDocument ?? document;
-        const backupSerialized = JSON.stringify(
-          toCurrentSaveStorageDocument(backupCandidate),
-        );
-        store.setItem(SAVE_KEYS.backup, backupSerialized);
-        if (store.getItem(SAVE_KEYS.backup) !== backupSerialized)
-          return {
-            ok: false,
-            message:
-              "Save rejected: backup validation failed before primary write.",
-            cleanupWarning: null,
-          };
+        // Keep a validated prior wire document verbatim. Re-projecting a
+        // near-limit V2/V3/V4 primary to V5 can add bytes beyond the decoder's
+        // maximum and create a backup that can never be loaded.
+        const backupSerialized =
+          previousPrimarySerialized !== null && previousDocument !== undefined
+            ? previousPrimarySerialized
+            : serialized;
+        const existingBackupSerialized =
+          previousDocument === undefined
+            ? store.getItem(SAVE_KEYS.backup)
+            : null;
+        const preserveExistingBackup =
+          existingBackupSerialized !== null &&
+          decodeSave(existingBackupSerialized).ok;
+        if (!preserveExistingBackup) {
+          if (backupSerialized.length > MAX_SAVE_DOCUMENT_CODE_UNITS)
+            return {
+              ok: false,
+              message:
+                "Save rejected: backup exceeds the supported size limit.",
+              cleanupWarning: null,
+            };
+          store.setItem(SAVE_KEYS.backup, backupSerialized);
+          if (store.getItem(SAVE_KEYS.backup) !== backupSerialized)
+            return {
+              ok: false,
+              message:
+                "Save rejected: backup validation failed before primary write.",
+              cleanupWarning: null,
+            };
+        }
         store.setItem(SAVE_KEYS.primary, serialized);
         if (store.getItem(SAVE_KEYS.primary) !== serialized)
           return {

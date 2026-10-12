@@ -186,7 +186,7 @@ export const hasGeneratedHarvestedNodeMembership = (
   world: unknown,
 ): boolean => {
   const parsedIds = parseHarvestedNodeList(value, world);
-  if (parsedIds === null || parsedIds.length === 0) return parsedIds !== null;
+  if (parsedIds === null) return false;
   if (
     !isRecord(world) ||
     typeof world.seed !== "string" ||
@@ -194,6 +194,7 @@ export const hasGeneratedHarvestedNodeMembership = (
     !isSupportedWorldGeneratorVersion(world.generatorVersion)
   )
     return false;
+  if (parsedIds.length === 0) return true;
 
   // Validate the complete list cheaply first, then generate each referenced
   // chunk once before depletion and discard its recipe before moving on.

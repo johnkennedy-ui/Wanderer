@@ -10,7 +10,10 @@ import {
 import { isSaveV2Document } from "../../domain/persistence/saveV2";
 import { isSaveV3Document } from "../../domain/persistence/saveV3";
 import { isSaveV4Document } from "../../domain/persistence/saveV4";
-import { isSaveV5DocumentStructure } from "../../domain/persistence/saveV5";
+import {
+  isSaveV5Document,
+  isSaveV5DocumentStructure,
+} from "../../domain/persistence/saveV5";
 import { MAX_SAVE_DOCUMENT_CODE_UNITS } from "../../domain/persistence/saveLimits";
 import type { SaveDocument } from "../../domain/types";
 import type { SaveV2Document } from "../../domain/persistence/saveV2";
@@ -257,6 +260,22 @@ describe("schema-2 persistence boundary", () => {
     expect(() => toSaveV2Document(withHarvestedNode)).toThrow(
       /Iron and harvested-node state/,
     );
+  });
+
+  it("rejects an unsupported V5 generator even when no harvested IDs exist", () => {
+    const current = toCurrentSaveStorageDocument(validSave());
+    const unsupported = {
+      ...current,
+      world: { ...current.world, generatorVersion: "unreleased-generator" },
+      harvestedNodeIds: [],
+    };
+
+    expect(isSaveV5Document(unsupported)).toBe(false);
+    expect(isSaveDocument(unsupported)).toBe(false);
+    expect(decodeSave(JSON.stringify(unsupported))).toMatchObject({
+      ok: false,
+      failure: "unsupported-generator",
+    });
   });
 
   it("keeps historical parsers but rejects unsafe balances after V2-V4 migration", () => {
@@ -1257,6 +1276,66 @@ describe("browser save validation and recovery", () => {
     }
   });
 
+  it("preserves a recovered backup when backup staging would fail", () => {
+    for (const fail of ["write", "readback"] as const) {
+      const store = new FaultingStore();
+      const storage = createBrowserSaveStorage(store);
+      const invalidPrimary = "{not valid JSON";
+      const recoveredBackup = fixtureText("recovery-primary");
+      store.seed(SAVE_KEYS.primary, invalidPrimary);
+      store.seed(SAVE_KEYS.backup, recoveredBackup);
+      expect(storage.load()).toMatchObject({ ok: true, source: "backup" });
+      if (fail === "write") store.failSetKeys.add(SAVE_KEYS.backup);
+      else store.corruptSetKeys.add(SAVE_KEYS.backup);
+
+      expect(storage.commit(validSave())).toMatchObject({ ok: true });
+      store.failSetKeys.clear();
+      store.corruptSetKeys.clear();
+      expect(store.getItem(SAVE_KEYS.backup)).toBe(recoveredBackup);
+      expect(storage.load()).toMatchObject({ ok: true, source: "primary" });
+    }
+  });
+
+  it("retains a recovered backup when replacement primary write fails", () => {
+    for (const fail of ["throw", "readback"] as const) {
+      const store = new FaultingStore();
+      const storage = createBrowserSaveStorage(store);
+      const invalidPrimary = "{not valid JSON";
+      const recoveredBackup = fixtureText("recovery-primary");
+      store.seed(SAVE_KEYS.primary, invalidPrimary);
+      store.seed(SAVE_KEYS.backup, recoveredBackup);
+      expect(storage.load()).toMatchObject({ ok: true, source: "backup" });
+      if (fail === "throw") store.failSetKeys.add(SAVE_KEYS.primary);
+      else store.corruptSetKeys.add(SAVE_KEYS.primary);
+
+      expect(storage.commit(validSave())).toMatchObject({ ok: false });
+      store.failSetKeys.clear();
+      store.corruptSetKeys.clear();
+      expect(store.getItem(SAVE_KEYS.backup)).toBe(recoveredBackup);
+      expect(storage.load()).toMatchObject({ ok: true, source: "backup" });
+    }
+  });
+
+  it("fails closed if the recovered backup cannot be validated before commit", () => {
+    const store = new FaultingStore();
+    const storage = createBrowserSaveStorage(store);
+    const invalidPrimary = "{not valid JSON";
+    const recoveredBackup = fixtureText("recovery-primary");
+    store.seed(SAVE_KEYS.primary, invalidPrimary);
+    store.seed(SAVE_KEYS.backup, recoveredBackup);
+    expect(storage.load()).toMatchObject({ ok: true, source: "backup" });
+    store.failGetKeys.add(SAVE_KEYS.backup);
+
+    expect(storage.commit(validSave())).toMatchObject({
+      ok: false,
+      message: "Save failed safely: browser storage was unavailable.",
+    });
+    store.failGetKeys.clear();
+    expect(store.getItem(SAVE_KEYS.primary)).toBe(invalidPrimary);
+    expect(store.getItem(SAVE_KEYS.backup)).toBe(recoveredBackup);
+    expect(storage.load()).toMatchObject({ ok: true, source: "backup" });
+  });
+
   it("preserves committed slots when a transaction read fails at each key", () => {
     for (const key of [
       SAVE_KEYS.temporary,
@@ -1320,6 +1399,161 @@ describe("browser save validation and recovery", () => {
 
     expect(storage.commit(oversized)).toMatchObject({ ok: false });
     expect(store.writes).toBe(0);
+  });
+
+  it("round-trips a maximum-size current save through browser-storage slots", () => {
+    const store = new MemoryStore();
+    const storage = createBrowserSaveStorage(store);
+    const base = validSave();
+    const baseLength = JSON.stringify(
+      toCurrentSaveStorageDocument(base),
+    ).length;
+    const padding = MAX_SAVE_DOCUMENT_CODE_UNITS - baseLength;
+    if (padding < 0)
+      throw new Error("Base save already exceeds the size limit");
+    const maximum = {
+      ...base,
+      world: { ...base.world, seed: base.world.seed + "s".repeat(padding) },
+    };
+    const serialized = JSON.stringify(toCurrentSaveStorageDocument(maximum));
+    expect(serialized.length).toBe(MAX_SAVE_DOCUMENT_CODE_UNITS);
+
+    expect(storage.commit(maximum)).toMatchObject({ ok: true });
+    expect(store.getItem(SAVE_KEYS.primary)?.length).toBe(
+      MAX_SAVE_DOCUMENT_CODE_UNITS,
+    );
+    expect(store.getItem(SAVE_KEYS.backup)?.length).toBe(
+      MAX_SAVE_DOCUMENT_CODE_UNITS,
+    );
+    const loaded = storage.load();
+    if (!loaded.ok) throw new Error("Expected maximum-size save to reload");
+    expect(loaded.document.world.seed).toBe(maximum.world.seed);
+  });
+
+  it("keeps a maximum-size legacy primary within the cap when backing it up", () => {
+    const current = toCurrentSaveStorageDocument(validSave());
+    const { iron: _iron, ...legacyResources } = current.resources;
+    const {
+      schemaVersion: _schemaVersion,
+      harvestedNodeIds: _harvestedNodeIds,
+      ...legacyFields
+    } = current;
+    const v4 = {
+      ...legacyFields,
+      schemaVersion: 4,
+      resources: legacyResources,
+    };
+    const v4Length = JSON.stringify(v4).length;
+    const padding = MAX_SAVE_DOCUMENT_CODE_UNITS - v4Length;
+    if (padding < 0) throw new Error("Base V4 save already exceeds the limit");
+    const maximumV4 = {
+      ...v4,
+      world: { ...v4.world, seed: v4.world.seed + "s".repeat(padding) },
+    };
+    const previousPrimary = JSON.stringify(maximumV4);
+    expect(previousPrimary.length).toBe(MAX_SAVE_DOCUMENT_CODE_UNITS);
+    const migrated = decodeSave(previousPrimary);
+    if (!migrated.ok)
+      throw new Error("Expected maximum-size V4 save to decode");
+    expect(
+      JSON.stringify(toCurrentSaveStorageDocument(migrated.document)).length,
+    ).toBeGreaterThan(MAX_SAVE_DOCUMENT_CODE_UNITS);
+
+    const previousBackup = JSON.stringify({
+      ...v4,
+      committedAt: v4.committedAt + 1,
+    });
+    const store = new MemoryStore();
+    store.seed(SAVE_KEYS.primary, previousPrimary);
+    store.seed(SAVE_KEYS.backup, previousBackup);
+    const storage = createBrowserSaveStorage(store);
+    const writesBeforeRejectedMigration = store.writes;
+
+    expect(storage.commit(migrated.document)).toMatchObject({
+      ok: false,
+      message: "Save rejected: document exceeds the supported size limit.",
+    });
+    expect(store.writes).toBe(writesBeforeRejectedMigration);
+    expect(store.getItem(SAVE_KEYS.primary)).toBe(previousPrimary);
+    expect(store.getItem(SAVE_KEYS.backup)).toBe(previousBackup);
+    expect(storage.load()).toMatchObject({ ok: true, source: "primary" });
+
+    expect(storage.commit(validSave())).toMatchObject({ ok: true });
+    expect(store.getItem(SAVE_KEYS.backup)).toBe(previousPrimary);
+    expect(store.getItem(SAVE_KEYS.backup)!.length).toBeLessThanOrEqual(
+      MAX_SAVE_DOCUMENT_CODE_UNITS,
+    );
+    expect(decodeSave(store.getItem(SAVE_KEYS.backup)).ok).toBe(true);
+  });
+
+  it("recovers maximum-size V2 and V3 backups without rewriting their wire bytes", () => {
+    const base = validSave();
+    const v2 = toSaveV2Document(base);
+    const v3 = {
+      ...v2,
+      schemaVersion: 3 as const,
+      classProgression: {
+        experience: 0,
+        level: 0 as const,
+        playerClass: null,
+        skillIds: [],
+        allocatedStats: emptyPlayerStatAllocations(),
+      },
+    };
+
+    for (const [version, legacy] of [
+      ["V2", v2],
+      ["V3", v3],
+    ] as const) {
+      const serialized = JSON.stringify(legacy);
+      const padding = MAX_SAVE_DOCUMENT_CODE_UNITS - serialized.length;
+      if (padding < 0)
+        throw new Error("Base " + version + " save already exceeds the limit");
+      const maximum = {
+        ...legacy,
+        world: {
+          ...legacy.world,
+          seed: legacy.world.seed + "s".repeat(padding),
+        },
+      };
+      const backup = JSON.stringify(maximum);
+      expect(backup.length).toBe(MAX_SAVE_DOCUMENT_CODE_UNITS);
+
+      const decoded = decodeSave(backup);
+      if (!decoded.ok)
+        throw new Error("Expected maximum-size " + version + " save to decode");
+      expect(
+        JSON.stringify(toCurrentSaveStorageDocument(decoded.document)).length,
+      ).toBeGreaterThan(MAX_SAVE_DOCUMENT_CODE_UNITS);
+
+      const invalidPrimary = "{not valid JSON";
+      const store = new MemoryStore();
+      store.seed(SAVE_KEYS.primary, invalidPrimary);
+      store.seed(SAVE_KEYS.backup, backup);
+      const storage = createBrowserSaveStorage(store);
+      const writesBeforeLoad = store.writes;
+
+      const recovered = storage.load();
+      expect(recovered).toMatchObject({
+        ok: true,
+        source: "backup",
+        primaryFailure: "invalid-json",
+      });
+      expect(store.writes).toBe(writesBeforeLoad);
+      expect(store.getItem(SAVE_KEYS.primary)).toBe(invalidPrimary);
+      expect(store.getItem(SAVE_KEYS.backup)).toBe(backup);
+      if (!recovered.ok)
+        throw new Error(
+          "Expected maximum-size " + version + " backup recovery",
+        );
+      expect(recovered.document.schemaVersion).toBe(5);
+      expect(recovered.document.world.seed).toBe(maximum.world.seed);
+
+      expect(storage.commit(validSave())).toMatchObject({ ok: true });
+      expect(store.getItem(SAVE_KEYS.backup)).toBe(backup);
+      expect(decodeSave(store.getItem(SAVE_KEYS.backup)).ok).toBe(true);
+      expect(store.getItem(SAVE_KEYS.primary)).not.toBe(invalidPrimary);
+    }
   });
 
   it("keeps frozen V2 projection exact while browser storage writes V5 progression", () => {
