@@ -20,8 +20,12 @@ const {
   markBrowserVerified,
   parseArguments,
 } = await import(artifactModulePath);
-const { runBrowserMatrix, parseBrowserArguments, PAGES_SMOKE_GREP } =
-  await import(browserModulePath);
+const {
+  runBrowserMatrix,
+  parseBrowserArguments,
+  PAGES_SMOKE_GREP,
+  UX_JOURNEY_SPEC,
+} = await import(browserModulePath);
 const directories: string[] = [];
 const html = (base: string) =>
   `<!doctype html><html><head><link rel="icon" href="${base}favicon.svg"><script type="module" src="${base}assets/index-abc123.js"></script><link rel="stylesheet" href="${base}assets/index-abc123.css"></head><body></body></html>`;
@@ -339,10 +343,8 @@ describe("build-once/browser-existing orchestration", () => {
       const pagesTest = browserTests.find(
         (c) => c.env.PLAYWRIGHT_BASE_PATH === "/Wanderer/",
       );
-      expect(primaryTest?.args.slice(1)).toEqual(["test"]);
-      expect(pagesTest?.args.slice(1)).toEqual(
-        reuse ? ["test", "--grep", PAGES_SMOKE_GREP] : ["test"],
-      );
+      expect(primaryTest?.args.slice(1)).toEqual(["test", UX_JOURNEY_SPEC]);
+      expect(pagesTest?.args.slice(1)).toEqual(["test", UX_JOURNEY_SPEC]);
       for (const c of commands)
         expect(c.env.VITE_BASE_PATH).toBe(c.env.PLAYWRIGHT_BASE_PATH);
       expect(events.filter((e) => e.startsWith("test:"))).toEqual([
@@ -357,12 +359,12 @@ describe("build-once/browser-existing orchestration", () => {
       }
     },
   );
-  it("keeps explicit full-matrix Pages tests unfiltered when reusing the root build", () => {
+  it("keeps the extended full matrix unfiltered when reusing the root build", () => {
     const cwd = setup();
     const commands: any[] = [];
     runBrowserMatrix({
       cwd,
-      argv: ["--reuse-root-build", "--scope", "matrix"],
+      argv: ["--reuse-root-build", "--scope", "full-matrix"],
       environment: {},
       run: (command: string, args: string[], options: any) => {
         commands.push({ command, args, environment: options.env });

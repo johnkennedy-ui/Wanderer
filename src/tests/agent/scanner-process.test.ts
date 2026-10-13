@@ -2114,29 +2114,115 @@ while True: time.sleep(1)`,
     });
   });
 
+  it("does not report cleanup success when a valid reaped receipt arrives after the shared deadline", async () => {
+    const ready = "late-deadline-root";
+    const { directory, path } = fixture(
+      (directory) =>
+        `const fs=require("node:fs");process.on("SIGTERM",()=>{});fs.writeFileSync(${JSON.stringify(join(directory, ready))},String(process.pid));setInterval(()=>{},1000);`,
+    );
+    const controller = new AbortController();
+    const pending = executeScanner(process.execPath, [path], directory, 2_000, {
+      signal: controller.signal,
+      graceMs: 10,
+      cleanupDeadlineMs: 250,
+      testStatusFault: "delay-status-consumption-past-deadline",
+    });
+    await waitFor(() => existsSync(join(directory, ready)));
+    const rootPid = Number(readFileSync(join(directory, ready), "utf8"));
+    controller.abort();
+    const result = await pending;
+    await waitFor(() => noProcess(rootPid));
+    expect(result).toMatchObject({
+      timedOut: false,
+      cleanup: "unknown",
+      error: "SCANNER_CLEANUP_DEADLINE",
+    });
+    expect(result.durationMs).toBeGreaterThanOrEqual(250);
+  });
+
   it("has no detached inner escape from an outer SIGKILL group", async () => {
     const { directory, path } = fixture(
       (directory) =>
         `const {spawn}=require('node:child_process');const fs=require('node:fs');const child=spawn(process.execPath,['-e',"setInterval(()=>{},1000)"],{stdio:'inherit'});fs.writeFileSync(${JSON.stringify(join(directory, "group-child"))},String(child.pid));setInterval(()=>{},1000);`,
     );
-    const harness = spawn(
-      node,
+    const groupLeaderPath = join(directory, "group-leader");
+    const reaperFailurePath = join(directory, "reaper-failure");
+    // Reap an already-dead orphan outside the killed group; keep the strict
+    // process-absence assertion meaningful instead of leaving a zombie for
+    // the Vitest worker to inherit.
+    const reaper = spawn(
+      "python3",
       [
+        "-B",
+        "-c",
+        "import ctypes,os,subprocess,sys,time\n" +
+          "assert ctypes.CDLL(None).prctl(36,1,0,0,0)==0\n" +
+          "marker=sys.argv[1]; failure=sys.argv[2]; command=sys.argv[3:]\n" +
+          "child=subprocess.Popen(command,start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n" +
+          "open(marker,'w',encoding='utf8').write(str(child.pid))\n" +
+          "child.wait()\n" +
+          "end=time.monotonic()+10\n" +
+          "while time.monotonic()<end:\n" +
+          " try: pid,_=os.waitpid(-1,os.WNOHANG)\n" +
+          " except ChildProcessError: sys.exit(0)\n" +
+          " if pid==0: time.sleep(.01)\n" +
+          "children=[]\n" +
+          "for entry in os.listdir('/proc'):\n" +
+          " if entry.isdigit():\n" +
+          "  try:\n" +
+          "   tail=open('/proc/'+entry+'/stat',encoding='utf8').read().rsplit(')',1)[1].split()\n" +
+          "   if int(tail[1])==os.getpid(): children.append(entry+':'+tail[0])\n" +
+          "  except (OSError,ValueError,IndexError): pass\n" +
+          "open(failure,'w',encoding='utf8').write(','.join(children))\n" +
+          "sys.exit(2)\n",
+        groupLeaderPath,
+        reaperFailurePath,
+        node,
         "--input-type=module",
         "-e",
-        `import {executeScanner} from ${JSON.stringify(helperUrl)};executeScanner(process.execPath,[${JSON.stringify(path)}],${JSON.stringify(directory)},5000,{graceMs:25});`,
+        "import {executeScanner} from " +
+          JSON.stringify(helperUrl) +
+          ";executeScanner(process.execPath,[" +
+          JSON.stringify(path) +
+          "]," +
+          JSON.stringify(directory) +
+          ",5000,{graceMs:25});",
       ],
-      { cwd: directory, detached: true, stdio: "ignore" },
+      { cwd: directory, stdio: "ignore" },
     );
-    trackGroup(harness.pid!);
-    await waitFor(() => existsSync(join(directory, "group-child")));
+    const reaperClosed = new Promise<void>((resolve, reject) => {
+      reaper.once("error", reject);
+      reaper.once("close", (code) =>
+        code === 0
+          ? resolve()
+          : reject(
+              new Error(
+                "reaper exited " +
+                  code +
+                  ": " +
+                  (existsSync(reaperFailurePath)
+                    ? readFileSync(reaperFailurePath, "utf8")
+                    : "no PID diagnostics"),
+              ),
+            ),
+      );
+    });
+    await waitFor(
+      () =>
+        existsSync(join(directory, "group-child")) &&
+        existsSync(groupLeaderPath),
+    );
+    const groupLeader = Number(readFileSync(groupLeaderPath, "utf8"));
+    trackGroup(groupLeader);
     const childPid = Number(
       readFileSync(join(directory, "group-child"), "utf8"),
     );
-    process.kill(-harness.pid!, "SIGKILL");
+    process.kill(-groupLeader, "SIGKILL");
     await waitFor(() => noProcess(childPid));
-    forgetGroup(harness.pid!);
-  });
+    await waitFor(() => noProcess(groupLeader));
+    await reaperClosed;
+    forgetGroup(groupLeader);
+  }, 15_000);
 
   it("naturally exits a standalone caller after timeout cleanup of an ordinary pipe holder", async () => {
     const { directory, path } = fixture(

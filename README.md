@@ -51,9 +51,13 @@ scoped JSON/Markdown under ignored `.agent/completions/`. Missing, stale or fail
 mandatory local evidence is nonzero. `agent:evidence` alone is not completion.
 
 `verify` preserves formatting, type/unit/soak/architecture checks, adds tested CI
-policy, and creates the root build and artifact manifest. Public `test:browser`
-still builds/tests both `/` and `/Wanderer/` using the static production preview,
-not the Vite dev server. Its `--reuse-root-build` mode consumes the root build
+policy, and creates the root build and artifact manifest. Public `test:browser` builds/tests both `/` and `/Wanderer/` using the static
+production preview, not the Vite dev server. The release matrix runs one
+deterministic integrated UX journey on desktop and touch: movement, tower
+placement, wall placement, and tree/rock harvesting with resource, position,
+and no-implicit-save assertions. The longer legacy browser suite remains
+available explicitly with `npm run test:browser -- --scope full-matrix`; it is
+not the default release matrix. `--reuse-root-build` consumes the root build
 from `verify` and leaves the verified Pages output. **Do not rebuild after the
 browser gate**: pre-upload verification must use those exact bytes. `dist/`,
 `node_modules/`, Playwright output and evidence/tool caches remain ignored.

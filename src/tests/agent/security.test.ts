@@ -25,6 +25,7 @@ const {
   REQUIRED_SECURITY_STEPS,
   MAX_AGE_MS,
   SECURITY_EVIDENCE_SCHEMA_VERSION,
+  CODEQL_EXECUTION_LIMITS,
   executeScanner,
   runSecurityCheck,
 } = await import(checkModulePath);
@@ -186,6 +187,15 @@ const sbom = {
 };
 
 describe("security parsers and execution fail closed", () => {
+  it("keeps conservative CodeQL resources and applies the owner-requested two-hour analysis cap", () => {
+    expect(CODEQL_EXECUTION_LIMITS).toEqual({
+      threads: 2,
+      ramMb: 2048,
+      databaseCreateTimeoutMs: 600_000,
+      previousDatabaseAnalyzeTimeoutMs: 45_000,
+      databaseAnalyzeTimeoutMs: 7_200_000,
+    });
+  });
   it("does not signal absent or unowned process groups during rescue", () => {
     expect(signalOwnedGroup(null, "SIGKILL")).toBe(false);
     const current = processIdentity(process.pid);
@@ -482,7 +492,7 @@ const evidenceFixture = () => {
           "--no-sarif-add-snippets",
           "--no-sarif-add-file-contents",
         ],
-        timeoutMs: 900_000,
+        timeoutMs: 7_200_000,
       },
     ],
   };

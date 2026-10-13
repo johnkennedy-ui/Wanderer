@@ -253,6 +253,7 @@ def main():
     termination_started = None
     requested_deadline = None
     cleanup_error = None
+    cleanup_deadline_missed = False
     kill_sent = False
     cleanup_deadline = None
     kill_deadline = None
@@ -281,9 +282,6 @@ def main():
         current_descendants = descendants(snapshot)
         if not write_owned_processes(root_identity_file, root_identity, snapshot, current_descendants):
             reason["value"] = reason["value"] or "control-eof"
-        if root_status is not None and not current_descendants:
-            break
-
         now = time.monotonic()
         if reason["value"] and termination_started is None:
             try:
@@ -291,12 +289,16 @@ def main():
             except OSError as error:
                 cleanup_error = f"SCANNER_PIDFD_SIGNAL:{error.errno or 'UNKNOWN'}"
             termination_started = now
-            cleanup_deadline = max(now, requested_deadline or 0) if requested_deadline else now + cleanup_deadline_ms / 1000
+            cleanup_deadline = requested_deadline if requested_deadline is not None else now + cleanup_deadline_ms / 1000
             reserve = min(0.250, max(0.0005, (cleanup_deadline - now) / 2))
             kill_deadline = min(
                 now + grace_ms / 1000,
                 cleanup_deadline - reserve,
             )
+        if root_status is not None and not current_descendants:
+            if cleanup_deadline is not None and now >= cleanup_deadline:
+                cleanup_deadline_missed = True
+            break
         if (
             termination_started is not None
             and not kill_sent
@@ -363,7 +365,9 @@ def main():
         root_status["signal"] if root_status else None,
         reason["value"] or "none",
         reaping,
-        cleanup_error or (None if root_status is not None else "SCANNER_ROOT_STATUS_UNKNOWN"),
+        cleanup_error
+        or ("SCANNER_CLEANUP_DEADLINE" if cleanup_deadline_missed else None)
+        or (None if root_status is not None else "SCANNER_ROOT_STATUS_UNKNOWN"),
     )
     if status_fault == "supervisor-nonzero":
         sys.exit(7)

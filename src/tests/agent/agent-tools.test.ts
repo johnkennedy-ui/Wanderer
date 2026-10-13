@@ -164,7 +164,7 @@ describe("changed-file check selection", () => {
     });
 
     expect(selection.mode).toBe("full");
-    expect(selection.browserCoverage).toBe("full-two-path-matrix");
+    expect(selection.browserCoverage).toBe("two-base-ux-journey");
     expect(
       selection.commands.find(
         (entry: { id: string }) => entry.id === "browser-matrix",
@@ -232,14 +232,14 @@ describe("changed-file check selection", () => {
     );
   });
 
-  it("adds primary plus Pages smoke browser coverage for completed presentation changes", () => {
+  it("adds the integrated two-base UX journey for completed presentation changes", () => {
     const selection = selectFocusedChecks(
       ["src/platform/rendering/threeRenderer.ts"],
       { scope: "completion" },
     );
 
     expect(selection.mode).toBe("completion");
-    expect(selection.browserCoverage).toBe("primary-plus-pages-smoke");
+    expect(selection.browserCoverage).toBe("two-base-ux-journey");
     expect(
       selection.commands.find(
         (entry: { id: string }) => entry.id === "browser-release",
@@ -256,7 +256,7 @@ describe("changed-file check selection", () => {
     expect(development.mode).toBe("full");
     expect(development.browserCoverage).toBe("none");
     expect(completion.mode).toBe("full");
-    expect(completion.browserCoverage).toBe("full-two-path-matrix");
+    expect(completion.browserCoverage).toBe("two-base-ux-journey");
     expect(
       completion.commands.map((entry: { id: string }) => entry.id),
     ).toContain("browser-matrix");
@@ -272,12 +272,12 @@ describe("changed-file check selection", () => {
       expect(selectFocusedChecks([path]).mode).toBe("full");
   });
 
-  it("requires the retained matrix for browser-runner changes", () => {
+  it("requires the two-base UX journey for browser-runner changes", () => {
     const selection = selectFocusedChecks(["scripts/agent/browser-test.mjs"], {
       scope: "completion",
     });
 
-    expect(selection.browserCoverage).toBe("full-two-path-matrix");
+    expect(selection.browserCoverage).toBe("two-base-ux-journey");
     expect(
       selection.commands.find(
         (entry: { id: string }) => entry.id === "browser-matrix",
@@ -293,12 +293,12 @@ describe("changed-file check selection", () => {
     ]);
   });
 
-  it("escalates stylesheet changes to the full browser matrix", () => {
+  it("escalates stylesheet changes to the two-base UX journey", () => {
     const selection = selectFocusedChecks(["src/ui/style.css"], {
       scope: "completion",
     });
 
-    expect(selection.browserCoverage).toBe("full-two-path-matrix");
+    expect(selection.browserCoverage).toBe("two-base-ux-journey");
     expect(
       selection.commands.find(
         (entry: { id: string }) => entry.id === "browser-matrix",
