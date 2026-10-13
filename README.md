@@ -51,9 +51,13 @@ scoped JSON/Markdown under ignored `.agent/completions/`. Missing, stale or fail
 mandatory local evidence is nonzero. `agent:evidence` alone is not completion.
 
 `verify` preserves formatting, type/unit/soak/architecture checks, adds tested CI
-policy, and creates the root build and artifact manifest. Public `test:browser`
-still builds/tests both `/` and `/Wanderer/` using the static production preview,
-not the Vite dev server. Its `--reuse-root-build` mode consumes the root build
+policy, and creates the root build and artifact manifest. Public `test:browser` builds/tests both `/` and `/Wanderer/` using the static
+production preview, not the Vite dev server. The release matrix runs one
+deterministic integrated UX journey on desktop and touch: movement, tower
+placement, wall placement, and tree/rock harvesting with resource, position,
+and no-implicit-save assertions. The longer legacy browser suite remains
+available explicitly with `npm run test:browser -- --scope full-matrix`; it is
+not the default release matrix. `--reuse-root-build` consumes the root build
 from `verify` and leaves the verified Pages output. **Do not rebuild after the
 browser gate**: pre-upload verification must use those exact bytes. `dist/`,
 `node_modules/`, Playwright output and evidence/tool caches remain ignored.
@@ -68,7 +72,7 @@ acceptance, CSP limitations, independent review and owner-only settings actions.
 Use a feature branch, make reviewable bounded commits, and do not push directly
 to `main`. See `AGENTS.md` for the compatibility workflow and required
 completion report, `ARCHITECTURE.md` for dependency boundaries, `SAVE_FORMAT.md`
-for current schema-4 storage and frozen schema-2/schema-3 compatibility, and
+for current schema-5 storage and frozen schema-2/schema-3/schema-4 compatibility, and
 `WORLD_GENERATION.md` for released generator compatibility.
 
 ## Implemented slice
@@ -77,8 +81,19 @@ for current schema-4 storage and frozen schema-2/schema-3 compatibility, and
   primitive Three.js projection;
 - one movement command boundary for keyboard and touch stick, with stationary
   auto-combat;
-- five data-backed resource roles: Wood, Stone, Metal / Scrap, Essence, and
-  Boss Core. Storage caps each common material; Boss Core is saved but exempt;
+- six data-backed resource roles: Wood, Stone, Metal / Scrap, Iron, Essence,
+  and Boss Core. Harvest trees for 24 Wood and rocks for 20 Stone plus 12 Iron;
+  Iron is separate from Scrap. All six balances have no gameplay or Storage
+  capacity cap, but must remain exact non-negative JavaScript safe integers
+  (Number.MAX_SAFE_INTEGER is valid). Any reward or refund that would exceed
+  that numeric representation is rejected atomically. V5 persists all six
+  balances; safe-range V2/V3/V4 balances migrate unchanged, while unsafe legacy
+  balances are rejected at current-state admission. Storage has no active
+  resource-capacity effect. V5 depletion accepts at most 4,096 canonical IDs,
+  each at most 1,024 UTF-16 code units; the sum of ID-string lengths is at most 1,048,576 UTF-16
+  code units, excluding JSON encoding overhead (not a raw serialized-save size
+  limit). Each ID must identify a generated harvestable obstacle in the saved
+  generator version;
 - normal, elite, and boss drops; ten boss upgrades including additive,
   multiplicative, and Chain Strike hit-resolution behavior;
 - exactly Campfire, Workshop, Farm, Storage, and Healer, each with real L1-L3
@@ -89,8 +104,9 @@ for current schema-4 storage and frozen schema-2/schema-3 compatibility, and
   with bright cyan silhouettes/outlines and red invalid cells. The line remains
   a preview until a later line-tile tap or Confirm; dragging also stages a line
   and the whole line rejected atomically; and
-- explicit campfire-only schema-4 browser saves (with schema-2/schema-3 recovery) plus
-  save-point respawn, 25% carried-resource death loss,
+- explicit campfire-only schema-5 browser saves (with schema-2/schema-3/schema-4
+  recovery) that persist depleted deterministic harvest nodes only on a valid save,
+  plus save-point respawn, 25% carried-resource death loss,
   temporary/primary/backup recovery, and no automatic persistence.
 
 ## Truth boundary

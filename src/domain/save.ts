@@ -2,11 +2,15 @@ import { decodeSave } from "./persistence/decodeSave";
 import { isSaveV2Document } from "./persistence/saveV2";
 import { isSaveV3Document } from "./persistence/saveV3";
 import { isSaveV4Document } from "./persistence/saveV4";
+import { isSaveV5Document } from "./persistence/saveV5";
 import type { SaveDocument } from "./types";
 
 /** Compatibility export. New callers should use the typed decodeSave result. */
 export const isSaveDocument = (value: unknown): boolean =>
-  isSaveV2Document(value) || isSaveV3Document(value) || isSaveV4Document(value);
+  isSaveV2Document(value) ||
+  isSaveV3Document(value) ||
+  isSaveV4Document(value) ||
+  isSaveV5Document(value);
 
 /**
  * Transitional nullable adapter retained for existing callers. Storage and the

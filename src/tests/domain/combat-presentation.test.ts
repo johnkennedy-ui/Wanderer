@@ -114,7 +114,14 @@ describe("combat presentation commitments", () => {
       delta: 0.1,
       elapsed: 3,
       player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
-      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      resources: {
+        wood: 0,
+        stone: 0,
+        scrap: 0,
+        essence: 0,
+        iron: 0,
+        bossCore: 0,
+      },
       enemies: new Map([[attacker.id, attacker]]),
       committedSavePoint: {
         id: "campfire:home",

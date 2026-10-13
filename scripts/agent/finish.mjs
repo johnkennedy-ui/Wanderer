@@ -29,12 +29,12 @@ export const REQUIRED_FULL_MATRIX_COMMANDS = [
   "npm run security:check",
   "node scripts/security/artifact.mjs verify --base /Wanderer/",
 ];
-// Outer bounds cover the existing complete matrices/scanner stages, not a
-// relaxation of any individual test's assertions, retries or timeout.
+// The two-base UX matrix now contains one bounded integrated journey; scanner
+// stages keep their independent runtime bounds and process assertions.
 const timeoutFor = (command) =>
   command.startsWith("npm run test:browser") ||
   command === REQUIRED_FINAL_COMMANDS[2]
-    ? 1_800_000
+    ? 600_000
     : 300_000;
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const reject = (message, code) => {

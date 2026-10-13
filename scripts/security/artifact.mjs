@@ -55,11 +55,16 @@ const manifestPathFor = (cwd, basePath) =>
 export const readArtifactIdentity = ({
   cwd = process.cwd(),
   basePath = "/Wanderer/",
+  environment = process.env,
 } = {}) => {
+  const artifactEnvironment = { ...environment };
+  // The dynamically selected listener port changes only the test server
+  // endpoint, not build inputs or the immutable artifact identity.
+  delete artifactEnvironment.PLAYWRIGHT_PORT;
   const input = collectInputFingerprint({
     cwd,
     environment: {
-      ...process.env,
+      ...artifactEnvironment,
       VITE_BASE_PATH: basePath,
       PLAYWRIGHT_BASE_PATH: basePath,
     },

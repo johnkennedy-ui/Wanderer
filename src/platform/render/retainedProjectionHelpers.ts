@@ -40,6 +40,7 @@ export const retainedTerrainInputKeyFor = (
         obstacle.kind ?? null,
         obstacle.waterKind ?? null,
         obstacle.radius ?? null,
+        obstacle.harvestable ?? false,
         obstacle.position.x,
         obstacle.position.y,
       ]),
@@ -579,6 +580,9 @@ export class RetainedProjection {
   private obstacle(obstacle: ChunkObstacle): void {
     const existing = this.obstacles.get(obstacle.id);
     if (existing !== undefined) {
+      existing.userData.harvestRayBlocker = true;
+      if (obstacle.harvestable !== true) delete existing.userData.harvestNodeId;
+      else existing.userData.harvestNodeId = obstacle.id;
       this.position(existing, obstacle.position, 0);
       return;
     }
@@ -588,6 +592,9 @@ export class RetainedProjection {
         this.resources.material(0x596869),
       );
       legacy.name = obstacle.id;
+      legacy.userData.harvestRayBlocker = true;
+      if (obstacle.harvestable === true)
+        legacy.userData.harvestNodeId = obstacle.id;
       this.position(legacy, obstacle.position, 0);
       this.obstacles.set(obstacle.id, legacy);
       this.group.add(legacy);
@@ -596,6 +603,9 @@ export class RetainedProjection {
     const radius = obstacle.radius ?? 0.38;
     const root = new THREE.Group();
     root.name = obstacle.id;
+    root.userData.harvestRayBlocker = true;
+    if (obstacle.harvestable === true)
+      root.userData.harvestNodeId = obstacle.id;
     const add = (
       geometry: THREE.BufferGeometry,
       material: THREE.Material,

@@ -70,7 +70,20 @@ type Descriptor = Readonly<{
   yaw: number;
   scale: number;
   fallback: boolean;
+  harvestRayBlocker: boolean;
+  harvestNodeId?: string;
 }>;
+
+const setHarvestRaycastMetadata = (
+  root: THREE.Object3D,
+  descriptor: Descriptor,
+): void => {
+  if (descriptor.harvestRayBlocker) root.userData.harvestRayBlocker = true;
+  else delete root.userData.harvestRayBlocker;
+  if (descriptor.harvestNodeId !== undefined)
+    root.userData.harvestNodeId = descriptor.harvestNodeId;
+  else delete root.userData.harvestNodeId;
+};
 
 interface Instance {
   readonly root: THREE.Group;
@@ -225,6 +238,7 @@ const obstacleDescriptor = (
       yaw: 0,
       scale: 1,
       fallback: true,
+      harvestRayBlocker: true,
     };
   }
   if (obstacle.kind === "mountain") {
@@ -240,6 +254,7 @@ const obstacleDescriptor = (
       yaw: unit(`${seed}|yaw`) * Math.PI * 2,
       scale: 1,
       fallback: true,
+      harvestRayBlocker: true,
     };
   }
   const kind = obstacle.kind === "tree" ? "tree" : "rock";
@@ -252,6 +267,8 @@ const obstacleDescriptor = (
     yaw: unit(`${seed}|yaw`) * Math.PI * 2,
     scale: 1,
     fallback: true,
+    harvestRayBlocker: true,
+    ...(obstacle.harvestable === true ? { harvestNodeId: obstacle.id } : {}),
   };
 };
 
@@ -299,6 +316,7 @@ export const environmentDescriptorInputKeyFor = (
         obstacle.kind ?? null,
         obstacle.waterKind ?? null,
         obstacle.radius ?? null,
+        obstacle.harvestable ?? false,
         obstacle.position.x,
         obstacle.position.y,
       ]),
@@ -361,6 +379,7 @@ export const environmentDescriptorsFor = (
         yaw: unit(`${seed}|yaw`) * Math.PI * 2,
         scale: 0.55 + unit(`${seed}|scale`) * 0.25,
         fallback: false,
+        harvestRayBlocker: false,
       });
     }
   }
@@ -442,6 +461,7 @@ export class EnvironmentProjection {
     if (instance === undefined) {
       const root = new THREE.Group();
       root.name = `environment:${descriptor.id}`;
+      setHarvestRaycastMetadata(root, descriptor);
       instance = { root, descriptor, model: undefined, state: "pending" };
       this.instances.set(descriptor.id, instance);
       this.group.add(root);
@@ -480,6 +500,8 @@ export class EnvironmentProjection {
       });
     }
     instance.descriptor = descriptor;
+    // Cached obstacle roots can change harvestability without changing identity.
+    setHarvestRaycastMetadata(instance.root, descriptor);
     instance.root.position.set(
       descriptor.position.x,
       0.014,

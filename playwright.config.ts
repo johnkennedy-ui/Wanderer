@@ -13,9 +13,12 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   workers: 1,
+  expect: { timeout: 5_000 },
   use: {
     baseURL: previewUrl,
     headless: true,
+    actionTimeout: 10_000,
+    navigationTimeout: 15_000,
     viewport: { width: 1280, height: 800 },
     trace: {
       mode: "retain-on-failure",

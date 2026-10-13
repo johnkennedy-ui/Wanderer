@@ -10,6 +10,7 @@ const resources = (): ResourceBag => ({
   stone: 100,
   scrap: 0,
   essence: 0,
+  iron: 0,
   bossCore: 0,
 });
 

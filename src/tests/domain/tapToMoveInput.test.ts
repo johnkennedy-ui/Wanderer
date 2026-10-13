@@ -44,6 +44,59 @@ describe("tap-to-move input", () => {
     input.dispose();
   });
 
+  it("routes a picked resource node only to harvesting and leaves placement arbitration intact", () => {
+    const canvas = new EventTarget() as HTMLCanvasElement;
+    let placementEnabled = false;
+    let worldPositionCalls = 0;
+    const destinations: DestinationCommand[] = [];
+    const harvested: string[] = [];
+    const placements: Vector2[] = [];
+    const toWorld = (clientX: number, clientY: number): Vector2 => {
+      worldPositionCalls += 1;
+      return { x: clientX, y: clientY };
+    };
+    const tapInput = createTapToMoveInput(
+      canvas,
+      toWorld,
+      (command) => destinations.push(command),
+      () => placementEnabled,
+      {
+        pickNodeId: () => "tree:fixture",
+        harvestNode: (nodeId) => harvested.push(nodeId),
+      },
+    );
+    const placementInput = createBuildPlacementInput(
+      canvas,
+      toWorld,
+      () => placementEnabled,
+      () => false,
+      {
+        tap: (position) => placements.push(position),
+        previewWallDrag: () => {},
+        stageWallDrag: () => {},
+        clearWallDragPreview: () => {},
+      },
+    );
+
+    const harvestUp = primaryPointerEvent("pointerup", 1, 10, 20);
+    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 1, 10, 20));
+    canvas.dispatchEvent(harvestUp);
+    expect(harvestUp.defaultPrevented).toBe(true);
+    expect(harvested).toEqual(["tree:fixture"]);
+    expect(destinations).toHaveLength(0);
+    expect(worldPositionCalls).toBe(0);
+
+    placementEnabled = true;
+    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 2, 12, 24));
+    canvas.dispatchEvent(primaryPointerEvent("pointerup", 2, 12, 24));
+    expect(harvested).toEqual(["tree:fixture"]);
+    expect(destinations).toHaveLength(0);
+    expect(placements).toEqual([{ x: 12, y: 24 }]);
+
+    placementInput.dispose();
+    tapInput.dispose();
+  });
+
   it("keeps an enabled world-placement tap separate from tap-to-move", () => {
     const canvas = new EventTarget() as HTMLCanvasElement;
     let placementEnabled = false;

@@ -5,8 +5,10 @@ import type {
   PlayerStatAllocations,
 } from "../types";
 import { isSupportedWorldGeneratorVersion } from "../world";
-import { isClassProgressionV4, isSaveV4Document } from "./saveV4";
+import { isClassProgressionV4 } from "./saveV4";
 import type { SaveV4Document } from "./saveV4";
+import { isSaveV5Document } from "./saveV5";
+import type { SaveV5Document } from "./saveV5";
 import { saveV2BuildingKinds, type SaveV2Document } from "./saveV2";
 
 /**
@@ -21,7 +23,7 @@ export const isClassProgression = isClassProgressionV4;
 /**
  * Released schema-2 documents could carry a non-wire progression extension.
  * It predates allocations, so its level is intentionally normalized during
- * pure migration rather than trusted as a current V4 value.
+ * pure migration rather than trusted as a current V5 value.
  */
 export interface LegacyClassProgression {
   readonly experience: number;
@@ -67,6 +69,10 @@ export const isLegacyClassProgression = (
 
 /** Retains an exact frozen V2 projection for historical fixture comparisons. */
 export const toSaveV2Document = (save: CurrentSave): SaveV2Document => {
+  if (save.resources.iron !== 0 || save.harvestedNodeIds.length > 0)
+    throw new Error(
+      "Iron and harvested-node state cannot be projected to schema version 2.",
+    );
   if (
     save.buildings.some(
       (building) => !saveV2BuildingKinds.includes(building.kind as never),
@@ -111,11 +117,11 @@ export const toSaveV2Document = (save: CurrentSave): SaveV2Document => {
   };
 };
 
-/** Copies the active V4 wire document without retaining runtime aliases. */
+/** Copies the active V5 wire document without retaining runtime aliases. */
 export const toCurrentSaveStorageDocument = (
   save: CurrentSave,
-): SaveV4Document => ({
-  schemaVersion: 4,
+): SaveV5Document => ({
+  schemaVersion: 5,
   world: {
     seed: save.world.seed,
     generatorVersion: save.world.generatorVersion,
@@ -130,8 +136,10 @@ export const toCurrentSaveStorageDocument = (
     stone: save.resources.stone,
     scrap: save.resources.scrap,
     essence: save.resources.essence,
+    iron: save.resources.iron,
     bossCore: save.resources.bossCore,
   },
+  harvestedNodeIds: [...save.harvestedNodeIds],
   buildings: save.buildings.map((building) => ({
     id: building.id,
     kind: building.kind,
@@ -162,5 +170,5 @@ export const toCurrentSaveStorageDocument = (
 
 /** Current runtime validation is intentionally separate from historical V2 parsing. */
 export const isCurrentSave = (value: unknown): value is CurrentSave =>
-  isSaveV4Document(value) &&
+  isSaveV5Document(value) &&
   isSupportedWorldGeneratorVersion(value.world.generatorVersion);

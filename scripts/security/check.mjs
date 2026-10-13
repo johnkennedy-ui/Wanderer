@@ -27,6 +27,17 @@ export { executeScanner } from "./scanner-process.mjs";
 
 export const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const SECURITY_EVIDENCE_SCHEMA_VERSION = 4;
+// Preserve the measured low-concurrency memory envelope until aligned
+// CodeQL-cgroup peak/pressure samples justify a resource increase. The two-hour
+// analysis deadline is the owner-requested two-hour cap; database
+// creation keeps its existing 10-minute bound.
+export const CODEQL_EXECUTION_LIMITS = Object.freeze({
+  threads: 2,
+  ramMb: 2048,
+  databaseCreateTimeoutMs: 600_000,
+  previousDatabaseAnalyzeTimeoutMs: 45_000,
+  databaseAnalyzeTimeoutMs: 7_200_000,
+});
 export const REQUIRED_SECURITY_STEPS = [
   "audit-full",
   "audit-runtime",
@@ -681,11 +692,11 @@ const collectSecurityCheck = async ({ cwd, execute, useTool, signal }) => {
             "--build-mode=none",
             "--codescanning-config",
             join(source, ".github/codeql-config.yml"),
-            "--threads=2",
-            "--ram=2048",
+            "--threads=" + CODEQL_EXECUTION_LIMITS.threads,
+            "--ram=" + CODEQL_EXECUTION_LIMITS.ramMb,
           ],
           cwd,
-          600_000,
+          CODEQL_EXECUTION_LIMITS.databaseCreateTimeoutMs,
         );
         requireExecution(created);
         const reportPath = join(root, "codeql-raw.sarif");
@@ -699,13 +710,13 @@ const collectSecurityCheck = async ({ cwd, execute, useTool, signal }) => {
             "--format=sarif-latest",
             "--output",
             reportPath,
-            "--threads=2",
-            "--ram=2048",
+            "--threads=" + CODEQL_EXECUTION_LIMITS.threads,
+            "--ram=" + CODEQL_EXECUTION_LIMITS.ramMb,
             "--no-sarif-add-snippets",
             "--no-sarif-add-file-contents",
           ],
           cwd,
-          900_000,
+          CODEQL_EXECUTION_LIMITS.databaseAnalyzeTimeoutMs,
         );
         requireExecution(analyzed);
         const report = json(readFileSync(reportPath, "utf8"), "SARIF");
@@ -867,10 +878,10 @@ const expectedInvocations = (name, runId) => {
         "--build-mode=none",
         "--codescanning-config",
         "./.github/codeql-config.yml",
-        "--threads=2",
-        "--ram=2048",
+        "--threads=" + CODEQL_EXECUTION_LIMITS.threads,
+        "--ram=" + CODEQL_EXECUTION_LIMITS.ramMb,
       ],
-      600_000,
+      CODEQL_EXECUTION_LIMITS.databaseCreateTimeoutMs,
     ),
     make(
       verifiedCommand("codeql"),
@@ -882,12 +893,12 @@ const expectedInvocations = (name, runId) => {
         "--format=sarif-latest",
         "--output",
         root + "/codeql-raw.sarif",
-        "--threads=2",
-        "--ram=2048",
+        "--threads=" + CODEQL_EXECUTION_LIMITS.threads,
+        "--ram=" + CODEQL_EXECUTION_LIMITS.ramMb,
         "--no-sarif-add-snippets",
         "--no-sarif-add-file-contents",
       ],
-      900_000,
+      CODEQL_EXECUTION_LIMITS.databaseAnalyzeTimeoutMs,
     ),
   ];
 };

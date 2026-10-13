@@ -107,6 +107,7 @@ describe("GameSession progression", () => {
         stone: 100,
         scrap: 100,
         essence: 100,
+        iron: 0,
         bossCore: 8,
       },
       savePointId: "campfire:player:committed",
@@ -123,6 +124,7 @@ describe("GameSession progression", () => {
       stone: 75,
       scrap: 75,
       essence: 75,
+      iron: 0,
       bossCore: 6,
     });
     expect(session.presentation().ui.notice).toEqual({

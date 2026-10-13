@@ -168,7 +168,14 @@ describe("projectile obstacles", () => {
       delta: 1,
       elapsed: 1,
       player: { position: { x: 0, y: 0 }, hp: 10, maxHp: 10 },
-      resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+      resources: {
+        wood: 0,
+        stone: 0,
+        scrap: 0,
+        essence: 0,
+        iron: 0,
+        bossCore: 0,
+      },
       enemies: new Map([[attacker.id, attacker]]),
       committedSavePoint: {
         id: "campfire",

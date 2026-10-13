@@ -24,6 +24,7 @@ export interface SaveProjectionInput {
     readonly maxHp: number;
   };
   readonly resources: ResourceBag;
+  readonly harvestedNodeIds: Iterable<string>;
   readonly buildings: readonly BuildingState[];
   readonly defeatedBossIds: Iterable<string>;
   readonly upgrades: Iterable<UpgradeId>;
@@ -41,7 +42,7 @@ export const projectCurrentSave = (
   committedAt: number,
   savePoint: SettlementCampfire,
 ): CurrentSave => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   world: copyWorldIdentity(state.world),
   player: {
     position: copyVector(state.player.position),
@@ -49,6 +50,7 @@ export const projectCurrentSave = (
     maxHp: state.player.maxHp,
   },
   resources: cloneResources(state.resources),
+  harvestedNodeIds: [...state.harvestedNodeIds].sort(),
   buildings: cloneBuildings(state.buildings),
   defeatedBossIds: [...state.defeatedBossIds].sort(),
   upgrades: [...state.upgrades].sort(),

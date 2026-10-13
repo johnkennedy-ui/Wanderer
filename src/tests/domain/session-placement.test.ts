@@ -10,6 +10,7 @@ const resources = (wood = 100): ResourceBag => ({
   stone: 100,
   scrap: 100,
   essence: 100,
+  iron: 0,
   bossCore: 10,
 });
 
@@ -137,6 +138,7 @@ describe("GameSession building placement preview and commit", () => {
       stone: 0,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 0,
     });
 

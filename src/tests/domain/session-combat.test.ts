@@ -93,12 +93,13 @@ describe("GameSession combat", () => {
     ).toBe(targetAfter?.hp);
   });
 
-  it("uses exactly five named data-backed resources with data-driven normal, elite, and boss drops", () => {
+  it("uses exactly six named data-backed resources with data-driven normal, elite, and boss drops", () => {
     expect(resourceKinds).toEqual([
       "wood",
       "stone",
       "scrap",
       "essence",
+      "iron",
       "bossCore",
     ]);
     expect(
@@ -113,6 +114,7 @@ describe("GameSession combat", () => {
       stone: 0,
       scrap: 0,
       essence: 0,
+      iron: 0,
       bossCore: 1,
     });
   });
@@ -127,6 +129,7 @@ describe("GameSession combat", () => {
           stone: 119,
           scrap: 0,
           essence: 0,
+          iron: 0,
           bossCore: 0,
         },
       },

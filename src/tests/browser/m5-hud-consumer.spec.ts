@@ -107,6 +107,7 @@ test("M5 combined HUD retains resources, skills and eight stats on identical inp
         stone: 120,
         scrap: 120,
         essence: 20,
+        iron: 0,
         bossCore: 0,
       },
       buildRadius: 6,

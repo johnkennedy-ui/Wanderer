@@ -268,6 +268,7 @@ def main():
     started = None
     kill_at = None
     final_at = None
+    final_reap_deadline = None
     cleanup_error = None
     forwarded_status = False
     status_pending = b""
@@ -283,6 +284,7 @@ def main():
     control_failed = False
     eof_watcher_observed = False
     post_poll_barrier_used = False
+    late_status_barrier_used = False
     status_drain_fixture_saturated = False
 
     def test_marker(name):
@@ -328,7 +330,7 @@ def main():
             control_forwarded = (reason["value"], requested_deadline["value"])
 
     def begin_termination(value, deadline=None):
-        nonlocal final_at, kill_at, control_pending
+        nonlocal final_at, final_reap_deadline, kill_at, control_pending
         now = time.monotonic()
         reason["value"] = reason["value"] or value
         # A caller supplied deadline is absolute.  In particular, do not turn
@@ -343,6 +345,10 @@ def main():
         )
         if final_at is not None and requested_deadline["value"] < final_at:
             final_at = requested_deadline["value"]
+            if final_reap_deadline is not None:
+                final_reap_deadline = min(
+                    final_reap_deadline, final_at + 0.250
+                )
             reserve = min(0.250, max(0.0005, (final_at - now) / 3))
             kill_at = max(now, final_at - reserve)
         effective = (reason["value"], requested_deadline["value"])
@@ -451,6 +457,16 @@ def main():
             list(watched), [control_fd] if control_pending else [], [], 0.025
         )
         if (
+            test_fault == "delay-status-consumption-past-deadline"
+            and not late_status_barrier_used
+            and status_read in readable
+            and final_at is not None
+        ):
+            late_status_barrier_used = True
+            delay = final_at + 0.050 - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+        if (
             test_fault == "post-poll-drain"
             and not post_poll_barrier_used
             and status_read in readable
@@ -521,6 +537,18 @@ def main():
                 cleanup_error = cleanup_error or f"SCANNER_PIDFD_SIGNAL:{error.errno or 'UNKNOWN'}"
             # Reconsider late/adopted descendants on every bounded pass.
             kill_at = now + 0.025
+        if (
+            not survivors
+            and final_at is not None
+            and now >= final_at
+        ):
+            write_status(
+                3,
+                reason["value"] or "control-eof",
+                "reaped" if cleanup_error is None else "incomplete",
+                cleanup_error or "SCANNER_CLEANUP_DEADLINE",
+            )
+            sys.exit(1)
         if not survivors:
             if supervisor_dead:
                 if status_receipt_invalid or status_pending or status_discarding:
@@ -533,11 +561,38 @@ def main():
                     if status == 0:
                         # A clean process with no frame remains a protocol fault.
                         return
-                    write_status(3, reason["value"] or "control-eof", "reaped" if cleanup_error is None else "incomplete", cleanup_error or "SCANNER_SUPERVISOR_DIED")
+                    missing_receipt_error = (
+                        "SCANNER_CLEANUP_DEADLINE"
+                        if requested_deadline["value"] is not None
+                        and time.monotonic() >= requested_deadline["value"]
+                        else "SCANNER_SUPERVISOR_DIED"
+                    )
+                    write_status(
+                        3,
+                        reason["value"] or "control-eof",
+                        "reaped" if cleanup_error is None else "incomplete",
+                        cleanup_error or missing_receipt_error,
+                    )
                 if status not in (None, 0) or not forwarded_status:
                     sys.exit(1)
                 return
         if final_at is not None and now >= final_at:
+            # The shared cleanup deadline determines the fail-closed receipt,
+            # but SIGKILL may make descendants waitable only after the last
+            # ordinary poll. Use the caller's existing 300 ms receipt-delivery
+            # allowance as a bounded final reap slice; never report cleanup as
+            # successful when the original deadline was missed.
+            if final_reap_deadline is None:
+                final_reap_deadline = final_at + 0.250
+            # Popen still owns the direct supervisor status until poll()
+            # observes its exit; waitpid(-1) before then would steal it.
+            if supervisor_dead:
+                reap()
+            if (
+                (not supervisor_dead or descendants(records()))
+                and time.monotonic() < final_reap_deadline
+            ):
+                continue
             write_status(3, reason["value"] or "control-eof", "incomplete", cleanup_error or "SCANNER_CLEANUP_DEADLINE")
             sys.exit(1)
 

@@ -7,6 +7,7 @@ import type { LegacyClassProgression } from "./currentSave";
 import type { SaveV2Document } from "./saveV2";
 import type { SaveV3Document } from "./saveV3";
 import { isClassProgressionV4 } from "./saveV4";
+import type { SaveV4Document } from "./saveV4";
 
 const defaultClassProgression = (): ClassProgression => ({
   experience: 0,
@@ -63,7 +64,7 @@ const migratedPlayerFor = (
 };
 
 /**
- * Pure in-memory migration from the released V2 DTO to the current V4 model.
+ * Pure in-memory migration from the released V2 DTO to the current V5 model.
  * It deliberately performs no persistence or GameSession mutation.
  */
 export const migrateSaveV2 = (
@@ -72,7 +73,7 @@ export const migrateSaveV2 = (
 ): CurrentSave => {
   const progression = normalizeLegacyProgression(classProgression);
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     world: {
       seed: document.world.seed,
       generatorVersion: document.world.generatorVersion,
@@ -83,8 +84,10 @@ export const migrateSaveV2 = (
       stone: document.resources.stone,
       scrap: document.resources.scrap,
       essence: document.resources.essence,
+      iron: 0,
       bossCore: document.resources.bossCore,
     },
+    harvestedNodeIds: [],
     buildings: document.buildings.map((building) => ({
       id: building.id,
       kind: building.kind,
@@ -128,14 +131,14 @@ const migratedV3PlayerFor = (
 };
 
 /**
- * Pure in-memory migration from frozen V3 semantics to the current V4 model.
+ * Pure in-memory migration from frozen V3 semantics to the current V5 model.
  * It never writes storage and intentionally retains the original skill prefix,
  * allocations, and relic rank.
  */
 export const migrateSaveV3 = (document: SaveV3Document): CurrentSave => {
   const progression = normalizeLegacyProgression(document.classProgression);
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     world: {
       seed: document.world.seed,
       generatorVersion: document.world.generatorVersion,
@@ -146,8 +149,10 @@ export const migrateSaveV3 = (document: SaveV3Document): CurrentSave => {
       stone: document.resources.stone,
       scrap: document.resources.scrap,
       essence: document.resources.essence,
+      iron: 0,
       bossCore: document.resources.bossCore,
     },
+    harvestedNodeIds: [],
     buildings: document.buildings.map((building) => ({
       id: building.id,
       kind: building.kind,
@@ -166,3 +171,32 @@ export const migrateSaveV3 = (document: SaveV3Document): CurrentSave => {
     classProgression: progression,
   };
 };
+
+/** Pure V4→V5 migration: preserves the old world and balances, starts Iron/depletion empty. */
+export const migrateSaveV4 = (document: SaveV4Document): CurrentSave => ({
+  schemaVersion: 5,
+  world: { ...document.world },
+  player: {
+    position: { ...document.player.position },
+    hp: document.player.hp,
+    maxHp: document.player.maxHp,
+  },
+  resources: { ...document.resources, iron: 0 },
+  harvestedNodeIds: [],
+  buildings: document.buildings.map((building) => ({
+    ...building,
+    position: { ...building.position },
+  })),
+  defeatedBossIds: [...document.defeatedBossIds],
+  upgrades: [...document.upgrades],
+  nextBuildingSerial: document.nextBuildingSerial,
+  committedAt: document.committedAt,
+  savePointId: document.savePointId,
+  savePointPosition: { ...document.savePointPosition },
+  classProgression: {
+    ...document.classProgression,
+    skillIds: [...document.classProgression.skillIds],
+    allocatedStats: { ...document.classProgression.allocatedStats },
+    weaponRank: document.classProgression.weaponRank ?? 0,
+  },
+});

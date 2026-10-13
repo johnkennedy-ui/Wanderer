@@ -22,11 +22,11 @@ import type { ChunkRecipeSource } from "./chunkRecipeCache";
 import {
   addResourceBags,
   canAffordResources,
-  collectResourcesWithinCapacity,
   resourcesForLevel,
   scaleResourceBag,
   subtractResourceBags,
 } from "./economy";
+import { tryAddResourceBags } from "../resourceBalances";
 import {
   findCampfireCoveringPosition,
   findNearbyCampfire,
@@ -339,14 +339,17 @@ export class SettlementRuntime {
         resourcesForLevel(buildingDefinitions[building.kind].baseCost, level),
       )
       .reduce(addResourceBags, emptyResources());
-    this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
     const refund = scaleResourceBag(
       cumulativeCost,
       gameplayTuning.buildingRefundRate,
     );
+    const nextResources = tryAddResourceBags(resources, refund);
+    if (nextResources === null)
+      return this.rejected({ kind: "resource-overflow" }, resources);
+    this.buildings = this.buildings.filter((candidate) => candidate.id !== id);
     return this.outcome(
       { ok: true, outcome: "demolished", building },
-      collectResourcesWithinCapacity(resources, refund),
+      nextResources,
     );
   }
 
@@ -385,15 +388,16 @@ export class SettlementRuntime {
     this.farmHarvestElapsed += delta;
     if (this.farmHarvestElapsed < gameplayTuning.farmHarvestEverySeconds)
       return { hp: nextHp, resources, harvested: false };
-    this.farmHarvestElapsed = 0;
     const harvest = farms
       .map((farm) => gameplayTuning.farmHarvestByLevel[farm.level - 1])
       .reduce(addResourceBags, emptyResources());
-    return {
-      hp: nextHp,
-      resources: collectResourcesWithinCapacity(resources, harvest),
-      harvested: true,
-    };
+    const nextResources = tryAddResourceBags(resources, harvest);
+    if (nextResources === null) {
+      this.farmHarvestElapsed = gameplayTuning.farmHarvestEverySeconds;
+      return { hp: nextHp, resources, harvested: false };
+    }
+    this.farmHarvestElapsed = 0;
+    return { hp: nextHp, resources: nextResources, harvested: true };
   }
 
   nearbyCampfireAt(

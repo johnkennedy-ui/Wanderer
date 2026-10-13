@@ -1,5 +1,6 @@
 import { gameplayTuning } from "../data/definitions";
-import { add, roundVector, scale } from "./math";
+import { deepFreeze } from "../data/deepFreeze";
+import { add, distance, roundVector, scale } from "./math";
 import { isMeaningfulMovement } from "./inputPolicy";
 import type {
   GamePresentation,
@@ -11,6 +12,7 @@ import type { PlacementPreview, PlacementRequest } from "./placement";
 import type {
   BuildingKind,
   AllocatablePlayerStatKind,
+  ChunkRecipe,
   ClassSkillId,
   DestinationCommand,
   FloorDropState,
@@ -43,7 +45,17 @@ import type {
 import { projectGamePresentation } from "./session/readModels";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
 import { visibleChunksFor } from "./session/worldRuntime";
+import { tryAddResourceBags } from "./resourceBalances";
 import {
+  effectiveChunkRecipeFor,
+  HARVEST_INTERACTION_DISTANCE,
+  hasHarvestedNodeIdCharacterCapacity,
+  harvestRewardsForObstacle,
+  MAX_HARVESTED_NODE_ID_LENGTH,
+  MAX_HARVESTED_NODE_IDS,
+} from "./resourceHarvesting";
+import {
+  CHUNK_RECIPE_CACHE_CAPACITY,
   ChunkRecipeCache,
   type ChunkRecipeSource,
 } from "./session/chunkRecipeCache";
@@ -135,6 +147,12 @@ const placementPreviewFor = (
 
 export class GameSession {
   private readonly chunkRecipes: ChunkRecipeCache;
+  private readonly effectiveChunkRecipeSource: ChunkRecipeSource;
+  private readonly effectiveChunkRecipes = new Map<
+    string,
+    { readonly source: ChunkRecipe; readonly result: ChunkRecipe }
+  >();
+  private harvestedNodeIds = new Set<string>();
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
@@ -172,6 +190,39 @@ export class GameSession {
       undefined,
       options.chunkRecipeSource,
     );
+    this.effectiveChunkRecipeSource = (world, coordinate) => {
+      const source = this.chunkRecipes.get(world, coordinate);
+      // Deterministic generators return immutable data properties. Preserve a
+      // custom live getter's fresh obstacle snapshot rather than caching it.
+      if (
+        Object.getOwnPropertyDescriptor(source, "obstacles")?.get !== undefined
+      )
+        return deepFreeze(
+          effectiveChunkRecipeFor(source, this.harvestedNodeIds),
+        );
+      const key = JSON.stringify([
+        world.seed,
+        world.generatorVersion,
+        coordinate.x,
+        coordinate.y,
+      ]);
+      const cached = this.effectiveChunkRecipes.get(key);
+      if (cached?.source === source) {
+        this.effectiveChunkRecipes.delete(key);
+        this.effectiveChunkRecipes.set(key, cached);
+        return cached.result;
+      }
+
+      const result = deepFreeze(
+        effectiveChunkRecipeFor(source, this.harvestedNodeIds),
+      );
+      if (this.effectiveChunkRecipes.size === CHUNK_RECIPE_CACHE_CAPACITY) {
+        const oldest = this.effectiveChunkRecipes.keys().next().value;
+        if (oldest !== undefined) this.effectiveChunkRecipes.delete(oldest);
+      }
+      this.effectiveChunkRecipes.set(key, { source, result });
+      return result;
+    };
     this.replaceState(
       options.saved === undefined
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
@@ -182,17 +233,19 @@ export class GameSession {
   private replaceState(state: SessionState): void {
     this.presentationResetId += 1;
     this.chunkRecipes.clear();
+    this.effectiveChunkRecipes.clear();
     this.enemyNavigation.clear();
     this.world = state.world;
     this.player = state.player;
     this.resources = state.resources;
+    this.harvestedNodeIds = state.harvestedNodeIds;
     this.settlement = new SettlementRuntime(
       {
         buildings: state.buildings,
         nextBuildingSerial: state.nextBuildingSerial,
         farmHarvestElapsed: state.farmHarvestElapsed,
       },
-      this.chunkRecipes.get,
+      this.effectiveChunkRecipeSource,
     );
     this.enemies = state.enemies;
     this.attackPresentation = state.attackPresentation;
@@ -235,6 +288,81 @@ export class GameSession {
     this.destination = next.destination;
     this.input = next.input;
   }
+  harvestNode(nodeId: string): void {
+    if (
+      typeof nodeId !== "string" ||
+      nodeId.length === 0 ||
+      nodeId.length > MAX_HARVESTED_NODE_ID_LENGTH
+    ) {
+      this.notice = { kind: "resource-node.rejected", reason: "unknown-node" };
+      return;
+    }
+    if (this.harvestedNodeIds.has(nodeId)) {
+      this.notice = {
+        kind: "resource-node.rejected",
+        reason: "already-harvested",
+      };
+      return;
+    }
+    const obstacle = visibleChunksFor(
+      this.world,
+      this.player.position,
+      this.chunkRecipes.get,
+    )
+      .flatMap((chunk) => chunk.obstacles)
+      .find((candidate) => candidate.id === nodeId);
+    const rewards =
+      obstacle === undefined ? null : harvestRewardsForObstacle(obstacle);
+    if (obstacle === undefined || rewards === null) {
+      this.notice = { kind: "resource-node.rejected", reason: "unknown-node" };
+      return;
+    }
+    if (
+      distance(this.player.position, obstacle.position) >
+      HARVEST_INTERACTION_DISTANCE
+    ) {
+      this.destination = null;
+      this.input = {
+        intent: { x: 0, y: 0 },
+        source: "system",
+        at: this.elapsed,
+      };
+      this.notice = { kind: "resource-node.rejected", reason: "out-of-reach" };
+      return;
+    }
+    if (this.harvestedNodeIds.size >= MAX_HARVESTED_NODE_IDS) {
+      this.notice = {
+        kind: "resource-node.rejected",
+        reason: "depletion-limit",
+      };
+      return;
+    }
+    if (!hasHarvestedNodeIdCharacterCapacity(this.harvestedNodeIds, nodeId)) {
+      this.notice = {
+        kind: "resource-node.rejected",
+        reason: "depletion-size-limit",
+      };
+      return;
+    }
+
+    const nextResources = tryAddResourceBags(this.resources, rewards);
+    if (nextResources === null) {
+      this.notice = {
+        kind: "resource-node.rejected",
+        reason: "inventory-limit",
+      };
+      return;
+    }
+
+    // Publish the inventory and depletion delta together after every check passes.
+    this.destination = null;
+    this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
+    this.harvestedNodeIds.add(nodeId);
+    this.resources = nextResources;
+    this.effectiveChunkRecipes.clear();
+    this.enemyNavigation.clear();
+    this.notice = { kind: "resource-node.harvested", rewards: { ...rewards } };
+  }
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.elapsed += delta;
@@ -263,13 +391,13 @@ export class GameSession {
       elapsed: this.elapsed,
       maximumTravel: movementDistance,
       world: this.world,
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
       buildings: this.settlement.buildingState,
     });
     this.player.position = destination.playerPosition;
     this.input = destination.input;
     this.destination = destination.destination;
-    const destinationMoving = destination.moving;
+    const destinationMoving = destination.moving && this.destination !== null;
     const moving = destinationMoving || isMeaningfulMovement(this.input.intent);
 
     if (moving) {
@@ -282,7 +410,7 @@ export class GameSession {
               this.player.position,
               scale(this.input.intent, movementDistance),
             ),
-            chunkRecipeSource: this.chunkRecipes.get,
+            chunkRecipeSource: this.effectiveChunkRecipeSource,
             buildings: this.settlement.buildingState,
           }),
         );
@@ -547,6 +675,7 @@ export class GameSession {
       world: this.world,
       player: this.player,
       resources: this.resources,
+      harvestedNodeIds: this.harvestedNodeIds,
       defeatedBossIds: this.defeatedBossIds,
       upgrades: this.upgrades,
       classProgression: this.classProgression,
@@ -568,7 +697,7 @@ export class GameSession {
     const visibleChunks = visibleChunksFor(
       this.world,
       this.player.position,
-      this.chunkRecipes.get,
+      this.effectiveChunkRecipeSource,
     );
     const savePoint = this.settlement.nearbyCampfireAt(
       this.world,
@@ -659,7 +788,7 @@ export class GameSession {
     const additions = visibleEnemyInsertionsFor({
       world: this.world,
       playerPosition: this.player.position,
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
       enemies: this.enemies,
       defeatedBossIds: this.defeatedBossIds,
       enemyHealthContext: enemyHealthContextFor(this.classProgression),
@@ -677,7 +806,7 @@ export class GameSession {
       startedWaveIndices: this.startedWaveIndices,
       pendingWaveIndices: this.pendingWaveIndices,
       enemyHealthContext: enemyHealthContextFor(this.classProgression),
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
       buildings: this.settlement.buildingState,
     });
     for (const id of plan.expiredEnemyIds) this.enemies.delete(id);
@@ -762,7 +891,7 @@ export class GameSession {
       world: this.world,
       upgrades: this.upgrades,
       buildings: this.settlement.buildingState,
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
     });
     this.player.hp = result.playerHp;
     this.enemies = result.enemies;
@@ -788,7 +917,7 @@ export class GameSession {
       world: this.world,
       upgrades: this.upgrades,
       classProgression: this.classProgression,
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
     });
     this.projectiles = result.projectiles;
     this.towerAttackElapsedById = result.elapsedByTowerId;
@@ -815,7 +944,7 @@ export class GameSession {
       buildings: this.settlement.buildingState,
       classProgression: this.classProgression,
       upgrades: this.upgrades,
-      chunkRecipeSource: this.chunkRecipes.get,
+      chunkRecipeSource: this.effectiveChunkRecipeSource,
       enemyNavigation: this.enemyNavigation,
     });
     this.player = result.player;

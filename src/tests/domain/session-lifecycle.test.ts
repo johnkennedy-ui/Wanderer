@@ -29,6 +29,7 @@ describe("GameSession lifecycle", () => {
         stone: 120,
         scrap: 120,
         essence: 20,
+        iron: 0,
         bossCore: 0,
       },
       buildings: [],
@@ -52,7 +53,14 @@ describe("GameSession lifecycle", () => {
     const saved: SaveDocument = {
       ...savedAtHome(),
       player: { position: { x: 4, y: -2 }, hp: 71, maxHp: 130 },
-      resources: { wood: 90, stone: 80, scrap: 70, essence: 60, bossCore: 1 },
+      resources: {
+        wood: 90,
+        stone: 80,
+        scrap: 70,
+        essence: 60,
+        iron: 0,
+        bossCore: 1,
+      },
       buildings: [
         {
           id: "building:fixture:0007",
@@ -96,10 +104,18 @@ describe("GameSession lifecycle", () => {
     (hydrated.buildings[0]?.position as { x: number }).x = 5;
     expect(projected.resources.wood).toBe(90);
     expect(projected.buildings[0]?.position).toEqual({ x: 1, y: 1 });
-    const { classProgression, ...historicalProjection } = projected;
-    expect({ ...historicalProjection, schemaVersion: 2 }).toEqual(
-      toSaveV2Document(projected),
-    );
+    const {
+      classProgression,
+      harvestedNodeIds: _harvestedNodeIds,
+      resources,
+      ...historicalProjection
+    } = projected;
+    const { iron: _iron, ...legacyResources } = resources;
+    expect({
+      ...historicalProjection,
+      resources: legacyResources,
+      schemaVersion: 2,
+    }).toEqual(toSaveV2Document(projected));
     expect(classProgression).toEqual({
       experience: 0,
       level: 0,
@@ -125,6 +141,7 @@ describe("GameSession lifecycle", () => {
       stone: 120,
       scrap: 120,
       essence: 20,
+      iron: 0,
       bossCore: 0,
     });
     expect(reset.ui.buildings).toEqual([]);

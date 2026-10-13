@@ -21,6 +21,7 @@ const TERMINATIONS = new Set([
 ]);
 const signalName = (value) =>
   typeof value === "string" && /^SIG[A-Z0-9]+$/.test(value);
+const monotonicNowMs = () => Number(process.hrtime.bigint() / 1_000_000n);
 
 export const selectOwnedTree = (records, rootPid, expectedRoot) => {
   const root = records.get(rootPid);
@@ -205,6 +206,7 @@ export const executeScanner = (
     let settled = false;
     let cleanupTimer = null;
     let forceSettleTimer = null;
+    let cleanupDeadlineAt = null;
     let stdinError = null;
     let fallbackStarted = false;
     let guardianClose = null;
@@ -261,7 +263,10 @@ export const executeScanner = (
         supervisorError === null;
       const matchesTermination =
         !termination || (protocolValid && parsed.termination === termination);
+      const cleanupDeadlineMissed =
+        cleanupDeadlineAt !== null && monotonicNowMs() >= cleanupDeadlineAt;
       const cleanup =
+        !cleanupDeadlineMissed &&
         supervisorNormal &&
         protocolValid &&
         matchesTermination &&
@@ -276,20 +281,22 @@ export const executeScanner = (
           ? "SCANNER_SUPERVISOR_STATUS_INVALID"
           : !matchesTermination
             ? "SCANNER_SUPERVISOR_TERMINATION_MISMATCH"
-            : parsed.error ||
-              (!supervisorNormal
-                ? "SCANNER_SUPERVISOR_EXIT_INVALID"
-                : (termination
-                    ? `SCANNER_${termination.toUpperCase().replace("-", "_")}`
-                    : null) ||
-                  (parsed.termination !== "none"
-                    ? `SCANNER_${parsed.termination
-                        .toUpperCase()
-                        .replace("-", "_")}`
-                    : null) ||
-                  (parsed.reaping !== "reaped"
-                    ? "SCANNER_CLEANUP_INCOMPLETE"
-                    : null)));
+            : cleanupDeadlineMissed
+              ? "SCANNER_CLEANUP_DEADLINE"
+              : parsed.error ||
+                (!supervisorNormal
+                  ? "SCANNER_SUPERVISOR_EXIT_INVALID"
+                  : (termination
+                      ? `SCANNER_${termination.toUpperCase().replace("-", "_")}`
+                      : null) ||
+                    (parsed.termination !== "none"
+                      ? `SCANNER_${parsed.termination
+                          .toUpperCase()
+                          .replace("-", "_")}`
+                      : null) ||
+                    (parsed.reaping !== "reaped"
+                      ? "SCANNER_CLEANUP_INCOMPLETE"
+                      : null)));
       done({
         exitCode: protocolValid ? parsed.exitCode : null,
         signal: protocolValid ? parsed.signal : null,
@@ -327,6 +334,7 @@ export const executeScanner = (
       if (termination || settled) return;
       termination = reason;
       const teardownBudgetMs = Math.max(1, cleanupDeadlineMs);
+      cleanupDeadlineAt = monotonicNowMs() + teardownBudgetMs;
       // Python time.monotonic() and Node hrtime share CLOCK_MONOTONIC on
       // Linux. Transmit one absolute deadline through both reapers so their
       // grace and reap reserves cannot become sequential relative windows.
@@ -396,7 +404,14 @@ export const executeScanner = (
           // A guardian that exits nonzero during caller-directed termination
           // has not established a scanner exit status, even when ownership
           // was not observed before the stop/cleanup race.
-          settle(null, null, null, true);
+          settle(
+            null,
+            null,
+            cleanupDeadlineAt !== null && monotonicNowMs() >= cleanupDeadlineAt
+              ? "SCANNER_CLEANUP_DEADLINE"
+              : null,
+            true,
+          );
         }, 100);
         return;
       }

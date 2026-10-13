@@ -3,6 +3,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { verifyArtifact, markBrowserVerified } from "../security/artifact.mjs";
+import { choosePlaywrightPort } from "./playwright-port.mjs";
+
+export const UX_JOURNEY_SPEC = "src/tests/browser/ux-journey.spec.ts";
 
 export const PAGES_SMOKE_GREP = [
   "environment clones load through the existing model cache at the deployment base",
@@ -18,6 +21,7 @@ const supportedScopes = new Set([
   "pages-smoke",
   "release",
   "matrix",
+  "full-matrix",
 ]);
 
 export const parseBrowserArguments = (argv) => {
@@ -113,18 +117,19 @@ export const runBrowserMatrix = ({
   for (const basePath of pathsForScope(options.scope)) {
     if (basePath !== "/" || !options.reuseRootBuild) build(basePath);
     const before = verify({ cwd, basePath });
-    const usePagesSmoke =
-      options.scope === "pages-smoke" ||
-      (options.scope === "release" && basePath === "/Wanderer/");
+    const useUxJourney =
+      options.scope === "matrix" || options.scope === "release";
+    const usePagesSmoke = options.scope === "pages-smoke";
     execute(
       process.execPath,
       [
         playwright,
         "test",
+        ...(useUxJourney ? [UX_JOURNEY_SPEC] : []),
         ...(usePagesSmoke ? ["--grep", PAGES_SMOKE_GREP] : []),
       ],
       basePath,
-      1_800_000,
+      600_000,
     );
     const after = verify({ cwd, basePath });
     if (before.manifest.contentSha256 !== after.manifest.contentSha256)
@@ -140,6 +145,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
+    process.env.PLAYWRIGHT_PORT = String(await choosePlaywrightPort());
     runBrowserMatrix({ argv: process.argv.slice(2) });
   } catch (error) {
     console.error(error.message);

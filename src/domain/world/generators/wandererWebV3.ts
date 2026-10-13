@@ -69,11 +69,16 @@ const isHomeApproach = (position: Vector2): boolean =>
 const isHomeFordAt = (position: Vector2): boolean =>
   position.y >= -8 && position.y <= 17;
 
-const nearbyActorsFor = (world: WorldIdentity, coordinate: Vector2) => {
+type V2ChunkRecipeFor = (coordinate: Vector2) => ChunkRecipe;
+
+const nearbyActorsFor = (
+  coordinate: Vector2,
+  v2ChunkRecipeFor: V2ChunkRecipeFor,
+) => {
   const actors: { readonly position: Vector2 }[] = [];
   for (let y = coordinate.y - 1; y <= coordinate.y + 1; y += 1)
     for (let x = coordinate.x - 1; x <= coordinate.x + 1; x += 1) {
-      const recipe = generateWandererWebV2Chunk(world, { x, y });
+      const recipe = v2ChunkRecipeFor({ x, y });
       actors.push(...recipe.campfires, ...recipe.spawns);
     }
   return actors;
@@ -156,10 +161,13 @@ const coordinatesAround = (coordinate: Vector2): readonly Vector2[] => {
 const riversAroundFor = (
   world: WorldIdentity,
   coordinate: Vector2,
+  v2ChunkRecipeFor: V2ChunkRecipeFor,
 ): ChunkObstacle[] => {
   const rivers: ChunkObstacle[] = [];
   for (const nearby of coordinatesAround(coordinate))
-    rivers.push(...riverFor(world, nearby, nearbyActorsFor(world, nearby)));
+    rivers.push(
+      ...riverFor(world, nearby, nearbyActorsFor(nearby, v2ChunkRecipeFor)),
+    );
   return rivers;
 };
 
@@ -208,12 +216,18 @@ const lakeFor = (
 const waterAroundFor = (
   world: WorldIdentity,
   coordinate: Vector2,
+  v2ChunkRecipeFor: V2ChunkRecipeFor,
 ): ChunkObstacle[] => {
-  const rivers = riversAroundFor(world, coordinate);
+  const rivers = riversAroundFor(world, coordinate, v2ChunkRecipeFor);
   const water = [...rivers];
   for (const nearby of coordinatesAround(coordinate))
     water.push(
-      ...lakeFor(world, nearby, nearbyActorsFor(world, nearby), rivers),
+      ...lakeFor(
+        world,
+        nearby,
+        nearbyActorsFor(nearby, v2ChunkRecipeFor),
+        rivers,
+      ),
     );
   return water;
 };
@@ -227,11 +241,23 @@ export const generateWandererWebV3Chunk: ChunkGenerator = (
   world,
   coordinate,
 ): ChunkRecipe => {
-  const base = generateWandererWebV2Chunk(world, coordinate);
+  // V3's environment helpers revisit overlapping 3×3 V2 neighborhoods.
+  // V2 recipes are pure for a fixed world identity and coordinate, so share
+  // them only for this generation call (never as persistent cache state).
+  const v2Chunks = new Map<string, ChunkRecipe>();
+  const v2ChunkRecipeFor: V2ChunkRecipeFor = (target) => {
+    const key = chunkKey(target);
+    const cached = v2Chunks.get(key);
+    if (cached !== undefined) return cached;
+    const generated = generateWandererWebV2Chunk(world, target);
+    v2Chunks.set(key, generated);
+    return generated;
+  };
+  const base = v2ChunkRecipeFor(coordinate);
   const seed = deriveDomainSeed(world, coordinate, "terrain");
   const origin = { x: coordinate.x * CHUNK_SIZE, y: coordinate.y * CHUNK_SIZE };
-  const actors = nearbyActorsFor(world, coordinate);
-  const nearbyWater = waterAroundFor(world, coordinate);
+  const actors = nearbyActorsFor(coordinate, v2ChunkRecipeFor);
+  const nearbyWater = waterAroundFor(world, coordinate, v2ChunkRecipeFor);
   const river = riverFor(world, coordinate, actors);
   const water = [
     ...river,

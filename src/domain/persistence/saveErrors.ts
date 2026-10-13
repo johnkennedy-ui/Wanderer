@@ -2,6 +2,7 @@ import type { CurrentSave } from "./currentSave";
 import type { SaveV2Document } from "./saveV2";
 import type { SaveV3Document } from "./saveV3";
 import type { SaveV4Document } from "./saveV4";
+import type { SaveV5Document } from "./saveV5";
 
 export type SaveLoadFailure =
   | "absent"
@@ -13,7 +14,8 @@ export type SaveLoadFailure =
 export interface SaveDecodeSuccess {
   readonly ok: true;
   readonly document: CurrentSave;
-  readonly wireDocument: SaveV2Document | SaveV3Document | SaveV4Document;
+  readonly wireDocument:
+    SaveV2Document | SaveV3Document | SaveV4Document | SaveV5Document;
 }
 
 export interface SaveDecodeFailure {

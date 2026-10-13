@@ -2,6 +2,7 @@ import {
   buildingDefinitions,
   classDefinitionFor,
   classSkillDefinitionFor,
+  resourceDefinitions,
   upgradeDefinitionFor,
   weaponRelicDefinitionFor,
 } from "../data/definitions";
@@ -39,6 +40,8 @@ export const presentPlacementRejection = (
       return `outside the ${rejection.radius}m campfire settlement radius`;
     case "insufficient-resources":
       return "insufficient resources";
+    case "resource-overflow":
+      return "the refund exceeds the exact resource-balance range";
     case "unknown-building":
       return "unknown building";
     case "occupied-by-actor":
@@ -117,6 +120,35 @@ export const presentGameNotice = (notice: GameNotice): string => {
       return "Collected floor drops on contact; no save was made.";
     case "farm.harvested":
       return "Farm harvest collected while stationary; storage capacity was enforced.";
+    case "resource-node.harvested": {
+      const rewards = [
+        notice.rewards.wood === undefined
+          ? null
+          : `Wood +${notice.rewards.wood}`,
+        notice.rewards.stone === undefined
+          ? null
+          : `Stone +${notice.rewards.stone}`,
+        notice.rewards.iron === undefined
+          ? null
+          : `Iron +${notice.rewards.iron}`,
+      ].filter((reward): reward is string => reward !== null);
+      return `Harvested ${rewards.join(" · ")}. It remains runtime-only until a campfire save.`;
+    }
+    case "resource-node.rejected":
+      switch (notice.reason) {
+        case "unknown-node":
+          return "That resource node is unavailable.";
+        case "out-of-reach":
+          return "Move within 2m of that tree or rock to harvest it.";
+        case "already-harvested":
+          return "That node has already been harvested; no resources changed.";
+        case "depletion-limit":
+          return "The session reached its safe depleted-node limit; no resources changed.";
+        case "depletion-size-limit":
+          return "The harvested-node save-size limit was reached; the node remains intact.";
+        case "inventory-limit":
+          return "The resource balance limit was reached; the node remains intact.";
+      }
     default:
       return exhaustNotice(notice);
   }
@@ -154,6 +186,8 @@ export const presentPlacementNotice = (notice: GameNotice): string => {
     case "wave.started":
     case "drop.collected":
     case "farm.harvested":
+    case "resource-node.harvested":
+    case "resource-node.rejected":
       return "";
     default:
       return exhaustNotice(notice);

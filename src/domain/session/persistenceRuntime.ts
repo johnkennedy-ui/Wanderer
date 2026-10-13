@@ -23,6 +23,7 @@ export const campfireSaveRequestFor = ({
   world,
   player,
   resources,
+  harvestedNodeIds,
   defeatedBossIds,
   upgrades,
   classProgression,
@@ -32,6 +33,7 @@ export const campfireSaveRequestFor = ({
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
+  readonly harvestedNodeIds: ReadonlySet<string>;
   readonly defeatedBossIds: ReadonlySet<string>;
   readonly upgrades: ReadonlySet<UpgradeId>;
   readonly classProgression: ClassProgression;
@@ -50,6 +52,7 @@ export const campfireSaveRequestFor = ({
           world,
           player,
           resources,
+          harvestedNodeIds,
           buildings: settlement.buildingState,
           defeatedBossIds,
           upgrades,

@@ -5,7 +5,7 @@ import type {
   ResourceBag,
   Vector2,
 } from "../types";
-import { collectResourcesWithinCapacity } from "./economy";
+import { tryAddResourceBags } from "../resourceBalances";
 
 export interface FloorDropCollectionInput {
   readonly playerPosition: Vector2;
@@ -42,13 +42,19 @@ export const floorDropCollectionPolicy = ({
       continue;
     }
 
-    nextResources = collectResourcesWithinCapacity(nextResources, {
+    const next = tryAddResourceBags(nextResources, {
       wood: drop.resource === "wood" ? drop.amount : 0,
       stone: drop.resource === "stone" ? drop.amount : 0,
       scrap: drop.resource === "scrap" ? drop.amount : 0,
       essence: drop.resource === "essence" ? drop.amount : 0,
+      iron: drop.resource === "iron" ? drop.amount : 0,
       bossCore: drop.resource === "bossCore" ? drop.amount : 0,
     });
+    if (next === null) {
+      remaining.push(copyDrop(drop));
+      continue;
+    }
+    nextResources = next;
     collectedAny = true;
   }
 

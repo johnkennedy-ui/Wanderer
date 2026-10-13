@@ -100,6 +100,10 @@ export const createGameApplication = async (
     renderer.worldPositionFromClientPoint,
     (command) => session.setDestination(command),
     ui.isWorldPlacementEnabled,
+    {
+      pickNodeId: renderer.harvestableNodeIdFromClientPoint,
+      harvestNode: (nodeId) => session.harvestNode(nodeId),
+    },
   );
   const buildPlacement = createBuildPlacementInput(
     renderer.canvas,

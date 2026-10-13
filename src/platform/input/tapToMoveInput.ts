@@ -15,6 +15,10 @@ export const createTapToMoveInput = (
   ) => Vector2 | null,
   sink: DestinationSink,
   isClaimedByPlacement: () => boolean = () => false,
+  harvesting?: {
+    readonly pickNodeId: (clientX: number, clientY: number) => string | null;
+    readonly harvestNode: (nodeId: string) => void;
+  },
 ): TapToMoveInput => {
   let pendingTap:
     | {
@@ -47,6 +51,14 @@ export const createTapToMoveInput = (
         MAX_TAP_TRAVEL_PIXELS
     )
       return;
+    if (harvesting !== undefined) {
+      const nodeId = harvesting.pickNodeId(event.clientX, event.clientY);
+      if (nodeId !== null) {
+        event.preventDefault();
+        harvesting.harvestNode(nodeId);
+        return;
+      }
+    }
     const destination = worldPositionFromClientPoint(
       event.clientX,
       event.clientY,

@@ -1,12 +1,18 @@
 import { isSupportedWorldGeneratorVersion } from "../world";
 import { isCurrentSave, isLegacyClassProgression } from "./currentSave";
-import { migrateSaveV2, migrateSaveV3 } from "./migrateSave";
+import { migrateSaveV2, migrateSaveV3, migrateSaveV4 } from "./migrateSave";
 import { isSaveV2Document, SAVE_V2_SCHEMA_VERSION } from "./saveV2";
 import { isSaveV3Document, SAVE_V3_SCHEMA_VERSION } from "./saveV3";
 import { isSaveV4Document, SAVE_V4_SCHEMA_VERSION } from "./saveV4";
-import type { SaveV4Document } from "./saveV4";
+import {
+  hasGeneratedHarvestedNodeMembership,
+  isSaveV5DocumentStructure,
+  SAVE_V5_SCHEMA_VERSION,
+} from "./saveV5";
+import type { SaveV5Document } from "./saveV5";
 import type { SaveDecodeResult } from "./saveErrors";
 import type { CurrentSave } from "../types";
+import { MAX_SAVE_DOCUMENT_CODE_UNITS } from "./saveLimits";
 
 const failure = (
   kind: Extract<SaveDecodeResult, { ok: false }>["failure"],
@@ -18,9 +24,9 @@ const hasSchemaVersion = (
 ): value is { schemaVersion: unknown } =>
   typeof value === "object" && value !== null && "schemaVersion" in value;
 
-/** Copies a V4 document into an owned current runtime representation. */
-const cloneSaveV4 = (document: SaveV4Document): CurrentSave => ({
-  schemaVersion: 4,
+/** Copies a V5 document into an owned current runtime representation. */
+const cloneSaveV5 = (document: SaveV5Document): CurrentSave => ({
+  schemaVersion: 5,
   world: { ...document.world },
   player: {
     position: { ...document.player.position },
@@ -28,6 +34,7 @@ const cloneSaveV4 = (document: SaveV4Document): CurrentSave => ({
     maxHp: document.player.maxHp,
   },
   resources: { ...document.resources },
+  harvestedNodeIds: [...document.harvestedNodeIds],
   buildings: document.buildings.map((building) => ({
     ...building,
     position: { ...building.position },
@@ -52,12 +59,17 @@ const cloneSaveV4 = (document: SaveV4Document): CurrentSave => ({
 });
 
 /**
- * Parse → identify schema → validate frozen V2/V3 or current V4 → migrate/copy
+ * Parse → identify schema → validate frozen V2/V3/V4 or current V5 → migrate/copy
  * in memory. No storage write occurs in this pipeline.
  */
 export const decodeSave = (serialized: string | null): SaveDecodeResult => {
   if (serialized === null)
     return failure("absent", "No save document is present.");
+  if (serialized.length > MAX_SAVE_DOCUMENT_CODE_UNITS)
+    return failure(
+      "invalid-document",
+      "Save data exceeds the maximum supported size.",
+    );
 
   let raw: unknown;
   try {
@@ -88,7 +100,7 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
     if (!isCurrentSave(document))
       return failure(
         "invalid-document",
-        "Migrated save data does not match current schema version 4.",
+        "Migrated save data does not match current schema version 5.",
       );
     return { ok: true, document, wireDocument: raw };
   }
@@ -108,7 +120,7 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
     if (!isCurrentSave(document))
       return failure(
         "invalid-document",
-        "Migrated save data does not match current schema version 4.",
+        "Migrated save data does not match current schema version 5.",
       );
     return { ok: true, document, wireDocument: raw };
   }
@@ -124,7 +136,32 @@ export const decodeSave = (serialized: string | null): SaveDecodeResult => {
         "unsupported-generator",
         `World generator ${raw.world.generatorVersion} is not supported.`,
       );
-    return { ok: true, document: cloneSaveV4(raw), wireDocument: raw };
+    const document = migrateSaveV4(raw);
+    if (!isCurrentSave(document))
+      return failure(
+        "invalid-document",
+        "Migrated save data does not match current schema version 5.",
+      );
+    return { ok: true, document, wireDocument: raw };
+  }
+
+  if (raw.schemaVersion === SAVE_V5_SCHEMA_VERSION) {
+    if (!isSaveV5DocumentStructure(raw))
+      return failure(
+        "invalid-document",
+        "Save data does not match schema version 5.",
+      );
+    if (!isSupportedWorldGeneratorVersion(raw.world.generatorVersion))
+      return failure(
+        "unsupported-generator",
+        `World generator ${raw.world.generatorVersion} is not supported.`,
+      );
+    if (!hasGeneratedHarvestedNodeMembership(raw.harvestedNodeIds, raw.world))
+      return failure(
+        "invalid-document",
+        "Saved harvested-node IDs do not match generated resource nodes.",
+      );
+    return { ok: true, document: cloneSaveV5(raw), wireDocument: raw };
   }
 
   return failure(

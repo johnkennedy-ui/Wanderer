@@ -64,7 +64,7 @@ const enemy = (overrides: Partial<RuntimeEnemy> = {}): RuntimeEnemy => ({
 const enemyPhaseBase = (enemies: ReadonlyMap<string, RuntimeEnemy>) => ({
   elapsed: 1,
   player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
-  resources: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+  resources: { wood: 0, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
   enemies,
   committedSavePoint: {
     id: "campfire:home",
@@ -317,7 +317,7 @@ describe("RO-inspired stat core", () => {
       ok: true,
       wireDocument: { schemaVersion: 2 },
       document: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         player: { hp: 200, maxHp: 250 },
         classProgression: {
           level: 5,
@@ -328,7 +328,7 @@ describe("RO-inspired stat core", () => {
     expect(v2.player).toEqual({ ...current.player, hp: 80, maxHp: 130 });
     if (!decoded.ok) throw new Error(decoded.message);
     const storage = toCurrentSaveStorageDocument(decoded.document);
-    expect(storage.schemaVersion).toBe(4);
+    expect(storage.schemaVersion).toBe(5);
     expect(decodeSave(JSON.stringify(storage))).toMatchObject({ ok: true });
   });
 });

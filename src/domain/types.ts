@@ -3,13 +3,21 @@ export const resourceKinds = Object.freeze([
   "stone",
   "scrap",
   "essence",
+  "iron",
   "bossCore",
 ] as const);
 
 export type ResourceKind = (typeof resourceKinds)[number];
+export type HarvestResourceKind = Extract<
+  ResourceKind,
+  "wood" | "stone" | "iron"
+>;
+export type HarvestRewards = Readonly<
+  Partial<Record<HarvestResourceKind, number>>
+>;
 export type CommonResourceKind = Exclude<ResourceKind, "bossCore">;
 export const commonResourceKinds: readonly CommonResourceKind[] = Object.freeze(
-  ["wood", "stone", "scrap", "essence"] as const,
+  ["wood", "stone", "scrap", "essence", "iron"] as const,
 );
 
 export type ResourceBag = Record<ResourceKind, number>;
@@ -344,6 +352,8 @@ export interface ChunkObstacle {
   readonly waterKind?: "river" | "lake";
   /** Collision footprint radius, in world units; legacy obstacles use 0.9. */
   readonly radius?: number;
+  /** Derived eligibility for resource interaction; absent from base recipes. */
+  readonly harvestable?: boolean;
 }
 
 export interface ChunkCampfire {
@@ -403,10 +413,12 @@ export interface CombatStats {
  * schema-2 wire DTO lives independently in persistence/saveV2.ts.
  */
 export interface CurrentSave {
-  readonly schemaVersion: 4;
+  readonly schemaVersion: 5;
   readonly world: WorldIdentity;
   readonly player: PlayerState;
   readonly resources: ResourceBag;
+  /** Stable procedural node IDs collected in this committed world state. */
+  readonly harvestedNodeIds: readonly string[];
   readonly buildings: readonly BuildingState[];
   readonly defeatedBossIds: readonly string[];
   readonly upgrades: readonly UpgradeId[];
@@ -431,5 +443,6 @@ export const emptyResources = (): ResourceBag => ({
   stone: 0,
   scrap: 0,
   essence: 0,
+  iron: 0,
   bossCore: 0,
 });

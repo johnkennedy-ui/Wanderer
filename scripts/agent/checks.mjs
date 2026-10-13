@@ -23,7 +23,7 @@ const command = (id, reason, commandLine, timeoutMs) => ({
   timeoutMs,
 });
 
-const browserCheckTimeoutMs = 1_800_000;
+const browserCheckTimeoutMs = 600_000;
 
 const mergeCommand = (commands, next) => {
   const existing = commands.get(next.id);
@@ -128,8 +128,8 @@ export const selectFocusedChecks = (
           ? "browser-matrix"
           : "browser-release",
         requiresFullBrowserMatrix || forcedFull
-          ? "cross-cutting deployment-path risk requires the retained full two-base browser matrix"
-          : "completed executable changes receive the full primary suite plus the focused Pages smoke suite",
+          ? "cross-cutting deployment-path risk requires the two-base integrated UX browser matrix"
+          : "completed executable changes receive the integrated UX journey on both deployment bases",
         requiresFullBrowserMatrix || forcedFull
           ? [
               "npm",
@@ -149,10 +149,7 @@ export const selectFocusedChecks = (
       scope,
       changedFiles,
       classifications,
-      browserCoverage:
-        requiresFullBrowserMatrix || forcedFull
-          ? "full-two-path-matrix"
-          : "primary-plus-pages-smoke",
+      browserCoverage: "two-base-ux-journey",
       commands: [...commands.values()],
       commandTexts: [...commands.values()].map((entry) =>
         commandText(entry.command),

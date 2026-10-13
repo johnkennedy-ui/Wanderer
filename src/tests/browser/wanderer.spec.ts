@@ -1175,8 +1175,9 @@ test(
     const committed = await page.evaluate(() =>
       JSON.parse(window.localStorage.getItem("wanderer.save.primary") ?? "{}"),
     );
+    // Loading V4 remains supported; an explicit save uses the active V5 schema.
     expect(committed).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 5,
       classProgression: {
         level: 25,
         playerClass: "wizard",

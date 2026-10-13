@@ -141,6 +141,11 @@ const authoredResourceDefinitions = {
     description: "Elite energy used for advanced upgrades.",
     groundDropColor: 0xb388ff,
   },
+  iron: {
+    label: "Iron",
+    description: "Mined ore for durable settlement work.",
+    groundDropColor: 0xb17c55,
+  },
   bossCore: {
     label: "Boss Core",
     description: "Boss progression currency.",
@@ -158,9 +163,9 @@ const authoredGameplayTuning = {
   towerDamageMultiplierByLevel: [0.1, 0.2, 0.3] as const,
   farmHarvestEverySeconds: 2,
   farmHarvestByLevel: [
-    { wood: 2, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
-    { wood: 4, stone: 2, scrap: 1, essence: 0, bossCore: 0 },
-    { wood: 6, stone: 3, scrap: 2, essence: 1, bossCore: 0 },
+    { wood: 2, stone: 1, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
+    { wood: 4, stone: 2, scrap: 1, essence: 0, iron: 0, bossCore: 0 },
+    { wood: 6, stone: 3, scrap: 2, essence: 1, iron: 0, bossCore: 0 },
   ] as const satisfies readonly ReadonlyResourceBag[],
   baseCampfireHealingPerSecond: 2,
   healerHealingBonusByLevel: [1, 3, 6] as const,
@@ -219,7 +224,7 @@ const authoredEnemyDefinitions = {
     moveSpeed: 3.2,
     attackEverySeconds: 1.2,
     respawnSeconds: 12,
-    drops: { wood: 5, stone: 1, scrap: 0, essence: 0, bossCore: 0 },
+    drops: { wood: 5, stone: 1, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
   },
   brute: {
     maxHp: 38,
@@ -227,7 +232,7 @@ const authoredEnemyDefinitions = {
     moveSpeed: 1.35,
     attackEverySeconds: 1.5,
     respawnSeconds: 14,
-    drops: { wood: 1, stone: 5, scrap: 2, essence: 0, bossCore: 0 },
+    drops: { wood: 1, stone: 5, scrap: 2, essence: 0, iron: 0, bossCore: 0 },
   },
   spitter: {
     maxHp: 28,
@@ -235,7 +240,7 @@ const authoredEnemyDefinitions = {
     moveSpeed: 1.75,
     attackEverySeconds: 1.1,
     respawnSeconds: 13,
-    drops: { wood: 2, stone: 1, scrap: 4, essence: 0, bossCore: 0 },
+    drops: { wood: 2, stone: 1, scrap: 4, essence: 0, iron: 0, bossCore: 0 },
   },
   elite: {
     maxHp: 56,
@@ -243,7 +248,7 @@ const authoredEnemyDefinitions = {
     moveSpeed: 1.5,
     attackEverySeconds: 1.4,
     respawnSeconds: 20,
-    drops: { wood: 7, stone: 7, scrap: 6, essence: 2, bossCore: 0 },
+    drops: { wood: 7, stone: 7, scrap: 6, essence: 2, iron: 0, bossCore: 0 },
   },
   boss: {
     maxHp: 72,
@@ -251,7 +256,7 @@ const authoredEnemyDefinitions = {
     moveSpeed: 1.25,
     attackEverySeconds: 1.3,
     respawnSeconds: null,
-    drops: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 1 },
+    drops: { wood: 0, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 1 },
   },
 } satisfies Record<EnemyKind, EnemyDefinition>;
 
@@ -260,7 +265,7 @@ export const enemyDefinitions = deepFreeze(authoredEnemyDefinitions);
 const authoredBuildingDefinitions = {
   Campfire: {
     label: "Campfire",
-    baseCost: { wood: 0, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+    baseCost: { wood: 0, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description: "Bootstraps a settlement and permits manual saves.",
     levelEffects: [
       "L1: 6m build radius and manual save point.",
@@ -270,7 +275,14 @@ const authoredBuildingDefinitions = {
   },
   Workshop: {
     label: "Workshop",
-    baseCost: { wood: 18, stone: 8, scrap: 2, essence: 0, bossCore: 0 },
+    baseCost: {
+      wood: 18,
+      stone: 8,
+      scrap: 2,
+      essence: 0,
+      iron: 0,
+      bossCore: 0,
+    },
     description: "Improves stationary basic-attack damage.",
     levelEffects: [
       "L1: +4 basic attack damage.",
@@ -280,7 +292,14 @@ const authoredBuildingDefinitions = {
   },
   Farm: {
     label: "Farm",
-    baseCost: { wood: 12, stone: 4, scrap: 0, essence: 0, bossCore: 0 },
+    baseCost: {
+      wood: 12,
+      stone: 4,
+      scrap: 0,
+      essence: 0,
+      iron: 0,
+      bossCore: 0,
+    },
     description: "Harvests material bundles while the Wanderer is stationary.",
     levelEffects: [
       "L1: every 2s, harvest 2 Wood and 1 Stone.",
@@ -290,7 +309,14 @@ const authoredBuildingDefinitions = {
   },
   Storage: {
     label: "Legacy Storage",
-    baseCost: { wood: 20, stone: 8, scrap: 3, essence: 0, bossCore: 0 },
+    baseCost: {
+      wood: 20,
+      stone: 8,
+      scrap: 3,
+      essence: 0,
+      iron: 0,
+      bossCore: 0,
+    },
     description:
       "A legacy structure preserved from existing saves. It has no resource effect and cannot be upgraded or relocated.",
     levelEffects: [
@@ -301,7 +327,14 @@ const authoredBuildingDefinitions = {
   },
   Healer: {
     label: "Healing Hut",
-    baseCost: { wood: 10, stone: 10, scrap: 4, essence: 1, bossCore: 0 },
+    baseCost: {
+      wood: 10,
+      stone: 10,
+      scrap: 4,
+      essence: 1,
+      iron: 0,
+      bossCore: 0,
+    },
     description:
       "Heals a stationary Wanderer inside its own compact healing aura.",
     levelEffects: [
@@ -312,7 +345,7 @@ const authoredBuildingDefinitions = {
   },
   WoodWall: {
     label: "Wood Wall",
-    baseCost: { wood: 6, stone: 0, scrap: 0, essence: 0, bossCore: 0 },
+    baseCost: { wood: 6, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description:
       "A solid wooden tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
     levelEffects: [
@@ -323,7 +356,7 @@ const authoredBuildingDefinitions = {
   },
   StoneWall: {
     label: "Stone Wall",
-    baseCost: { wood: 0, stone: 8, scrap: 0, essence: 0, bossCore: 0 },
+    baseCost: { wood: 0, stone: 8, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description:
       "A solid stone tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
     levelEffects: [
@@ -334,7 +367,14 @@ const authoredBuildingDefinitions = {
   },
   ArcherTower: {
     label: "Archer Tower",
-    baseCost: { wood: 14, stone: 4, scrap: 4, essence: 0, bossCore: 0 },
+    baseCost: {
+      wood: 14,
+      stone: 4,
+      scrap: 4,
+      essence: 0,
+      iron: 0,
+      bossCore: 0,
+    },
     description:
       "An upgradable ballista that fires over walls at the nearest enemy from its snapped tile.",
     levelEffects: [
@@ -345,7 +385,7 @@ const authoredBuildingDefinitions = {
   },
   SwordTower: {
     label: "Sword Tower",
-    baseCost: { wood: 8, stone: 8, scrap: 5, essence: 0, bossCore: 0 },
+    baseCost: { wood: 8, stone: 8, scrap: 5, essence: 0, iron: 0, bossCore: 0 },
     description:
       "An upgradable close defender whose rotating blades sweep every in-range enemy.",
     levelEffects: [
@@ -356,7 +396,14 @@ const authoredBuildingDefinitions = {
   },
   MageTower: {
     label: "Mage Tower",
-    baseCost: { wood: 4, stone: 10, scrap: 4, essence: 2, bossCore: 0 },
+    baseCost: {
+      wood: 4,
+      stone: 10,
+      scrap: 4,
+      essence: 2,
+      iron: 0,
+      bossCore: 0,
+    },
     description:
       "An upgradable crystal tower whose visible bolt flies over walls and splashes nearby enemies at impact.",
     levelEffects: [

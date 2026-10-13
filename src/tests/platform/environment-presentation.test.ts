@@ -168,6 +168,67 @@ describe("environment presentation", () => {
     ).toBeLessThanOrEqual(2);
   });
 
+  it("updates harvest targets on reused roots and leaves decoration unmarked", () => {
+    const base = Array.from({ length: 160 }, (_, cosmetic) => ({
+      ...chunk(1, 1, cosmetic),
+      obstacles: [],
+    })).find((candidate) =>
+      environmentDescriptorsFor(snapshot([candidate])).some((item) =>
+        item.id.startsWith("environment:"),
+      ),
+    )!;
+    const treeId = "tree:reused";
+    const tree = {
+      id: treeId,
+      kind: "tree" as const,
+      radius: 1,
+      position: { x: 60, y: 60 },
+      harvestable: true,
+    };
+    const rock = {
+      id: "rock:blocked",
+      kind: "rock" as const,
+      radius: 1,
+      position: { x: 70, y: 70 },
+    };
+    const frame = snapshot([{ ...base, obstacles: [tree, rock] }]);
+    const decoration = environmentDescriptorsFor(frame).find((item) =>
+      item.id.startsWith("environment:"),
+    );
+    expect(decoration).toBeDefined();
+    expect(decoration?.harvestRayBlocker).toBe(false);
+
+    const projection = new EnvironmentProjection({
+      acquire: async () => undefined,
+    });
+    const rootFor = (id: string): THREE.Group => {
+      const root = projection.group.children.find(
+        (child) => child.name === `environment:${id}`,
+      );
+      if (!(root instanceof THREE.Group))
+        throw new Error(`environment root not found: ${id}`);
+      return root;
+    };
+    projection.render(frame, vi.fn());
+    const treeRoot = rootFor(treeId);
+    expect(treeRoot.userData.harvestRayBlocker).toBe(true);
+    expect(treeRoot.userData.harvestNodeId).toBe(treeId);
+    expect(rootFor(rock.id).userData.harvestRayBlocker).toBe(true);
+    expect(rootFor(rock.id).userData.harvestNodeId).toBeUndefined();
+    expect(rootFor(decoration!.id).userData.harvestRayBlocker).toBeUndefined();
+
+    projection.render(
+      snapshot([
+        { ...base, obstacles: [{ ...tree, harvestable: false }, rock] },
+      ]),
+      vi.fn(),
+    );
+    expect(rootFor(treeId)).toBe(treeRoot);
+    expect(treeRoot.userData.harvestRayBlocker).toBe(true);
+    expect(treeRoot.userData.harvestNodeId).toBeUndefined();
+    projection.dispose();
+  });
+
   it.each([
     ["world_river_tile", "river tile"],
     ["world_lake", "lake"],
@@ -226,6 +287,11 @@ describe("environment presentation", () => {
     );
     expect(mountainAssets).toContain("environment-world-cave");
     expect(mountainAssets).toContain("environment-world-mountain");
+    for (const id of ["river", "lake", "peak"]) {
+      const feature = descriptors(12).find((item) => item.id === id);
+      expect(feature?.harvestRayBlocker).toBe(true);
+      expect(feature?.harvestNodeId).toBeUndefined();
+    }
   });
 
   it("caps cosmetic decoration, preserves it during player travel and excludes interaction footprints", () => {
