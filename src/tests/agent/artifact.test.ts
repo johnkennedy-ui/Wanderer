@@ -16,6 +16,7 @@ const browserModulePath = "../../../scripts/agent/browser-test.mjs";
 const {
   collectArtifact,
   createArtifact,
+  readArtifactIdentity,
   verifyArtifact,
   markBrowserVerified,
   parseArguments,
@@ -225,6 +226,51 @@ describe("artifact identity and reviewed membership", () => {
       verifyArtifact({ ...options(cwd), requireBrowser: true }),
     ).toThrow("browser");
   });
+  it("keeps the dynamic Playwright port out of immutable artifact identity", () => {
+    const cwd = fixture("/");
+    writeFileSync(join(cwd, ".gitignore"), ".agent/\ndist/\n");
+    execFileSync("git", ["init", "--quiet"], { cwd });
+    execFileSync("git", ["add", "."], { cwd });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Artifact Test",
+        "-c",
+        "user.email=test@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+      ],
+      { cwd },
+    );
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      VITE_BASE_PATH: "/",
+    };
+    delete environment.PLAYWRIGHT_PORT;
+    const withoutPort = readArtifactIdentity({
+      cwd,
+      basePath: "/",
+      environment,
+    });
+    const withPort = readArtifactIdentity({
+      cwd,
+      basePath: "/",
+      environment: { ...environment, PLAYWRIGHT_PORT: "4173" },
+    });
+    expect(withPort.sourceInputDigest).toBe(withoutPort.sourceInputDigest);
+    const withChangedBuildInput = readArtifactIdentity({
+      cwd,
+      basePath: "/",
+      environment: { ...environment, NODE_ENV: "artifact-test-change" },
+    });
+    expect(withChangedBuildInput.sourceInputDigest).not.toBe(
+      withoutPort.sourceInputDigest,
+    );
+  });
+
   it.each(["/", "/Wanderer/"])(
     "executes the real creation CLI at %s and refuses an untested publication",
     (basePath) => {
