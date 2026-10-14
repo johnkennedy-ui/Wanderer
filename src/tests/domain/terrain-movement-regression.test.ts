@@ -5,10 +5,11 @@ import {
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 } from "../../domain/world";
 
 describe("terrain movement regressions", () => {
-  it.each([WANDERER_WEB_V1, WANDERER_WEB_V2, WANDERER_WEB_V3])(
+  it.each([WANDERER_WEB_V1, WANDERER_WEB_V2, WANDERER_WEB_V3, WANDERER_WEB_V4])(
     "keeps an unobstructed tap destination through zero and rounded tiny remainders (%s)",
     (generatorVersion) => {
       const session = new GameSession({

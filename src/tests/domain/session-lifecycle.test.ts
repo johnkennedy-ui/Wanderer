@@ -15,6 +15,7 @@ import {
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 } from "../../domain/world";
 import { savedAtHome } from "./session-test-helpers";
 
@@ -22,7 +23,7 @@ describe("GameSession lifecycle", () => {
   it("constructs, hydrates, resets, and projects complete instance-owned lifecycle state", () => {
     const fresh = createFreshSessionState();
     expect(fresh).toMatchObject({
-      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V3 },
+      world: { seed: "wanderer-known-seed", generatorVersion: WANDERER_WEB_V4 },
       player: { position: { x: 0, y: 0 }, hp: 100, maxHp: 100 },
       resources: {
         wood: 120,
@@ -344,7 +345,7 @@ describe("GameSession lifecycle", () => {
 
     const unsupported = {
       ...saved.document,
-      world: { ...saved.document.world, generatorVersion: "wanderer-web-v4" },
+      world: { ...saved.document.world, generatorVersion: "wanderer-web-v99" },
     };
     expect(() => new GameSession({ saved: unsupported })).toThrow(
       UnsupportedWorldGeneratorVersionError,

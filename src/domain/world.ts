@@ -4,16 +4,19 @@ import {
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 } from "./world/generatorTypes";
 import { generateWandererWebV1Chunk } from "./world/generators/wandererWebV1";
 import { generateWandererWebV2Chunk } from "./world/generators/wandererWebV2";
 import { generateWandererWebV3Chunk } from "./world/generators/wandererWebV3";
+import { generateWandererWebV4Chunk } from "./world/generators/wandererWebV4";
 
 export {
   UnsupportedWorldGeneratorVersionError,
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 } from "./world/generatorTypes";
 export type {
   ChunkGenerator,
@@ -31,12 +34,13 @@ export {
 } from "./world/shared";
 
 /** New worlds use the newest explicitly supported released generator. */
-export const DEFAULT_WORLD_GENERATOR_VERSION = WANDERER_WEB_V3;
+export const DEFAULT_WORLD_GENERATOR_VERSION = WANDERER_WEB_V4;
 
 const chunkGenerators = Object.freeze({
   [WANDERER_WEB_V1]: generateWandererWebV1Chunk,
   [WANDERER_WEB_V2]: generateWandererWebV2Chunk,
   [WANDERER_WEB_V3]: generateWandererWebV3Chunk,
+  [WANDERER_WEB_V4]: generateWandererWebV4Chunk,
 });
 
 type KnownWorldGeneratorVersion = keyof typeof chunkGenerators;
@@ -46,6 +50,7 @@ export const supportedWorldGeneratorVersions = Object.freeze([
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 ] as const);
 
 export const isSupportedWorldGeneratorVersion = (version: string): boolean =>

@@ -6,6 +6,9 @@ import {
   primeTerrainWorld,
   terrainFixtureFor,
   terrainFordFixture,
+  terrainV4MountainFixture,
+  terrainV4FordFixture,
+  terrainV4SeaFixture,
   terrainWorld,
   tapWorldPosition,
   visiblePosition,
@@ -74,6 +77,128 @@ for (const kind of ["tree", "mountain"] as const) {
     expect(faults).toEqual([]);
   });
 }
+
+test("V4 mountain ridge footprint blocks keyboard movement in the browser", async ({
+  page,
+}, testInfo) => {
+  const fixture = terrainV4MountainFixture();
+  const world = {
+    seed: "terrain-v4-ridge-browser",
+    generatorVersion: "wanderer-web-v4",
+  };
+  const faults = captureBrowserFaults(page);
+  await primeTerrainWorld(page, fixture.start, world);
+  await page.goto(applicationPath, { waitUntil: "commit" });
+  await page.getByTestId("character-status-toggle").click();
+  await expect(page.getByTestId("position")).toContainText("input: system");
+  const key =
+    fixture.obstacle.position.x > fixture.start.x
+      ? "d"
+      : fixture.obstacle.position.x < fixture.start.x
+        ? "a"
+        : fixture.obstacle.position.y > fixture.start.y
+          ? "w"
+          : "s";
+  await page.keyboard.down(key);
+  await page.waitForTimeout(900);
+  await page.keyboard.up(key);
+  const stopped = await visiblePosition(page);
+  expect(
+    Math.hypot(
+      stopped.x - fixture.obstacle.position.x,
+      stopped.y - fixture.obstacle.position.y,
+    ),
+  ).toBeGreaterThanOrEqual(fixture.obstacle.radius + 0.2);
+  expect(
+    Math.hypot(
+      stopped.x - fixture.obstacle.position.x,
+      stopped.y - fixture.obstacle.position.y,
+    ),
+  ).toBeLessThan(fixture.obstacle.radius + 0.4);
+  await attachTerrainScreenshot(page, testInfo, "mountain");
+  expect(faults).toEqual([]);
+});
+
+test("V4 sea blocks keyboard approach and permits retreat on land", async ({
+  page,
+}, testInfo) => {
+  const fixture = terrainV4SeaFixture();
+  const world = {
+    seed: "terrain-v4-ridge-browser",
+    generatorVersion: "wanderer-web-v4",
+  };
+  const faults = captureBrowserFaults(page);
+  await primeTerrainWorld(page, fixture.start, world);
+  await page.goto(applicationPath, { waitUntil: "commit" });
+  await page.getByTestId("character-status-toggle").click();
+  await expect(page.getByTestId("position")).toContainText("input: system");
+  const key =
+    fixture.obstacle.position.x > fixture.start.x
+      ? "d"
+      : fixture.obstacle.position.x < fixture.start.x
+        ? "a"
+        : fixture.obstacle.position.y > fixture.start.y
+          ? "w"
+          : "s";
+  await page.keyboard.down(key);
+  await page.waitForTimeout(900);
+  await page.keyboard.up(key);
+  const stopped = await visiblePosition(page);
+  const stoppedDistance = Math.hypot(
+    stopped.x - fixture.obstacle.position.x,
+    stopped.y - fixture.obstacle.position.y,
+  );
+  expect(stoppedDistance).toBeGreaterThanOrEqual(fixture.obstacle.radius + 0.2);
+  expect(stoppedDistance).toBeLessThan(fixture.obstacle.radius + 0.4);
+  const reverseKey =
+    key === "d" ? "a" : key === "a" ? "d" : key === "w" ? "s" : "w";
+  await page.keyboard.down(reverseKey);
+  await page.waitForTimeout(350);
+  await page.keyboard.up(reverseKey);
+  const retreated = await visiblePosition(page);
+  expect(
+    Math.hypot(retreated.x - stopped.x, retreated.y - stopped.y),
+  ).toBeGreaterThan(0.3);
+  await attachTerrainScreenshot(page, testInfo, "sea");
+  expect(faults).toEqual([]);
+});
+
+test("V4 island river ford permits deliberate canvas crossing", async ({
+  page,
+}, testInfo) => {
+  const fixture = terrainV4FordFixture();
+  const world = {
+    seed: "terrain-v4-ridge-browser",
+    generatorVersion: "wanderer-web-v4",
+  };
+  const faults = captureBrowserFaults(page);
+  await primeTerrainWorld(page, fixture.start, world);
+  await page.goto(applicationPath, { waitUntil: "commit" });
+  await page.getByTestId("character-status-toggle").click();
+  await expect(page.getByTestId("position")).toContainText("input: system");
+  await page.getByTestId("character-status-toggle").click();
+  for (const target of [fixture.midpoint, fixture.end]) {
+    const player = await visiblePosition(page);
+    await tapWorldPosition(
+      page,
+      player,
+      target,
+      testInfo.project.name === "touch",
+    );
+    await expect
+      .poll(async () => {
+        const actual = await visiblePosition(page);
+        return Math.hypot(actual.x - target.x, actual.y - target.y);
+      })
+      .toBeLessThan(0.2);
+    await expect(page.getByTestId("world-canvas")).toHaveAttribute(
+      "data-destination-marker",
+      "inactive",
+    );
+  }
+  await attachTerrainScreenshot(page, testInfo, "water");
+  expect(faults).toEqual([]);
+});
 
 test("a generated river ford permits deliberate canvas crossing", async ({
   page,

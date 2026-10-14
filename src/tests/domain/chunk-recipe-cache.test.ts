@@ -8,6 +8,7 @@ import {
 import type { Vector2, WorldIdentity } from "../../domain/types";
 import { GameSession } from "../../domain/GameSession";
 import {
+  DEFAULT_WORLD_GENERATOR_VERSION,
   generateChunk,
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
@@ -295,7 +296,7 @@ describe("bounded instance-owned chunk recipes", () => {
       session.resetWorld(world.seed);
       // Released reset selects the current default, even from an older session.
       expect(session.diagnostics().world.generatorVersion).toBe(
-        WANDERER_WEB_V3,
+        DEFAULT_WORLD_GENERATOR_VERSION,
       );
       expect(session.diagnostics().chunkCache).toMatchObject({
         misses: 9,

@@ -143,6 +143,13 @@ describe("retained Three CPU projection", () => {
               waterKind: "lake",
               radius: 1.6,
             },
+            {
+              id: "sea",
+              position: { x: 10, y: 11 },
+              kind: "water",
+              waterKind: "sea",
+              radius: 15,
+            },
           ],
         },
       ],
@@ -152,6 +159,7 @@ describe("retained Three CPU projection", () => {
     const mountain = rootFor("mountain");
     const river = rootFor("river");
     const lake = rootFor("lake");
+    const sea = rootFor("sea");
     expect(tree).toMatchObject({ position: { x: 2, z: -3 } });
     expect(tree?.children).toHaveLength(2);
     expect((tree?.children[0] as THREE.Mesh).geometry).toMatchObject({
@@ -160,7 +168,7 @@ describe("retained Three CPU projection", () => {
     expect((mountain?.children[0] as THREE.Mesh).geometry).toMatchObject({
       parameters: { radius: 1.2, radialSegments: 6 },
     });
-    for (const water of [river, lake]) {
+    for (const water of [river, lake, sea]) {
       expect(water?.children).toHaveLength(2);
       expect((water?.children[0] as THREE.Mesh).rotation.x).toBe(-Math.PI / 2);
       expect(water?.children[1].position.y).toBeLessThan(
@@ -178,6 +186,15 @@ describe("retained Three CPU projection", () => {
       (
         (river?.children[0] as THREE.Mesh)
           .material as THREE.MeshStandardMaterial
+      ).color.getHex(),
+    ).not.toBe(
+      (
+        (lake?.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial
+      ).color.getHex(),
+    );
+    expect(
+      (
+        (sea?.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial
       ).color.getHex(),
     ).not.toBe(
       (
