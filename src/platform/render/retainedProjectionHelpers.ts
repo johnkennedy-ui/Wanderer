@@ -641,7 +641,11 @@ export class RetainedProjection {
         add(
           this.resources.water(radius),
           this.resources.material(
-            obstacle.waterKind === "river" ? 0x1976a8 : 0x2196c9,
+            obstacle.waterKind === "river"
+              ? 0x1976a8
+              : obstacle.waterKind === "sea"
+                ? 0x125b84
+                : 0x2196c9,
             0.35,
             0x0d47a1,
             0.12,

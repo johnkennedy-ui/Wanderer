@@ -1,8 +1,18 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 import { PerspectiveCamera, Vector3 } from "three";
 import { decodeSave } from "../../domain/save";
-import type { ChunkObstacle, Vector2 } from "../../domain/types";
-import { generateChunk, WANDERER_WEB_V3 } from "../../domain/world";
+import type { ChunkObstacle, Vector2, WorldIdentity } from "../../domain/types";
+import {
+  generateChunk,
+  WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
+} from "../../domain/world";
+import {
+  islandDescriptorFor,
+  isLandPosition,
+  mountainRangeForChunk,
+  riverPathForIsland,
+} from "../../domain/world/generators/wandererWebV4";
 import { HARVEST_INTERACTION_DISTANCE } from "../../domain/resourceHarvesting";
 import {
   sweepTerrainMovement,
@@ -15,8 +25,12 @@ export const terrainWorld = Object.freeze({
   seed: "terrain-browser-regression",
   generatorVersion: WANDERER_WEB_V3,
 });
+const terrainV4World: WorldIdentity = Object.freeze({
+  seed: "terrain-v4-ridge-browser",
+  generatorVersion: WANDERER_WEB_V4,
+});
 
-export type TerrainKind = "tree" | "mountain" | "water";
+export type TerrainKind = "tree" | "mountain" | "water" | "sea";
 export type TerrainFixture = Readonly<{
   obstacle: ChunkObstacle & {
     readonly kind: TerrainKind;
@@ -111,6 +125,155 @@ export const harvestableFixtureFor = (
   );
 };
 
+/** Find a live V4 ridge footprint with clear approach and retreat space. */
+export const terrainV4MountainFixture = (): TerrainFixture => {
+  for (let y = -20; y < 20; y += 1)
+    for (let x = 20; x < 60; x += 1)
+      for (const obstacle of mountainRangeForChunk(terrainV4World, { x, y })) {
+        if (
+          !isLandPosition(terrainV4World, {
+            x: (x + 0.5) * 16,
+            y: (y + 0.5) * 16,
+          })
+        )
+          continue;
+        for (const direction of directions) {
+          const clearance = (obstacle.radius ?? 0) + 2.6;
+          const start = {
+            x: obstacle.position.x + direction.x * clearance,
+            y: obstacle.position.y + direction.y * clearance,
+          };
+          const retreat = {
+            x: start.x + direction.x * 1.2,
+            y: start.y + direction.y * 1.2,
+          };
+          const swept = sweepTerrainMovement(
+            terrainV4World,
+            start,
+            obstacle.position,
+          );
+          if (
+            !terrainBlocksPosition(terrainV4World, start) &&
+            !terrainBlocksPosition(terrainV4World, retreat) &&
+            Math.abs(
+              Math.hypot(
+                swept.x - obstacle.position.x,
+                swept.y - obstacle.position.y,
+              ) -
+                ((obstacle.radius ?? 0) + 0.28),
+            ) < 0.03
+          )
+            return {
+              obstacle: obstacle as TerrainFixture["obstacle"],
+              start,
+              retreat,
+            };
+        }
+      }
+  throw new Error("No safe V4 mountain ridge fixture was found");
+};
+
+/** Find a V4 sea edge with a clear land-side approach and reverse route. */
+export const terrainV4SeaFixture = (): TerrainFixture => {
+  const radius = islandDescriptorFor(terrainV4World, { x: 0, y: 0 }).radius;
+  const edgeChunk = Math.floor(radius / 16);
+  for (let y = -4; y <= 4; y += 1)
+    for (let x = edgeChunk - 3; x <= edgeChunk + 4; x += 1)
+      for (const obstacle of generateChunk(terrainV4World, { x, y })
+        .obstacles) {
+        if (obstacle.waterKind !== "sea" || obstacle.radius === undefined)
+          continue;
+        for (const direction of directions) {
+          const approachDistance = obstacle.radius + 3;
+          const start = {
+            x: obstacle.position.x + direction.x * approachDistance,
+            y: obstacle.position.y + direction.y * approachDistance,
+          };
+          const retreat = {
+            x: start.x + direction.x * 1.2,
+            y: start.y + direction.y * 1.2,
+          };
+          const swept = sweepTerrainMovement(
+            terrainV4World,
+            start,
+            obstacle.position,
+          );
+          if (
+            !terrainBlocksPosition(terrainV4World, start) &&
+            !terrainBlocksPosition(terrainV4World, retreat) &&
+            Math.abs(
+              Math.hypot(
+                swept.x - obstacle.position.x,
+                swept.y - obstacle.position.y,
+              ) -
+                (obstacle.radius + 0.28),
+            ) < 0.03
+          )
+            return {
+              obstacle: obstacle as TerrainFixture["obstacle"],
+              start,
+              retreat,
+            };
+        }
+      }
+  throw new Error("No safe V4 sea-edge fixture was found");
+};
+
+export const terrainV4FordFixture = (): {
+  start: Vector2;
+  midpoint: Vector2;
+  end: Vector2;
+} => {
+  const spacing = 1.35;
+  for (const islandCoordinate of [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ]) {
+    const path = riverPathForIsland(terrainV4World, islandCoordinate);
+    for (let index = 4; index < path.length - 4; index += 1) {
+      const along = (index * spacing) % 36;
+      if (along > 2.4 && along < 33.6) continue;
+      const before = path[index - 1];
+      const after = path[index + 1];
+      const midpoint = path[index];
+      if (before === undefined || after === undefined || midpoint === undefined)
+        continue;
+      const dx = after.x - before.x;
+      const dy = after.y - before.y;
+      const length = Math.hypot(dx, dy);
+      if (length === 0) continue;
+      const normal = { x: -dy / length, y: dx / length };
+      const start = {
+        x: midpoint.x + normal.x * 3,
+        y: midpoint.y + normal.y * 3,
+      };
+      const end = {
+        x: midpoint.x - normal.x * 3,
+        y: midpoint.y - normal.y * 3,
+      };
+      let clear = true;
+      for (let step = 0; step <= 30; step += 1) {
+        const amount = step / 30;
+        const position = {
+          x: start.x + (end.x - start.x) * amount,
+          y: start.y + (end.y - start.y) * amount,
+        };
+        if (
+          !isLandPosition(terrainV4World, position) ||
+          terrainBlocksPosition(terrainV4World, position, generateChunk, 0.28)
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (clear) return { start, midpoint, end };
+    }
+  }
+  throw new Error("No traversable V4 river ford was found");
+};
+
 export const terrainFordFixture = (): {
   start: Vector2;
   midpoint: Vector2;
@@ -152,10 +315,11 @@ export const terrainFordFixture = (): {
 export const primeTerrainWorld = async (
   page: Page,
   position: Vector2,
+  world: WorldIdentity = terrainWorld,
 ): Promise<void> => {
   const value = JSON.stringify({
     schemaVersion: 4,
-    world: terrainWorld,
+    world,
     player: { position, hp: 100, maxHp: 100 },
     resources: { wood: 120, stone: 120, scrap: 120, essence: 20, bossCore: 0 },
     buildings: [],

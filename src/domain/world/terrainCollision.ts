@@ -8,11 +8,12 @@ import type {
 import { chunkCoordinateFor } from "./shared";
 import type { ChunkRecipeSource } from "../session/chunkRecipeCache";
 import { generateChunk } from "../world";
-import { WANDERER_WEB_V3 } from "./generatorTypes";
+import { WANDERER_WEB_V3, WANDERER_WEB_V4 } from "./generatorTypes";
 
 const LEGACY_ROCK_RADIUS = 0.9;
 const PLAYER_CLEARANCE = 0.28;
 const MAX_SWEEP_DISTANCE = 4;
+const V4_SEA_FOOTPRINT_RADIUS = 15;
 const SAFE_SPAWN_RADII = Object.freeze([
   0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6,
 ] as const);
@@ -34,6 +35,10 @@ const SAFE_SPAWN_DIRECTIONS = Object.freeze([
 const ROUNDING_CLEARANCE = Math.SQRT2 * 0.005 + 0.0001;
 const radiusFor = (radius: number | undefined): number =>
   radius ?? LEGACY_ROCK_RADIUS;
+
+const usesTerrainFootprints = (world: WorldIdentity): boolean =>
+  world.generatorVersion === WANDERER_WEB_V3 ||
+  world.generatorVersion === WANDERER_WEB_V4;
 
 /** Larger enemies reserve more space; the boss is deliberately wider than mobs. */
 export const enemyTerrainClearanceFor = (kind: EnemyKind): number => {
@@ -77,7 +82,11 @@ const v3ObstaclesFor = (
   recipeSource: ChunkRecipeSource,
 ) => {
   const obstacles: ChunkObstacle[] = [];
-  for (const coordinate of coordinatesCovering(start, end, 1.5 + clearance))
+  const queryPadding =
+    (world.generatorVersion === WANDERER_WEB_V4
+      ? V4_SEA_FOOTPRINT_RADIUS
+      : 1.5) + clearance;
+  for (const coordinate of coordinatesCovering(start, end, queryPadding))
     obstacles.push(...recipeSource(world, coordinate).obstacles);
   return obstacles;
 };
@@ -93,7 +102,7 @@ export const terrainBlocksPosition = (
   recipeSource: ChunkRecipeSource = generateChunk,
   clearance = 0,
 ): boolean => {
-  if (world.generatorVersion !== WANDERER_WEB_V3)
+  if (!usesTerrainFootprints(world))
     return recipeSource(world, chunkCoordinateFor(position)).obstacles.some(
       (obstacle) => distance(obstacle.position, position) < LEGACY_ROCK_RADIUS,
     );
@@ -122,7 +131,7 @@ export const nearestTerrainSafePosition = (
   recipeSource: ChunkRecipeSource = generateChunk,
   clearance = 0,
 ): Vector2 | null => {
-  if (world.generatorVersion !== WANDERER_WEB_V3) return position;
+  if (!usesTerrainFootprints(world)) return position;
 
   const recipes = new Map<string, ReturnType<ChunkRecipeSource>>();
   const memoizedSource: ChunkRecipeSource = (requestedWorld, coordinate) => {
@@ -236,7 +245,7 @@ export const sweepTerrainMovement = (
   recipeSource: ChunkRecipeSource = generateChunk,
   clearance = PLAYER_CLEARANCE,
 ): Vector2 => {
-  if (world.generatorVersion !== WANDERER_WEB_V3) return desired;
+  if (!usesTerrainFootprints(world)) return desired;
   const end = cappedDestinationFor(start, desired);
   const obstacles = v3ObstaclesFor(world, start, end, clearance, recipeSource);
   let firstContact = 1;

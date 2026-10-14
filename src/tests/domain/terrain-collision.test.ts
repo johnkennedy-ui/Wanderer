@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { roundVector } from "../../domain/math";
 import type { ChunkRecipe, WorldIdentity } from "../../domain/types";
-import { WANDERER_WEB_V3 } from "../../domain/world";
+import { WANDERER_WEB_V3, WANDERER_WEB_V4 } from "../../domain/world";
 import { advanceEnemyCombatPhase } from "../../domain/session/combatTickRuntime";
 import type { RuntimeEnemy } from "../../domain/session/sessionState";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../../domain/world/terrainCollision";
 
 const world = { seed: "collision", generatorVersion: WANDERER_WEB_V3 };
+const v4World = { seed: "collision", generatorVersion: WANDERER_WEB_V4 };
 const source = (
   _world: WorldIdentity,
   coordinate: { x: number; y: number },
@@ -36,6 +37,61 @@ const source = (
 });
 
 describe("terrain collision", () => {
+  it("queries the neighboring V4 sea footprint before the player enters it", () => {
+    const seaSource = (
+      _world: WorldIdentity,
+      coordinate: { x: number; y: number },
+    ): ChunkRecipe => ({
+      coordinate,
+      key: coordinate.x + "," + coordinate.y,
+      domainSeeds: {},
+      obstacles:
+        coordinate.x === 18 && coordinate.y === 0
+          ? [
+              {
+                id: "sea:neighbor",
+                kind: "water",
+                waterKind: "sea",
+                radius: 15,
+                position: { x: 296, y: 8 },
+              },
+            ]
+          : [],
+      campfires: [],
+      spawns: [],
+    });
+    expect(terrainBlocksPosition(v4World, { x: 282, y: 8 }, seaSource)).toBe(
+      true,
+    );
+    expect(terrainBlocksPosition(v4World, { x: 278, y: 8 }, seaSource)).toBe(
+      false,
+    );
+    const stopped = sweepTerrainMovement(
+      v4World,
+      { x: 278, y: 8 },
+      { x: 282, y: 8 },
+      seaSource,
+    );
+    expect(Math.hypot(stopped.x - 296, stopped.y - 8)).toBeGreaterThanOrEqual(
+      15.27,
+    );
+    expect(Math.hypot(stopped.x - 296, stopped.y - 8)).toBeLessThan(15.4);
+  });
+
+  it("applies the same cross-chunk footprint sweep to V4 worlds", () => {
+    expect(terrainBlocksPosition(v4World, { x: 15.5, y: 0 }, source)).toBe(
+      true,
+    );
+    const stopped = sweepTerrainMovement(
+      v4World,
+      { x: 14, y: 0 },
+      { x: 18, y: 0 },
+      source,
+    );
+    expect(stopped.x).toBeLessThan(14.83);
+    expect(stopped.x).toBeGreaterThan(14.7);
+  });
+
   it("uses explicit V3 footprints across chunk borders and cannot tunnel", () => {
     expect(terrainBlocksPosition(world, { x: 15.5, y: 0 }, source)).toBe(true);
     const stopped = sweepTerrainMovement(

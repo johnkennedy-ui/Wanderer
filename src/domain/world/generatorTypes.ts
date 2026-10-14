@@ -4,9 +4,13 @@ import type { ChunkRecipe, Vector2, WorldIdentity } from "../types";
 export const WANDERER_WEB_V1 = "wanderer-web-v1" as const;
 export const WANDERER_WEB_V2 = "wanderer-web-v2" as const;
 export const WANDERER_WEB_V3 = "wanderer-web-v3" as const;
+export const WANDERER_WEB_V4 = "wanderer-web-v4" as const;
 
 export type ReleasedWorldGeneratorVersion =
-  typeof WANDERER_WEB_V1 | typeof WANDERER_WEB_V2 | typeof WANDERER_WEB_V3;
+  | typeof WANDERER_WEB_V1
+  | typeof WANDERER_WEB_V2
+  | typeof WANDERER_WEB_V3
+  | typeof WANDERER_WEB_V4;
 
 export type ChunkGenerator = (
   world: WorldIdentity,

@@ -6,6 +6,7 @@ import {
   WANDERER_WEB_V1,
   WANDERER_WEB_V2,
   WANDERER_WEB_V3,
+  WANDERER_WEB_V4,
 } from "../../domain/world";
 
 export const SOAK_HALF_STEPS = 2080;
@@ -56,11 +57,17 @@ export const assertRuntimeInvariants = (state: RuntimeDiagnostics): void => {
   canonicalJson(state);
   requireInvariant(state.world.seed.length > 0, "world seed");
   requireInvariant(
-    [WANDERER_WEB_V1, WANDERER_WEB_V2, WANDERER_WEB_V3].includes(
+    [
+      WANDERER_WEB_V1,
+      WANDERER_WEB_V2,
+      WANDERER_WEB_V3,
+      WANDERER_WEB_V4,
+    ].includes(
       state.world.generatorVersion as
         | typeof WANDERER_WEB_V1
         | typeof WANDERER_WEB_V2
-        | typeof WANDERER_WEB_V3,
+        | typeof WANDERER_WEB_V3
+        | typeof WANDERER_WEB_V4,
     ),
     "generator",
   );
