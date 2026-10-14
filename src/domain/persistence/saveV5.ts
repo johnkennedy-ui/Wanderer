@@ -89,7 +89,8 @@ const parseHarvestedNodeIdFor = (
   const treePrefix = "tree:" + world.generatorVersion + ":" + world.seed + ":";
   const kind = value.startsWith(rockPrefix)
     ? "rock"
-    : world.generatorVersion === "wanderer-web-v3" &&
+    : (world.generatorVersion === "wanderer-web-v3" ||
+          world.generatorVersion === "wanderer-web-v4") &&
         value.startsWith(treePrefix)
       ? "tree"
       : null;
