@@ -19,6 +19,13 @@ export const createTapToMoveInput = (
     readonly pickNodeId: (clientX: number, clientY: number) => string | null;
     readonly harvestNode: (nodeId: string) => void;
   },
+  buildingSelection?: {
+    readonly pickBuildingId: (
+      clientX: number,
+      clientY: number,
+    ) => string | null;
+    readonly selectBuilding: (buildingId: string | null) => void;
+  },
 ): TapToMoveInput => {
   let pendingTap:
     | {
@@ -51,6 +58,39 @@ export const createTapToMoveInput = (
         MAX_TAP_TRAVEL_PIXELS
     )
       return;
+    if (buildingSelection !== undefined) {
+      const buildingId = buildingSelection.pickBuildingId(
+        event.clientX,
+        event.clientY,
+      );
+      if (buildingId !== null) {
+        event.preventDefault();
+        if (event.pointerType === "touch") {
+          const suppressRetargetedClick = (click: MouseEvent): void => {
+            click.preventDefault();
+            click.stopImmediatePropagation();
+            document.removeEventListener(
+              "click",
+              suppressRetargetedClick,
+              true,
+            );
+          };
+          document.addEventListener("click", suppressRetargetedClick, true);
+          setTimeout(
+            () =>
+              document.removeEventListener(
+                "click",
+                suppressRetargetedClick,
+                true,
+              ),
+            0,
+          );
+        }
+        buildingSelection.selectBuilding(buildingId);
+        return;
+      }
+      buildingSelection.selectBuilding(null);
+    }
     if (harvesting !== undefined) {
       const nodeId = harvesting.pickNodeId(event.clientX, event.clientY);
       if (nodeId !== null) {

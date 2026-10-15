@@ -108,6 +108,35 @@ describe("retained Three CPU projection", () => {
     projection.dispose();
   });
 
+  it("shows the selected-building highlight, follows relocation, and clears on removal", () => {
+    const projection = new RetainedProjection();
+    const snapshot = rendererSnapshot();
+    const building = snapshot.visibleBuildings[0];
+    projection.render(snapshot);
+    projection.setSelectedBuilding(building.id);
+
+    const highlight = meshFor(projection, "building-selection-highlight");
+    expect(highlight.visible).toBe(true);
+    expect(highlight.position.toArray()).toEqual([1, 0.035, -1]);
+    expect(highlight.renderOrder).toBe(3);
+
+    projection.render({
+      ...snapshot,
+      visibleBuildings: [{ ...building, position: { x: 2, y: 3 } }],
+    });
+    expect(highlight.visible).toBe(true);
+    expect(highlight.position.toArray()).toEqual([2, 0.035, -3]);
+
+    projection.setSelectedBuilding(null);
+    expect(highlight.visible).toBe(false);
+    projection.setSelectedBuilding(building.id);
+    expect(highlight.visible).toBe(true);
+    projection.render({ ...snapshot, visibleBuildings: [] });
+    expect(highlight.visible).toBe(false);
+    expect(projection.group.getObjectByName(building.id)).toBeUndefined();
+    projection.dispose();
+  });
+
   it("projects typed terrain with visual bases aligned to supplied footprints", () => {
     const projection = new RetainedProjection();
     const snapshot = rendererSnapshot();

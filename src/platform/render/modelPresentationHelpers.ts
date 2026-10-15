@@ -304,6 +304,7 @@ export class ModelTemplateCache {
 
 interface ModelDescriptor {
   readonly id: string;
+  readonly buildingId?: string;
   readonly asset: ModelAssetKey;
   readonly position: Vector2;
   readonly height: number;
@@ -380,6 +381,7 @@ export class ModelProjection {
       ...snapshot.visibleChunks.flatMap((chunk) =>
         chunk.campfires.map((campfire) => ({
           id: campfire.id,
+          buildingId: campfire.id,
           asset: "building-Campfire" as const,
           position: campfire.position,
           height: 0,
@@ -397,6 +399,7 @@ export class ModelProjection {
               }
             : {}),
           id: building.id,
+          buildingId: building.id,
           asset: towerLevelModelFor(building.kind, building.level),
           position: building.position,
           height: 0,
@@ -546,6 +549,8 @@ export class ModelProjection {
     if (instance === undefined) {
       const root = new THREE.Group();
       root.name = `model:${descriptor.id}`;
+      if (descriptor.buildingId !== undefined)
+        root.userData.buildingId = descriptor.buildingId;
       const poseRoot = new THREE.Group();
       poseRoot.name = `pose:${descriptor.id}`;
       root.add(poseRoot);

@@ -958,12 +958,8 @@ test("new Storage is unavailable while released legacy Storage remains visible a
   await expect(
     legacyRow.getByRole("button", { name: "Upgrade" }),
   ).toBeDisabled();
-  await expect(
-    legacyRow.getByRole("button", { name: "Relocate on canvas" }),
-  ).toBeDisabled();
-  await expect(
-    legacyRow.getByRole("button", { name: "Demolish" }),
-  ).toBeEnabled();
+  await expect(legacyRow.getByRole("button", { name: "Move" })).toBeDisabled();
+  await expect(legacyRow.getByRole("button", { name: "Delete" })).toBeEnabled();
   await expect(
     page.getByTestId("resources").getByTitle("Wood", { exact: true }),
   ).toHaveAttribute("aria-label", "Wood: 480");

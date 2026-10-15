@@ -60,7 +60,7 @@ const setup = async (page: Page, project: string) => {
     project === "touch" ? locator.tap() : locator.click();
   const canvas = page.getByTestId("world-canvas");
   const rows = page.getByTestId("building-list").locator(".building-row");
-  const positionAt = async (x: number, y: number) => {
+  const positionAt = async (x: number, y: number, height = 0) => {
     const bounds = await canvas.boundingBox();
     if (bounds === null) throw new Error("World canvas has no visible bounds");
     const tuning = defaultThreeCameraTuning;
@@ -77,7 +77,7 @@ const setup = async (page: Page, project: string) => {
     );
     camera.lookAt(player.x, 0, -player.y);
     camera.updateMatrixWorld();
-    const projected = new Vector3(x, 0, -y).project(camera);
+    const projected = new Vector3(x, height, -y).project(camera);
     const position = {
       x: ((projected.x + 1) / 2) * bounds.width,
       y: ((1 - projected.y) / 2) * bounds.height,
@@ -101,6 +101,19 @@ const setup = async (page: Page, project: string) => {
       )
       .toBe(player.positionText);
     await expect(canvas).toHaveAttribute("data-destination-marker", "inactive");
+  };
+  const tapBuildingAt = async (x: number, y: number) => {
+    const { position } = await positionAt(x, y, 0.3);
+    await resolveIncidentalChoiceOverlays(page);
+    if (project === "touch") await canvas.tap({ position });
+    else await canvas.click({ position });
+    await expect
+      .poll(() =>
+        page
+          .getByTestId("position")
+          .evaluate((node) => node.textContent?.trim()),
+      )
+      .toBe(player.positionText);
   };
   const previewAt = async (x: number, y: number) => {
     await expect(page.getByTestId("placement-mode")).toBeVisible();
@@ -149,7 +162,16 @@ const setup = async (page: Page, project: string) => {
     // a second wall tap now selects the endpoint rather than placing a brick.
     await activate(page.getByTestId("confirm-placement"));
   };
-  return { activate, placeAt, previewAt, dragLine, tapAt, rows, player };
+  return {
+    activate,
+    placeAt,
+    previewAt,
+    dragLine,
+    tapAt,
+    tapBuildingAt,
+    rows,
+    player,
+  };
 };
 
 const wallDragCases = [
@@ -591,7 +613,7 @@ test("wall relocation snaps negative coordinates, retains identity, and supports
   const beforeResources = await page.getByTestId("resources").textContent();
   if (beforeResources === null)
     throw new Error("Initial resources were not available");
-  await activate(wood.getByRole("button", { name: "Relocate on canvas" }));
+  await activate(wood.getByRole("button", { name: "Move" }));
   await previewAt(-1.4, -2.6);
   const relocationPreview = page.getByTestId("placement-preview");
   await expect(relocationPreview).toBeVisible();
@@ -604,7 +626,7 @@ test("wall relocation snaps negative coordinates, retains identity, and supports
   await expect(relocationPreview).toBeHidden();
   await openBuild(page);
   await expectRowPosition(wood, 2, 2);
-  await activate(wood.getByRole("button", { name: "Relocate on canvas" }));
+  await activate(wood.getByRole("button", { name: "Move" }));
   await placeAt(-1.4, -2.6);
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
@@ -622,4 +644,88 @@ test("wall relocation snaps negative coordinates, retains identity, and supports
   await openBuild(page);
   await expect(rows).toHaveCount(1);
   await expectRowPosition(wood, -1, -3);
+});
+
+test("tapping a building highlights it and exposes upgrade, move, and delete actions", async ({
+  page,
+}, testInfo) => {
+  const { activate, placeAt, previewAt, tapBuildingAt, rows } = await setup(
+    page,
+    testInfo.project.name,
+  );
+  await openBuild(page);
+  await activate(page.getByTestId("build-Campfire"));
+  await placeAt(2.3, 1.7);
+  await openBuild(page);
+
+  const campfireL1 = rows.filter({ hasText: "Campfire L1" });
+  await expect(campfireL1).toHaveCount(1);
+  const testId = await campfireL1.getAttribute("data-testid");
+  if (testId === null || !testId.startsWith("building-"))
+    throw new Error("Placed building did not expose its stable row identity");
+  const buildingId = testId.slice("building-".length);
+  const campfire = page.getByTestId(testId);
+
+  await activate(page.getByTestId("close-build-menu"));
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  await tapBuildingAt(2, 2);
+  const canvas = page.getByTestId("world-canvas");
+  await expect(canvas).toHaveAttribute("data-selected-building", buildingId);
+  await expect(page.getByTestId("build-menu-panel")).toBeVisible();
+  await expect(campfire).toHaveAttribute("data-selected", "true");
+  await expect(
+    campfire.getByRole("button", { name: "Upgrade", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    campfire.getByRole("button", { name: "Move", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    campfire.getByRole("button", { name: "Delete", exact: true }),
+  ).toBeEnabled();
+
+  await activate(
+    campfire.getByRole("button", { name: "Upgrade", exact: true }),
+  );
+  await expect(campfire).toContainText("Campfire L2");
+  await expect(canvas).toHaveAttribute("data-selected-building", buildingId);
+
+  await activate(campfire.getByRole("button", { name: "Move", exact: true }));
+  await expect(page.getByTestId("placement-mode")).toContainText(
+    "Campfire relocation selected",
+  );
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  await activate(page.getByTestId("cancel-placement"));
+  await expect(page.getByTestId("placement-mode")).toBeHidden();
+  await openBuild(page);
+  await expect(campfire).toHaveAttribute("data-selected", "true");
+
+  await activate(campfire.getByRole("button", { name: "Move", exact: true }));
+  await previewAt(4, 2);
+  await expect(page.getByTestId("placement-preview")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  await expect(page.getByTestId("confirm-placement")).toBeEnabled();
+  await activate(page.getByTestId("confirm-placement"));
+  await openBuild(page);
+  await expectRowPosition(campfire, 4, 2);
+  await expect(campfire).toHaveAttribute("data-selected", "true");
+
+  const deleteAction = campfire.getByRole("button", {
+    name: "Delete",
+    exact: true,
+  });
+  const deleteTap = activate(deleteAction);
+  const deletionObserved = expect(rows).toHaveCount(0);
+  const [tapResult, deletionResult] = await Promise.allSettled([
+    deleteTap,
+    deletionObserved,
+  ]);
+  if (deletionResult.status === "rejected") throw deletionResult.reason;
+  // A successful touch removes the tapped control during event dispatch.
+  // Playwright may then time out waiting for that detached locator, so the
+  // durable postcondition is the authoritative result for this destructive
+  // action; a rejected tap is accepted only when demolition was observed.
+  if (tapResult.status === "rejected") await expect(rows).toHaveCount(0);
+  await expect(canvas).toHaveAttribute("data-selected-building", "");
 });

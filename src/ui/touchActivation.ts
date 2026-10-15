@@ -9,7 +9,12 @@ export const attachTouchSafeActivation = (
 ): (() => void) => {
   let suppressNextClick = false;
   const onPointerUp = (event: PointerEvent): void => {
-    if (event.pointerType !== "touch" || !event.isPrimary || event.button !== 0)
+    if (
+      button.disabled ||
+      event.pointerType !== "touch" ||
+      !event.isPrimary ||
+      event.button !== 0
+    )
       return;
     suppressNextClick = true;
     activate();

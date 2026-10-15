@@ -39,6 +39,7 @@ interface BuildingRow {
  * world coordinates belong to the subsequent public placement tap, not a row. */
 export class RetainedBuildingRows {
   private readonly rows = new Map<string, BuildingRow>();
+  private selectedBuildingId: string | null = null;
   private disposed = false;
   constructor(
     private readonly host: HTMLElement,
@@ -61,6 +62,11 @@ export class RetainedBuildingRows {
         this.rows.set(building.id, row);
       }
       row.kind = building.kind;
+      setAttribute(
+        row.element,
+        "data-selected",
+        String(this.selectedBuildingId === building.id),
+      );
       const legacyStorage = building.kind === "Storage";
       setText(
         row.label,
@@ -119,6 +125,13 @@ export class RetainedBuildingRows {
     }
   }
 
+  select(buildingId: string | null): void {
+    if (this.disposed) return;
+    this.selectedBuildingId = buildingId;
+    for (const [id, row] of this.rows)
+      setAttribute(row.element, "data-selected", String(id === buildingId));
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -137,14 +150,24 @@ export class RetainedBuildingRows {
     upgrade.textContent = "Upgrade";
     const move = document.createElement("button");
     move.type = "button";
-    move.textContent = "Relocate on canvas";
+    move.textContent = "Move";
+    move.setAttribute("aria-label", "Move");
     const demolish = document.createElement("button");
     demolish.type = "button";
-    demolish.textContent = "Demolish";
+    demolish.textContent = "Delete";
+    demolish.setAttribute("aria-label", "Delete");
     const onUpgrade = (): void => this.intents.upgradeBuilding(id);
     const onMove = (): void => this.intents.startRelocation(id, row.kind);
     const onDemolish = (): void => this.intents.demolish(id);
+    const removeUpgradeActivation = attachTouchSafeActivation(
+      upgrade,
+      onUpgrade,
+    );
     const removeMoveActivation = attachTouchSafeActivation(move, onMove);
+    const removeDeleteActivation = attachTouchSafeActivation(
+      demolish,
+      onDemolish,
+    );
     const row: BuildingRow = {
       element,
       label,
@@ -153,14 +176,12 @@ export class RetainedBuildingRows {
       kind: building.kind,
       aura: null,
       dispose(): void {
-        upgrade.removeEventListener("click", onUpgrade);
+        removeUpgradeActivation();
         removeMoveActivation();
-        demolish.removeEventListener("click", onDemolish);
+        removeDeleteActivation();
         element.remove();
       },
     };
-    upgrade.addEventListener("click", onUpgrade);
-    demolish.addEventListener("click", onDemolish);
     element.append(label, upgrade, move, demolish);
     return row;
   }

@@ -11,7 +11,10 @@ import {
 import { EnvironmentProjection } from "./environmentPresentationHelpers";
 import { RetainedProjection } from "./retainedProjectionHelpers";
 import { PlacementPreviewProjection } from "./placementPreviewHelpers";
-import { harvestableNodeIdFromIntersections } from "./harvestRaycastHelpers";
+import {
+  buildingIdFromIntersections,
+  harvestableNodeIdFromIntersections,
+} from "./harvestRaycastHelpers";
 
 export { buildingColors, enemyPresentation } from "./projectionResourceHelpers";
 
@@ -28,6 +31,7 @@ export interface ThreeRenderer {
   render(
     snapshot: GameRendererSnapshot,
     placementPreview?: PlacementPreview | null,
+    selectedBuildingId?: string | null,
   ): void;
   worldPositionFromClientPoint(
     clientX: number,
@@ -37,6 +41,7 @@ export interface ThreeRenderer {
     clientX: number,
     clientY: number,
   ): string | null;
+  buildingIdFromClientPoint(clientX: number, clientY: number): string | null;
   diagnostics(): ThreeRendererDiagnostics;
   dispose(): void;
 }
@@ -146,6 +151,24 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     );
   };
 
+  const buildingIdFromClientPoint = (
+    clientX: number,
+    clientY: number,
+  ): string | null => {
+    if (disposed) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    pointer.set(
+      ((clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera(pointer, camera);
+    return buildingIdFromIntersections(
+      raycaster.intersectObjects([projection.group, models.group], true),
+    );
+  };
+
   const positionPlayerHealthLabel = (snapshot: GameRendererSnapshot): void => {
     projectedHealth
       .set(snapshot.player.position.x, 1.75, -snapshot.player.position.y)
@@ -206,6 +229,7 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     canvas,
     worldPositionFromClientPoint,
     harvestableNodeIdFromClientPoint,
+    buildingIdFromClientPoint,
     diagnostics: () => ({
       ...projection.diagnostics(),
       placementPreview: placementGhosts.diagnostics(),
@@ -213,9 +237,12 @@ export const createThreeRenderer = (host: HTMLElement): ThreeRenderer => {
     render(
       snapshot: GameRendererSnapshot,
       placementPreview: PlacementPreview | null = null,
+      selectedBuildingId: string | null = null,
     ): void {
       if (disposed) return;
       projection.render(snapshot);
+      projection.setSelectedBuilding(selectedBuildingId);
+      setDataset("selectedBuilding", selectedBuildingId ?? "");
       placementGhosts.render(placementPreview);
       const placementDiagnostics = placementGhosts.diagnostics();
       setDataset(

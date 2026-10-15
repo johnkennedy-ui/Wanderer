@@ -50,7 +50,7 @@ test("M5 live DOM retains rows through updates and previewed relocation, removin
   const second = await rows.nth(1).elementHandle();
   const move = await rows
     .nth(0)
-    .getByRole("button", { name: "Relocate on canvas", exact: true })
+    .getByRole("button", { name: "Move", exact: true })
     .elementHandle();
   if (first === null || second === null || move === null)
     throw new Error("Missing retained building rows/buttons");
@@ -62,8 +62,8 @@ test("M5 live DOM retains rows through updates and previewed relocation, removin
   if (!secondText) throw new Error("Missing whole retained row text");
   await expect(rows.nth(1).getByRole("button")).toHaveText([
     "Upgrade",
-    "Relocate on canvas",
-    "Demolish",
+    "Move",
+    "Delete",
   ]);
   await page.getByTestId("close-build-menu").click();
   await openStatus(page);
@@ -121,7 +121,7 @@ test("M5 live DOM retains rows through updates and previewed relocation, removin
   expect(await first.evaluate((node) => node.isConnected)).toBe(true);
   await rows
     .nth(0)
-    .getByRole("button", { name: "Demolish", exact: true })
+    .getByRole("button", { name: "Delete", exact: true })
     .click();
   await expect(rows).toHaveCount(1);
   expect(await first.evaluate((node) => node.isConnected)).toBe(false);
@@ -252,7 +252,7 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
   const rowHandle = await row.elementHandle(),
     auraHandle = await aura.elementHandle();
   const relocate = await row
-    .getByRole("button", { name: "Relocate on canvas", exact: true })
+    .getByRole("button", { name: "Move", exact: true })
     .elementHandle();
   if (rowHandle === null || auraHandle === null || relocate === null)
     throw new Error("Missing hut DOM");
@@ -320,7 +320,7 @@ test("M5 Healing Hut keeps aura and listeners across upgrades, rejection, cancel
   await expect(page.getByTestId("placement-preview")).toBeHidden();
   await relocate.click();
   await openBuild(page);
-  await row.getByRole("button", { name: "Demolish", exact: true }).click();
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await expect(row).toHaveCount(0);
   expect(await auraHandle.evaluate((node) => node.isConnected)).toBe(false);
