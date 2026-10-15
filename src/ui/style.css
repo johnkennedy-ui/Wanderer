@@ -338,6 +338,24 @@ input {
 .building-row span {
   flex: 1 1 100%;
 }
+.building-inspector-stats {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.building-inspector-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.building-inspector-stats dd {
+  margin: 0;
+  font-weight: 700;
+}
+.building-inspector-actions {
+  display: flex;
+  gap: 0.4rem;
+}
 .resource-list {
   display: flex;
   flex-wrap: wrap;

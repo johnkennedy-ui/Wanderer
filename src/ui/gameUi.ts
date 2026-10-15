@@ -12,7 +12,11 @@ import type {
   PlacementResult,
 } from "../domain/notices";
 import type { PlacementPreview, PlacementRequest } from "../domain/placement";
-import { buildingKinds, maximumClassSkillTier } from "../domain/types";
+import {
+  buildingKinds,
+  isSingleTierBuildingKind,
+  maximumClassSkillTier,
+} from "../domain/types";
 import type {
   AllocatablePlayerStatKind,
   BuildingKind,
@@ -298,6 +302,17 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <div class="build-buttons" data-testid="build-buttons"></div>
       <div class="building-list" data-testid="building-list"></div>
     </section>
+    <section id="building-inspector-panel" data-testid="building-inspector-panel" class="side-panel panel building-inspector-panel" aria-label="Building details" hidden>
+      <header class="panel-heading"><h2 data-testid="building-inspector-title">Building</h2><button type="button" class="panel-close" data-testid="close-building-inspector" aria-label="Close building details">×</button></header>
+      <dl class="building-inspector-stats" aria-label="Building stats">
+        <div><dt>HP</dt><dd data-testid="building-inspector-hp"></dd></div>
+        <div><dt>Defense</dt><dd data-testid="building-inspector-defense"></dd></div>
+      </dl>
+      <div class="building-inspector-actions" role="group" aria-label="Building actions">
+        <button type="button" data-testid="building-inspector-upgrade">Upgrade</button>
+        <button type="button" data-testid="building-inspector-move">Move</button>
+      </div>
+    </section>
     <section class="placement-feedback" data-testid="placement-feedback" aria-label="Building placement feedback">
       <p data-testid="placement-mode" class="placement-mode" role="status" aria-live="polite">Placement mode inactive.</p>
       <button type="button" data-testid="cancel-placement" class="placement-cancel" aria-label="Cancel placement" title="Cancel placement" hidden>×</button>
@@ -352,6 +367,22 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   const classChoices = byTestId<HTMLDivElement>("class-choices");
   const statusPanel = byTestId<HTMLElement>("character-status-panel");
   const buildMenuPanel = byTestId<HTMLElement>("build-menu-panel");
+  const buildingInspectorPanel = byTestId<HTMLElement>(
+    "building-inspector-panel",
+  );
+  const buildingInspectorTitle = byTestId<HTMLElement>(
+    "building-inspector-title",
+  );
+  const buildingInspectorHp = byTestId<HTMLElement>("building-inspector-hp");
+  const buildingInspectorDefense = byTestId<HTMLElement>(
+    "building-inspector-defense",
+  );
+  const buildingInspectorUpgrade = byTestId<HTMLButtonElement>(
+    "building-inspector-upgrade",
+  );
+  const buildingInspectorMove = byTestId<HTMLButtonElement>(
+    "building-inspector-move",
+  );
   const resourcesPanel = byTestId<HTMLElement>("resources-panel");
   const skillTreePanel = byTestId<HTMLElement>("skill-tree-panel");
   const statsPanel = byTestId<HTMLElement>("stats-panel");
@@ -370,6 +401,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     "close-character-status",
   );
   const closeBuildMenu = byTestId<HTMLButtonElement>("close-build-menu");
+  const closeBuildingInspector = byTestId<HTMLButtonElement>(
+    "close-building-inspector",
+  );
   const closeResources = byTestId<HTMLButtonElement>("close-resources");
   const closeSkillTree = byTestId<HTMLButtonElement>("close-skill-tree");
   const closeStats = byTestId<HTMLButtonElement>("close-stats");
@@ -394,6 +428,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let settingsVisible = false;
   let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
   let selectedBuildingId: string | null = null;
+  let latestSnapshot: GameUiSnapshot | null = null;
   let placementMode: PlacementMode = null;
   let stagedPlacement: {
     readonly request: PlacementRequest;
@@ -528,6 +563,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     buildMenuVisible = visible;
     setPanelVisibility(buildMenuPanel, buildMenuToggle, visible);
   };
+  const setBuildingInspectorVisible = (visible: boolean): void => {
+    if (buildingInspectorPanel.hidden !== !visible)
+      buildingInspectorPanel.hidden = !visible;
+  };
   const setResourcesPanelVisible = (visible: boolean): void => {
     resourcesPanelVisible = visible;
     setPanelVisibility(resourcesPanel, resourcesToggle, visible);
@@ -575,17 +614,22 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   };
   statusPanelToggle.addEventListener("click", () => {
     setSettingsVisible(false);
-    setStatusPanelVisible(!statusPanelVisible);
+    const visible = !statusPanelVisible;
+    setStatusPanelVisible(visible);
+    if (visible) setBuildingInspectorVisible(false);
   });
   buildMenuToggle.addEventListener("click", () => {
     setSettingsVisible(false);
-    setBuildMenuVisible(!buildMenuVisible);
+    const visible = !buildMenuVisible;
+    setBuildMenuVisible(visible);
+    if (visible) setBuildingInspectorVisible(false);
   });
   resourcesToggle.addEventListener("click", () => {
     setSettingsVisible(false);
     const visible = !resourcesPanelVisible;
     setResourcesPanelVisible(visible);
     if (visible) {
+      setBuildingInspectorVisible(false);
       setSkillTreePanelVisible(false);
       setStatsPanelVisible(false);
     }
@@ -595,6 +639,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     const visible = !skillTreePanelVisible;
     setSkillTreePanelVisible(visible);
     if (visible) {
+      setBuildingInspectorVisible(false);
       setResourcesPanelVisible(false);
       setStatsPanelVisible(false);
     }
@@ -604,6 +649,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     const visible = !statsPanelVisible;
     setStatsPanelVisible(visible);
     if (visible) {
+      setBuildingInspectorVisible(false);
       setResourcesPanelVisible(false);
       setSkillTreePanelVisible(false);
     }
@@ -612,6 +658,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     const visible = !settingsVisible;
     setSettingsVisible(visible);
     if (visible) {
+      setBuildingInspectorVisible(false);
       setStatusPanelVisible(false);
       setBuildMenuVisible(false);
       setResourcesPanelVisible(false);
@@ -626,6 +673,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     setStatusPanelVisible(false),
   );
   closeBuildMenu.addEventListener("click", () => setBuildMenuVisible(false));
+  closeBuildingInspector.addEventListener("click", () => selectBuilding(null));
   closeResources.addEventListener("click", () =>
     setResourcesPanelVisible(false),
   );
@@ -640,6 +688,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     // dedicated placement feedback remains visible.
     setStatusPanelVisible(false);
     setBuildMenuVisible(false);
+    setBuildingInspectorVisible(false);
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
     setStatsPanelVisible(false);
@@ -687,20 +736,66 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       intents.demolish(id);
     },
   });
+  const renderBuildingInspector = (
+    building: GameUiSnapshot["buildings"][number],
+  ): void => {
+    const definition = buildingDefinitions[building.kind];
+    text(buildingInspectorTitle, definition.label + " · L" + building.level);
+    text(buildingInspectorHp, String(definition.stats.hp));
+    text(buildingInspectorDefense, String(definition.stats.defense));
+    const legacyStorage = building.kind === "Storage";
+    const upgradeDisabled =
+      legacyStorage ||
+      isSingleTierBuildingKind(building.kind) ||
+      building.level === 3;
+    buildingInspectorUpgrade.disabled = upgradeDisabled;
+    buildingInspectorUpgrade.title = legacyStorage
+      ? "Legacy Storage cannot be upgraded."
+      : isSingleTierBuildingKind(building.kind)
+        ? "Walls are single-tier and cannot be upgraded."
+        : building.level === 3
+          ? "This building is already at maximum level."
+          : "Upgrade this building.";
+    buildingInspectorMove.disabled = legacyStorage;
+    buildingInspectorMove.title = legacyStorage
+      ? "Legacy Storage cannot be relocated."
+      : "Relocate this building.";
+  };
+  attachTouchSafeActivation(buildingInspectorUpgrade, () => {
+    if (selectedBuildingId !== null)
+      intents.upgradeBuilding(selectedBuildingId);
+  });
+  attachTouchSafeActivation(buildingInspectorMove, () => {
+    const building = latestSnapshot?.buildings.find(
+      (candidate) => candidate.id === selectedBuildingId,
+    );
+    if (building !== undefined)
+      startPlacement({
+        kind: "relocate",
+        buildingId: building.id,
+        buildingKind: building.kind,
+      });
+  });
   const selectBuilding = (buildingId: string | null): void => {
     if (disposed) return;
     selectedBuildingId = buildingId;
     buildingRows.select(buildingId);
     if (buildingId === null) {
+      setBuildingInspectorVisible(false);
       setBuildMenuVisible(false);
       return;
     }
     setStatusPanelVisible(false);
+    setBuildMenuVisible(false);
     setResourcesPanelVisible(false);
     setSkillTreePanelVisible(false);
     setStatsPanelVisible(false);
     setSettingsVisible(false);
-    setBuildMenuVisible(true);
+    setBuildingInspectorVisible(true);
+    const selected = latestSnapshot?.buildings.find(
+      (building) => building.id === buildingId,
+    );
+    if (selected !== undefined) renderBuildingInspector(selected);
   };
   const effects = new RetainedEffects(byTestId<HTMLUListElement>("effects"));
   const skillTree = new RetainedEffects(
@@ -847,6 +942,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     },
     render(snapshot: GameUiSnapshot, placementValidationKey?: string): void {
       if (disposed) return;
+      latestSnapshot = snapshot;
       refreshStagedPlacement(snapshot, placementValidationKey);
       text(
         byTestId("seed"),
@@ -937,6 +1033,13 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       )
         selectBuilding(null);
       buildingRows.render(snapshot.buildings);
+      if (selectedBuildingId !== null) {
+        const selectedBuilding = snapshot.buildings.find(
+          (building) => building.id === selectedBuildingId,
+        );
+        if (selectedBuilding === undefined) selectBuilding(null);
+        else renderBuildingInspector(selectedBuilding);
+      }
       effects.render(snapshot.effects);
       const skillTreeSummary = byTestId<HTMLElement>("skill-tree-summary");
       if (snapshot.classProgression.playerClass === null) {

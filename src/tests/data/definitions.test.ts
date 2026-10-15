@@ -102,6 +102,10 @@ describe("authored definitions", () => {
     );
 
     for (const id of upgradeIds) expect(upgradeDefinitionFor(id).id).toBe(id);
+    for (const kind of buildingKinds) {
+      expect(buildingDefinitions[kind].stats.hp).toBeGreaterThan(0);
+      expect(buildingDefinitions[kind].stats.defense).toBeGreaterThanOrEqual(0);
+    }
     expect(classSkillDefinitions.map((skill) => skill.id)).toEqual(
       classSkillIds,
     );

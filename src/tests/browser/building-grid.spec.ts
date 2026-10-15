@@ -646,7 +646,7 @@ test("wall relocation snaps negative coordinates, retains identity, and supports
   await expectRowPosition(wood, -1, -3);
 });
 
-test("tapping a building highlights it and exposes upgrade, move, and delete actions", async ({
+test("tapping a building opens only its stats and upgrade/move actions", async ({
   page,
 }, testInfo) => {
   const { activate, placeAt, previewAt, tapBuildingAt, rows } = await setup(
@@ -671,29 +671,40 @@ test("tapping a building highlights it and exposes upgrade, move, and delete act
   await tapBuildingAt(2, 2);
   const canvas = page.getByTestId("world-canvas");
   await expect(canvas).toHaveAttribute("data-selected-building", buildingId);
-  await expect(page.getByTestId("build-menu-panel")).toBeVisible();
+  const inspector = page.getByTestId("building-inspector-panel");
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  await expect(inspector).toBeVisible();
+  await expect(inspector.getByTestId("building-inspector-title")).toHaveText(
+    "Campfire · L1",
+  );
+  await expect(page.getByTestId("building-inspector-hp")).toHaveText("1000");
+  await expect(page.getByTestId("building-inspector-defense")).toHaveText("20");
   await expect(campfire).toHaveAttribute("data-selected", "true");
   await expect(
-    campfire.getByRole("button", { name: "Upgrade", exact: true }),
+    inspector.getByRole("button", { name: "Upgrade", exact: true }),
   ).toBeEnabled();
   await expect(
-    campfire.getByRole("button", { name: "Move", exact: true }),
+    inspector.getByRole("button", { name: "Move", exact: true }),
   ).toBeEnabled();
-  await expect(
-    campfire.getByRole("button", { name: "Delete", exact: true }),
-  ).toBeEnabled();
+  await expect(inspector.getByRole("button", { name: "Delete" })).toHaveCount(
+    0,
+  );
 
   await activate(
-    campfire.getByRole("button", { name: "Upgrade", exact: true }),
+    inspector.getByRole("button", { name: "Upgrade", exact: true }),
   );
   await expect(campfire).toContainText("Campfire L2");
+  await expect(inspector.getByTestId("building-inspector-title")).toHaveText(
+    "Campfire · L2",
+  );
   await expect(canvas).toHaveAttribute("data-selected-building", buildingId);
 
-  await activate(campfire.getByRole("button", { name: "Move", exact: true }));
+  await activate(inspector.getByRole("button", { name: "Move", exact: true }));
   await expect(page.getByTestId("placement-mode")).toContainText(
     "Campfire relocation selected",
   );
   await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  await expect(inspector).toBeHidden();
   await activate(page.getByTestId("cancel-placement"));
   await expect(page.getByTestId("placement-mode")).toBeHidden();
   await openBuild(page);
