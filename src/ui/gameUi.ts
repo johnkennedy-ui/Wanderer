@@ -67,6 +67,8 @@ type PlacementMode =
 
 export interface GameUi {
   readonly worldHost: HTMLElement;
+  selectBuilding(buildingId: string | null): void;
+  selectedBuildingId(): string | null;
   isWorldPlacementEnabled(): boolean;
   isWallPlacementEnabled(): boolean;
   hasStagedPlacementPreview(): boolean;
@@ -268,7 +270,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <button data-testid="new-world">New / reset world</button>
         <button data-testid="save-button">Save at campfire</button>
       </div>
-      <p class="subtle">WASD / arrows move. Tap open ground to travel; click trees, rocks, or ore to harvest when in reach. Building placement takes priority over world taps.</p>
+      <p class="subtle">WASD / arrows move. Tap a building to select it and show actions; tap open ground to travel. Click trees, rocks, or ore to harvest when in reach. Building placement takes priority over world taps.</p>
       <p data-testid="save-message" class="subtle">No automatic save. Reload restores only the last explicit campfire commit.</p>
       <hr />
       <h2>Passive effects</h2>
@@ -391,6 +393,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let statsPanelVisible = false;
   let settingsVisible = false;
   let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
+  let selectedBuildingId: string | null = null;
   let placementMode: PlacementMode = null;
   let stagedPlacement: {
     readonly request: PlacementRequest;
@@ -684,6 +687,21 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       intents.demolish(id);
     },
   });
+  const selectBuilding = (buildingId: string | null): void => {
+    if (disposed) return;
+    selectedBuildingId = buildingId;
+    buildingRows.select(buildingId);
+    if (buildingId === null) {
+      setBuildMenuVisible(false);
+      return;
+    }
+    setStatusPanelVisible(false);
+    setResourcesPanelVisible(false);
+    setSkillTreePanelVisible(false);
+    setStatsPanelVisible(false);
+    setSettingsVisible(false);
+    setBuildMenuVisible(true);
+  };
   const effects = new RetainedEffects(byTestId<HTMLUListElement>("effects"));
   const skillTree = new RetainedEffects(
     byTestId<HTMLUListElement>("skill-tree-skills"),
@@ -746,6 +764,10 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
 
   return {
     worldHost,
+    selectBuilding,
+    selectedBuildingId(): string | null {
+      return selectedBuildingId;
+    },
     isWorldPlacementEnabled(): boolean {
       return placementMode !== null;
     },
@@ -907,6 +929,13 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       const placementNotice = presentPlacementNotice(snapshot.notice);
       if (placementNotice !== "") setPlacementFeedback(placementNotice);
 
+      if (
+        selectedBuildingId !== null &&
+        !snapshot.buildings.some(
+          (building) => building.id === selectedBuildingId,
+        )
+      )
+        selectBuilding(null);
       buildingRows.render(snapshot.buildings);
       effects.render(snapshot.effects);
       const skillTreeSummary = byTestId<HTMLElement>("skill-tree-summary");

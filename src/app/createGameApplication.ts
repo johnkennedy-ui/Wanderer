@@ -104,6 +104,10 @@ export const createGameApplication = async (
       pickNodeId: renderer.harvestableNodeIdFromClientPoint,
       harvestNode: (nodeId) => session.harvestNode(nodeId),
     },
+    {
+      pickBuildingId: renderer.buildingIdFromClientPoint,
+      selectBuilding: ui.selectBuilding,
+    },
   );
   const buildPlacement = createBuildPlacementInput(
     renderer.canvas,
@@ -141,7 +145,11 @@ export const createGameApplication = async (
           ])
         : undefined;
       ui.render(presentation.ui, placementValidationKey);
-      renderer.render(presentation.renderer, ui.placementPreview());
+      renderer.render(
+        presentation.renderer,
+        ui.placementPreview(),
+        ui.selectedBuildingId(),
+      );
       ui.showTransient(platformMessage);
     },
   );

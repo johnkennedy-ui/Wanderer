@@ -139,4 +139,41 @@ describe("tap-to-move input", () => {
     placementInput.dispose();
     tapInput.dispose();
   });
+
+  it("selects tapped buildings before harvesting or tap-to-move and clears selection on open ground", () => {
+    const canvas = new EventTarget() as HTMLCanvasElement;
+    const destinations: DestinationCommand[] = [];
+    const harvested: string[] = [];
+    const selected: Array<string | null> = [];
+    const input = createTapToMoveInput(
+      canvas,
+      (clientX, clientY) => ({ x: clientX, y: clientY }),
+      (command) => destinations.push(command),
+      () => false,
+      {
+        pickNodeId: () => "tree:fixture",
+        harvestNode: (id) => harvested.push(id),
+      },
+      {
+        pickBuildingId: (clientX) =>
+          clientX === 10 ? "building:fixture" : null,
+        selectBuilding: (id) => selected.push(id),
+      },
+    );
+
+    const buildingUp = primaryPointerEvent("pointerup", 1, 10, 20);
+    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 1, 10, 20));
+    canvas.dispatchEvent(buildingUp);
+    expect(buildingUp.defaultPrevented).toBe(true);
+    expect(selected).toEqual(["building:fixture"]);
+    expect(harvested).toHaveLength(0);
+    expect(destinations).toHaveLength(0);
+
+    canvas.dispatchEvent(primaryPointerEvent("pointerdown", 2, 20, 30));
+    canvas.dispatchEvent(primaryPointerEvent("pointerup", 2, 20, 30));
+    expect(selected).toEqual(["building:fixture", null]);
+    expect(harvested).toEqual(["tree:fixture"]);
+    expect(destinations).toHaveLength(0);
+    input.dispose();
+  });
 });

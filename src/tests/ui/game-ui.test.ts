@@ -131,6 +131,10 @@ describe("retained UI list operations", () => {
     const rows = new RetainedBuildingRows(asElement(host), intents);
     rows.render([building("a"), building("b", 3)]);
     const [a, b] = host.children;
+    rows.select("b");
+    expect(a.getAttribute("data-selected")).toBe("false");
+    expect(b.getAttribute("data-selected")).toBe("true");
+    rows.select(null);
     const aWrites = a.children[0].writes,
       bWrites = b.children[0].writes;
     const listeners = [a.children[2], b.children[1], b.children[3]];
@@ -168,18 +172,33 @@ describe("retained UI list operations", () => {
     };
     const rows = new RetainedBuildingRows(asElement(host), intents);
     rows.render([building("wall")]);
-    const relocate = host.children[0].children[2];
+    const [, upgrade, move, remove] = host.children[0].children;
 
-    relocate.dispatchEvent(primaryTouchUp());
+    upgrade.disabled = true;
+    upgrade.dispatchEvent(primaryTouchUp());
+    expect(intents.upgradeBuilding).not.toHaveBeenCalled();
+
+    upgrade.disabled = false;
+    upgrade.dispatchEvent(primaryTouchUp());
+    expect(intents.upgradeBuilding).toHaveBeenCalledExactlyOnceWith("wall");
+    upgrade.click();
+    expect(intents.upgradeBuilding).toHaveBeenCalledExactlyOnceWith("wall");
+
+    move.dispatchEvent(primaryTouchUp());
     expect(intents.startRelocation).toHaveBeenCalledExactlyOnceWith(
       "wall",
       "Workshop",
     );
-    relocate.click();
+    move.click();
     expect(intents.startRelocation).toHaveBeenCalledExactlyOnceWith(
       "wall",
       "Workshop",
     );
+
+    remove.dispatchEvent(primaryTouchUp());
+    expect(intents.demolish).toHaveBeenCalledExactlyOnceWith("wall");
+    remove.click();
+    expect(intents.demolish).toHaveBeenCalledExactlyOnceWith("wall");
     rows.dispose();
   });
 

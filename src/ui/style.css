@@ -321,8 +321,19 @@ input {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.3rem;
-  border-top: 1px solid rgb(184 213 174 / 25%);
-  padding-top: 0.35rem;
+  border: 1px solid transparent;
+  border-top-color: rgb(184 213 174 / 25%);
+  border-radius: 6px;
+  padding: 0.35rem;
+}
+.building-row[data-selected="true"] {
+  border-color: #ffe082;
+  background: rgb(255 224 130 / 16%);
+  box-shadow: 0 0 0 1px rgb(255 224 130 / 48%);
+}
+.building-row[data-selected="true"] span {
+  color: #fff1c2;
+  font-weight: 700;
 }
 .building-row span {
   flex: 1 1 100%;

@@ -86,6 +86,8 @@ export class RetainedProjection {
   private readonly relicDrops: MarkerMap = new Map();
   private readonly player: THREE.Mesh;
   private destination: THREE.Mesh | undefined;
+  private selectedBuildingId: string | null = null;
+  private selectedBuildingRing: THREE.Mesh | undefined;
   private terrainInputKey: string | undefined;
   private buildingInputKey: string | undefined;
   private lastPresentationElapsed: number | undefined;
@@ -169,7 +171,7 @@ export class RetainedProjection {
           aura.name = `aura:${building.id}`;
           aura.rotation.x = -Math.PI / 2;
         }
-        this.marker(
+        const marker = this.marker(
           this.buildings,
           building.id,
           building.position,
@@ -184,11 +186,13 @@ export class RetainedProjection {
             : this.resources.material(buildingColors[building.kind]),
           wall ? 0.5 : 0,
         );
+        marker.userData.buildingId = building.id;
       }
       this.removeMissing(this.buildings, buildings);
       this.removeMissing(this.auras, auras);
       this.buildingInputKey = buildingInputKey;
     }
+    this.updateBuildingSelectionHighlight();
     const enemies = new Set<string>();
     for (const enemy of snapshot.enemies) {
       enemies.add(enemy.id);
@@ -395,6 +399,12 @@ export class RetainedProjection {
     return this.mageExplosions.size;
   }
 
+  /** Highlights one retained building without making presentation own selection state. */
+  setSelectedBuilding(id: string | null): void {
+    this.selectedBuildingId = id;
+    this.updateBuildingSelectionHighlight();
+  }
+
   /** Keeps the proven geometric marker as an async GLB fallback. */
   setModelVisible(id: string, visible: boolean): void {
     const mesh =
@@ -449,6 +459,37 @@ export class RetainedProjection {
     this.group.clear();
     this.group.removeFromParent();
     this.resources.dispose();
+  }
+
+  private updateBuildingSelectionHighlight(): void {
+    const id = this.selectedBuildingId;
+    if (id === null) {
+      if (this.selectedBuildingRing !== undefined)
+        this.selectedBuildingRing.visible = false;
+      return;
+    }
+    const building = this.buildings.get(id);
+    if (building === undefined) {
+      this.selectedBuildingId = null;
+      if (this.selectedBuildingRing !== undefined)
+        this.selectedBuildingRing.visible = false;
+      return;
+    }
+    if (this.selectedBuildingRing === undefined) {
+      const ring = this.resources.mesh(
+        this.resources.ring(0.86),
+        this.resources.material(0xffe082, 0.25, 0xffc107, 1.6),
+      );
+      ring.name = "building-selection-highlight";
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.035;
+      ring.renderOrder = 3;
+      this.group.add(ring);
+      this.selectedBuildingRing = ring;
+    }
+    this.selectedBuildingRing.position.x = building.position.x;
+    this.selectedBuildingRing.position.z = building.position.z;
+    this.selectedBuildingRing.visible = true;
   }
 
   private marker(

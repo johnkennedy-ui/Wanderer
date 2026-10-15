@@ -97,6 +97,8 @@ const setup = async () => {
     clearWorldPlacementDraft: vi.fn(),
     applyWorldPlacement: vi.fn(),
     render: vi.fn<GameUi["render"]>(),
+    selectBuilding: vi.fn(),
+    selectedBuildingId: vi.fn(() => null),
     showTransient: vi.fn(),
     dispose: vi.fn(),
   } satisfies GameUi;
@@ -105,6 +107,7 @@ const setup = async () => {
     render: vi.fn<ThreeRenderer["render"]>(),
     worldPositionFromClientPoint: vi.fn(() => null),
     harvestableNodeIdFromClientPoint: vi.fn(() => null),
+    buildingIdFromClientPoint: vi.fn(() => null),
     diagnostics: vi.fn<ThreeRenderer["diagnostics"]>(),
     dispose: vi.fn(),
   } satisfies ThreeRenderer;
