@@ -40,6 +40,11 @@ export interface EnemyDefinition {
 
 export interface BuildingDefinition {
   readonly label: string;
+  /** Display-only inspection stats; gameplay does not read these values. */
+  readonly stats: {
+    readonly hp: number;
+    readonly defense: number;
+  };
   readonly baseCost: ReadonlyResourceBag;
   readonly description: string;
   readonly levelEffects: readonly [string, string, string];
@@ -265,6 +270,7 @@ export const enemyDefinitions = deepFreeze(authoredEnemyDefinitions);
 const authoredBuildingDefinitions = {
   Campfire: {
     label: "Campfire",
+    stats: { hp: 1000, defense: 20 },
     baseCost: { wood: 0, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description: "Bootstraps a settlement and permits manual saves.",
     levelEffects: [
@@ -275,6 +281,7 @@ const authoredBuildingDefinitions = {
   },
   Workshop: {
     label: "Workshop",
+    stats: { hp: 500, defense: 10 },
     baseCost: {
       wood: 18,
       stone: 8,
@@ -292,6 +299,7 @@ const authoredBuildingDefinitions = {
   },
   Farm: {
     label: "Farm",
+    stats: { hp: 400, defense: 8 },
     baseCost: {
       wood: 12,
       stone: 4,
@@ -309,6 +317,7 @@ const authoredBuildingDefinitions = {
   },
   Storage: {
     label: "Legacy Storage",
+    stats: { hp: 350, defense: 8 },
     baseCost: {
       wood: 20,
       stone: 8,
@@ -327,6 +336,7 @@ const authoredBuildingDefinitions = {
   },
   Healer: {
     label: "Healing Hut",
+    stats: { hp: 450, defense: 10 },
     baseCost: {
       wood: 10,
       stone: 10,
@@ -345,6 +355,7 @@ const authoredBuildingDefinitions = {
   },
   WoodWall: {
     label: "Wood Wall",
+    stats: { hp: 600, defense: 25 },
     baseCost: { wood: 6, stone: 0, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description:
       "A solid wooden tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
@@ -356,6 +367,7 @@ const authoredBuildingDefinitions = {
   },
   StoneWall: {
     label: "Stone Wall",
+    stats: { hp: 1000, defense: 40 },
     baseCost: { wood: 0, stone: 8, scrap: 0, essence: 0, iron: 0, bossCore: 0 },
     description:
       "A solid stone tile that blocks movement and projectiles. Single-tier; place adjoining tiles to build a wall.",
@@ -367,6 +379,7 @@ const authoredBuildingDefinitions = {
   },
   ArcherTower: {
     label: "Archer Tower",
+    stats: { hp: 500, defense: 12 },
     baseCost: {
       wood: 14,
       stone: 4,
@@ -385,6 +398,7 @@ const authoredBuildingDefinitions = {
   },
   SwordTower: {
     label: "Sword Tower",
+    stats: { hp: 700, defense: 16 },
     baseCost: { wood: 8, stone: 8, scrap: 5, essence: 0, iron: 0, bossCore: 0 },
     description:
       "An upgradable close defender whose rotating blades sweep every in-range enemy.",
@@ -396,6 +410,7 @@ const authoredBuildingDefinitions = {
   },
   MageTower: {
     label: "Mage Tower",
+    stats: { hp: 450, defense: 8 },
     baseCost: {
       wood: 4,
       stone: 10,
