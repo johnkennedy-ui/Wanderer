@@ -646,7 +646,7 @@ test("wall relocation snaps negative coordinates, retains identity, and supports
   await expectRowPosition(wood, -1, -3);
 });
 
-test("tapping a building opens only its stats and upgrade/move actions", async ({
+test("tapping a building opens only its stats and upgrade/move/delete actions", async ({
   page,
 }, testInfo) => {
   const { activate, placeAt, previewAt, tapBuildingAt, rows } = await setup(
@@ -686,9 +686,9 @@ test("tapping a building opens only its stats and upgrade/move actions", async (
   await expect(
     inspector.getByRole("button", { name: "Move", exact: true }),
   ).toBeEnabled();
-  await expect(inspector.getByRole("button", { name: "Delete" })).toHaveCount(
-    0,
-  );
+  await expect(
+    inspector.getByRole("button", { name: "Delete", exact: true }),
+  ).toBeEnabled();
 
   await activate(
     inspector.getByRole("button", { name: "Upgrade", exact: true }),
@@ -721,8 +721,13 @@ test("tapping a building opens only its stats and upgrade/move actions", async (
   await openBuild(page);
   await expectRowPosition(campfire, 4, 2);
   await expect(campfire).toHaveAttribute("data-selected", "true");
+  await activate(page.getByTestId("close-build-menu"));
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
 
-  const deleteAction = campfire.getByRole("button", {
+  await tapBuildingAt(4, 2);
+  await expect(inspector).toBeVisible();
+  await expect(page.getByTestId("build-menu-panel")).toBeHidden();
+  const deleteAction = inspector.getByRole("button", {
     name: "Delete",
     exact: true,
   });

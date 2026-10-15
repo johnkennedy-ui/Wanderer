@@ -311,6 +311,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
       <div class="building-inspector-actions" role="group" aria-label="Building actions">
         <button type="button" data-testid="building-inspector-upgrade">Upgrade</button>
         <button type="button" data-testid="building-inspector-move">Move</button>
+        <button type="button" data-testid="building-inspector-delete">Delete</button>
       </div>
     </section>
     <section class="placement-feedback" data-testid="placement-feedback" aria-label="Building placement feedback">
@@ -382,6 +383,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   );
   const buildingInspectorMove = byTestId<HTMLButtonElement>(
     "building-inspector-move",
+  );
+  const buildingInspectorDelete = byTestId<HTMLButtonElement>(
+    "building-inspector-delete",
   );
   const resourcesPanel = byTestId<HTMLElement>("resources-panel");
   const skillTreePanel = byTestId<HTMLElement>("skill-tree-panel");
@@ -775,6 +779,9 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         buildingId: building.id,
         buildingKind: building.kind,
       });
+  });
+  attachTouchSafeActivation(buildingInspectorDelete, () => {
+    if (selectedBuildingId !== null) intents.demolish(selectedBuildingId);
   });
   const selectBuilding = (buildingId: string | null): void => {
     if (disposed) return;
