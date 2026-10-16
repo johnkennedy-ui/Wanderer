@@ -173,7 +173,7 @@ describe("GameSession wall and tile integration", () => {
   );
 
   it.each(["keyboard", "tap-to-move"] as const)(
-    "blocks %s movement at an adjoining wall seam and opens after demolition",
+    "keeps %s collision-safe at an adjoining wall seam and opens after demolition",
     (source) => {
       const session = createSession({
         player: { position: { x: 0, y: 0.5 }, hp: 100, maxHp: 100 },
@@ -196,10 +196,13 @@ describe("GameSession wall and tile integration", () => {
       for (let index = 0; index < 15; index += 1) {
         session.tick(0.1);
         const position = session.presentation().ui.player.position;
-        expect(position.x).toBeLessThanOrEqual(0.22);
+        if (source === "keyboard") expect(position.x).toBeLessThanOrEqual(0.22);
+        else
+          expect(Math.hypot(position.x, position.y - 0.5)).toBeGreaterThan(0.2);
         expect(wallBlocksPosition(position, walls, 0.28)).toBe(false);
       }
-      expect(session.presentation().ui.player.position.x).toBeGreaterThan(0);
+      if (source === "tap-to-move")
+        expect(session.presentation().renderer.destination).not.toBeNull();
       for (const wall of walls)
         expect(session.demolishBuilding(wall.id).ok).toBe(true);
       move();

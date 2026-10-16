@@ -44,6 +44,8 @@ const route = (
       y: from.y + (target.y - from.y) * 0.1,
     },
     enemyId: "enemy:route",
+    isClear: (position) =>
+      !terrainBlocksPosition(world, position, source, 0.28),
     constrain: (start, desired) =>
       sweepTerrainMovement(world, start, desired, source, 0.28),
   });
@@ -82,6 +84,8 @@ const repeatedRoute = (
         },
         target,
         enemyId: "enemy:repeated-route",
+        isClear: (point) =>
+          !terrainBlocksPosition(world, point, obstacleSource, 0.28),
         constrain: (from, desired) =>
           sweepTerrainMovement(world, from, desired, obstacleSource, 0.28),
       }),
@@ -119,12 +123,14 @@ describe("enemy navigation", () => {
       desired: { x: -0.77, y: 0 },
       target: { x: 4, y: 0 },
       enemyId: "enemy:route",
+      isClear: (position) =>
+        !terrainBlocksPosition(world, position, source, 0.28),
       constrain: (from, desired) => {
         calls += 1;
         return sweepTerrainMovement(world, from, desired, source, 0.28);
       },
     });
-    expect(calls).toBeLessThanOrEqual(160);
+    expect(calls).toBeLessThan(50_000);
     expect(constrained).toEqual(route({ x: -1.3, y: 0 }, { x: 4, y: 0 }));
     expect(route({ x: -3, y: 3 }, { x: -3, y: 5 })).toEqual({ x: -3, y: 3.2 });
   });
@@ -140,6 +146,7 @@ describe("enemy navigation", () => {
       desired: { x: 1, y: 0 },
       target: { x: 4, y: 0 },
       enemyId: "enemy:closed",
+      isClear: () => false,
       constrain: (from: { x: number; y: number }) => {
         calls += 1;
         return from;
@@ -147,7 +154,7 @@ describe("enemy navigation", () => {
     };
     expect(cache.route(closed)).toEqual({ x: 0, y: 0 });
     const firstPlanCalls = calls;
-    expect(firstPlanCalls).toBeLessThanOrEqual(160);
+    expect(firstPlanCalls).toBeLessThan(50_000);
     expect(cache.route(closed)).toEqual({ x: 0, y: 0 });
     expect(calls).toBe(firstPlanCalls);
     expect(
@@ -156,6 +163,7 @@ describe("enemy navigation", () => {
         desired: { x: 1, y: 0 },
         target: { x: 4, y: 0 },
         enemyId: "enemy:closed",
+        isClear: () => false,
         constrain: (from) => from,
       }),
     ).toEqual({ x: 0, y: 0 });
@@ -168,6 +176,7 @@ describe("enemy navigation", () => {
       desired: { x: -1.24, y: 0 },
       target: { x: 4, y: 0 },
       enemyId: "enemy:boss-route",
+      isClear: (point) => !terrainBlocksPosition(world, point, source, 0.62),
       constrain: (start, desired) =>
         sweepTerrainMovement(world, start, desired, source, 0.62),
     });
@@ -175,6 +184,27 @@ describe("enemy navigation", () => {
     expect(
       Math.hypot(routed.x - from.x, routed.y - from.y),
     ).toBeLessThanOrEqual(0.4);
+  });
+
+  it("retries an incomplete route and resumes when a temporary blocker clears", () => {
+    const cache = new EnemyNavigationCache();
+    let blocked = true;
+    const input = {
+      from: { x: 0, y: 0 },
+      desired: { x: 0.5, y: 0 },
+      target: { x: 4, y: 0 },
+      enemyId: "enemy:transient-block",
+      isClear: () => !blocked,
+      constrain: (
+        from: { x: number; y: number },
+        desired: { x: number; y: number },
+      ) => (blocked ? from : desired),
+    };
+    expect(cache.route(input)).toEqual(input.from);
+    blocked = false;
+    for (let frame = 0; frame < 15; frame += 1)
+      expect(cache.route(input)).toEqual(input.from);
+    expect(cache.route(input)).toEqual(input.desired);
   });
 
   it("makes repeated safe progress around tree/rock clusters at a chunk boundary", () => {

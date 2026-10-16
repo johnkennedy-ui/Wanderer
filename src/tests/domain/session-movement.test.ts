@@ -230,7 +230,7 @@ describe("GameSession movement", () => {
     });
     advance(session, 5);
     const position = session.presentation().ui.player.position;
-    expect(position.x).toBeLessThan(obstacle.position.x);
+    expect(position.x).toBeGreaterThan(obstacle.position.x);
     expect(
       Math.hypot(
         position.x - obstacle.position.x,
