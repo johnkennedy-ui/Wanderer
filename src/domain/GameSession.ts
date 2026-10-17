@@ -1,5 +1,4 @@
 import { gameplayTuning } from "../data/definitions";
-import { deepFreeze } from "../data/deepFreeze";
 import { add, distance, roundVector, scale } from "./math";
 import { isMeaningfulMovement } from "./inputPolicy";
 import type {
@@ -12,7 +11,6 @@ import type { PlacementPreview, PlacementRequest } from "./placement";
 import type {
   BuildingKind,
   AllocatablePlayerStatKind,
-  ChunkRecipe,
   ClassSkillId,
   DestinationCommand,
   FloorDropState,
@@ -45,17 +43,17 @@ import type {
 import { projectGamePresentation } from "./session/readModels";
 import { projectRuntimeDiagnostics } from "./session/runtimeDiagnostics";
 import { visibleChunksFor } from "./session/worldRuntime";
-import { tryAddResourceBags } from "./resourceBalances";
 import {
-  effectiveChunkRecipeFor,
   HARVEST_INTERACTION_DISTANCE,
-  hasHarvestedNodeIdCharacterCapacity,
   harvestRewardsForObstacle,
-  MAX_HARVESTED_NODE_ID_LENGTH,
-  MAX_HARVESTED_NODE_IDS,
 } from "./resourceHarvesting";
 import {
-  CHUNK_RECIPE_CACHE_CAPACITY,
+  harvestApproachCandidatesFor,
+  harvestDecisionFor,
+  harvestLookupFor,
+} from "./session/harvestDecision";
+import { EffectiveChunkRecipeCache } from "./session/effectiveChunkRecipeCache";
+import {
   ChunkRecipeCache,
   type ChunkRecipeSource,
 } from "./session/chunkRecipeCache";
@@ -65,13 +63,9 @@ import {
 } from "./session/settlementRuntime";
 import {
   combatStatsFor,
-  describeProgressionEffects,
   movingAttackSpeedMultiplierFor,
-  pendingClassSkillChoicesFor,
-  playerStatsFor,
-  statPointsAvailableFor,
 } from "./session/progressionRules";
-import { playerHitRecoveryPresentationFor } from "./session/hitRecoveryPolicy";
+import { presentationDerivationFor } from "./session/presentationDerivation";
 import { EnemyNavigationCache } from "./session/enemyNavigation";
 import { isWallKind } from "./session/buildingGeometry";
 import { wallBlocksPosition } from "./session/buildingGeometry";
@@ -153,11 +147,8 @@ const placementPreviewFor = (
 
 export class GameSession {
   private readonly chunkRecipes: ChunkRecipeCache;
+  private readonly effectiveChunkRecipes: EffectiveChunkRecipeCache;
   private readonly effectiveChunkRecipeSource: ChunkRecipeSource;
-  private readonly effectiveChunkRecipes = new Map<
-    string,
-    { readonly source: ChunkRecipe; readonly result: ChunkRecipe }
-  >();
   private harvestedNodeIds = new Set<string>();
   private pendingHarvestNodeId: string | null = null;
   private world!: WorldIdentity;
@@ -198,39 +189,11 @@ export class GameSession {
       undefined,
       options.chunkRecipeSource,
     );
-    this.effectiveChunkRecipeSource = (world, coordinate) => {
-      const source = this.chunkRecipes.get(world, coordinate);
-      // Deterministic generators return immutable data properties. Preserve a
-      // custom live getter's fresh obstacle snapshot rather than caching it.
-      if (
-        Object.getOwnPropertyDescriptor(source, "obstacles")?.get !== undefined
-      )
-        return deepFreeze(
-          effectiveChunkRecipeFor(source, this.harvestedNodeIds),
-        );
-      const key = JSON.stringify([
-        world.seed,
-        world.generatorVersion,
-        coordinate.x,
-        coordinate.y,
-      ]);
-      const cached = this.effectiveChunkRecipes.get(key);
-      if (cached?.source === source) {
-        this.effectiveChunkRecipes.delete(key);
-        this.effectiveChunkRecipes.set(key, cached);
-        return cached.result;
-      }
-
-      const result = deepFreeze(
-        effectiveChunkRecipeFor(source, this.harvestedNodeIds),
-      );
-      if (this.effectiveChunkRecipes.size === CHUNK_RECIPE_CACHE_CAPACITY) {
-        const oldest = this.effectiveChunkRecipes.keys().next().value;
-        if (oldest !== undefined) this.effectiveChunkRecipes.delete(oldest);
-      }
-      this.effectiveChunkRecipes.set(key, { source, result });
-      return result;
-    };
+    this.effectiveChunkRecipes = new EffectiveChunkRecipeCache(
+      this.chunkRecipes.get,
+    );
+    this.effectiveChunkRecipeSource = (world, coordinate) =>
+      this.effectiveChunkRecipes.get(world, coordinate, this.harvestedNodeIds);
     this.replaceState(
       options.saved === undefined
         ? createFreshSessionState({ world: options.world ?? DEFAULT_WORLD })
@@ -302,19 +265,9 @@ export class GameSession {
   }
   harvestNode(nodeId: string): void {
     this.pendingHarvestNodeId = null;
-    if (
-      typeof nodeId !== "string" ||
-      nodeId.length === 0 ||
-      nodeId.length > MAX_HARVESTED_NODE_ID_LENGTH
-    ) {
-      this.notice = { kind: "resource-node.rejected", reason: "unknown-node" };
-      return;
-    }
-    if (this.harvestedNodeIds.has(nodeId)) {
-      this.notice = {
-        kind: "resource-node.rejected",
-        reason: "already-harvested",
-      };
+    const lookup = harvestLookupFor(nodeId, this.harvestedNodeIds);
+    if (lookup.kind === "reject") {
+      this.notice = { kind: "resource-node.rejected", reason: lookup.reason };
       return;
     }
     const obstacle = visibleChunksFor(
@@ -323,51 +276,35 @@ export class GameSession {
       this.chunkRecipes.get,
     )
       .flatMap((chunk) => chunk.obstacles)
-      .find((candidate) => candidate.id === nodeId);
-    const rewards =
-      obstacle === undefined ? null : harvestRewardsForObstacle(obstacle);
-    if (obstacle === undefined || rewards === null) {
-      this.notice = { kind: "resource-node.rejected", reason: "unknown-node" };
+      .find((candidate) => candidate.id === lookup.nodeId);
+    const approachCandidates =
+      obstacle === undefined || harvestRewardsForObstacle(obstacle) === null
+        ? []
+        : harvestApproachCandidatesFor(this.player.position, obstacle).filter(
+            (point) =>
+              !terrainBlocksPosition(
+                this.world,
+                point,
+                this.effectiveChunkRecipeSource,
+                0.28,
+              ) &&
+              !wallBlocksPosition(point, this.settlement.buildingState, 0.28),
+          );
+    const decision = harvestDecisionFor({
+      nodeId: lookup.nodeId,
+      harvestedNodeIds: this.harvestedNodeIds,
+      obstacle,
+      playerPosition: this.player.position,
+      resources: this.resources,
+      approachCandidates,
+    });
+    if (decision.kind === "reject") {
+      this.notice = { kind: "resource-node.rejected", reason: decision.reason };
       return;
     }
-    const rockRadius = obstacle.kind === "rock" ? (obstacle.radius ?? 0.9) : 0;
-    const pickupRange = HARVEST_INTERACTION_DISTANCE + rockRadius;
-    if (distance(this.player.position, obstacle.position) > pickupRange) {
-      const approachPoints = Array.from({ length: 16 }, (_, index) => {
-        const angle = (Math.PI * 2 * index) / 16;
-        return [1.5, 1.65, 1.8, 1.95].map((gap) => ({
-          x: obstacle.position.x + Math.cos(angle) * (rockRadius + gap),
-          y: obstacle.position.y + Math.sin(angle) * (rockRadius + gap),
-        }));
-      })
-        .flat()
-        .filter(
-          (point) =>
-            !terrainBlocksPosition(
-              this.world,
-              point,
-              this.effectiveChunkRecipeSource,
-              0.28,
-            ) &&
-            !wallBlocksPosition(point, this.settlement.buildingState, 0.28),
-        )
-        .sort(
-          (left, right) =>
-            distance(this.player.position, left) -
-              distance(this.player.position, right) ||
-            left.x - right.x ||
-            left.y - right.y,
-        );
-      const approach = approachPoints[0];
-      if (approach === undefined) {
-        this.notice = {
-          kind: "resource-node.rejected",
-          reason: "out-of-reach",
-        };
-        return;
-      }
-      this.pendingHarvestNodeId = nodeId;
-      this.destination = approach;
+    if (decision.kind === "approach") {
+      this.pendingHarvestNodeId = lookup.nodeId;
+      this.destination = decision.destination;
       this.input = {
         intent: { x: 0, y: 0 },
         source: "system",
@@ -375,38 +312,18 @@ export class GameSession {
       };
       return;
     }
-    if (this.harvestedNodeIds.size >= MAX_HARVESTED_NODE_IDS) {
-      this.notice = {
-        kind: "resource-node.rejected",
-        reason: "depletion-limit",
-      };
-      return;
-    }
-    if (!hasHarvestedNodeIdCharacterCapacity(this.harvestedNodeIds, nodeId)) {
-      this.notice = {
-        kind: "resource-node.rejected",
-        reason: "depletion-size-limit",
-      };
-      return;
-    }
-
-    const nextResources = tryAddResourceBags(this.resources, rewards);
-    if (nextResources === null) {
-      this.notice = {
-        kind: "resource-node.rejected",
-        reason: "inventory-limit",
-      };
-      return;
-    }
 
     // Publish the inventory and depletion delta together after every check passes.
     this.destination = null;
     this.input = { intent: { x: 0, y: 0 }, source: "system", at: this.elapsed };
-    this.harvestedNodeIds.add(nodeId);
-    this.resources = nextResources;
+    this.harvestedNodeIds.add(lookup.nodeId);
+    this.resources = decision.nextResources;
     this.effectiveChunkRecipes.clear();
     this.enemyNavigation.clear();
-    this.notice = { kind: "resource-node.harvested", rewards: { ...rewards } };
+    this.notice = {
+      kind: "resource-node.harvested",
+      rewards: { ...decision.rewards },
+    };
   }
   tick(deltaSeconds: number): void {
     const delta = Math.max(0, Math.min(deltaSeconds, 0.1));
@@ -860,24 +777,20 @@ export class GameSession {
       this.world,
       this.player.position,
     );
-    const effects = describeProgressionEffects(
-      this.settlement.buildingState,
-      this.upgrades,
-      this.classProgression,
-    ).filter((effect) => !effect.startsWith("Storage"));
+    const derived = presentationDerivationFor({
+      elapsed: this.elapsed,
+      recoveryEndsAt: this.playerHitRecoveryEndsAt,
+      buildings: this.settlement.buildingState,
+      upgrades: this.upgrades,
+      classProgression: this.classProgression,
+    });
     return projectGamePresentation({
       presentationElapsed: this.elapsed,
       presentationResetId: this.presentationResetId,
       world: this.world,
       player: this.player,
-      playerStats: playerStatsFor(this.classProgression),
-      playerHitRecovery: playerHitRecoveryPresentationFor({
-        elapsed: this.elapsed,
-        recoveryEndsAt: this.playerHitRecoveryEndsAt,
-        recoverySeconds: gameplayTuning.playerHitRecoverySeconds,
-        flashIntervalSeconds:
-          gameplayTuning.playerHitRecoveryFlashIntervalSeconds,
-      }),
+      playerStats: derived.playerStats,
+      playerHitRecovery: derived.playerHitRecovery,
       resources: this.resources,
       buildRadius,
       destination: this.destination,
@@ -892,18 +805,12 @@ export class GameSession {
       inputSource: this.input.source,
       combatStatus: this.combatStatus,
       wave: this.waveStatus(),
-      effects,
+      effects: derived.effects,
       pendingUpgradeChoices: [...this.pendingUpgradeChoices],
       classProgression: this.classProgression,
-      pendingClassChoices:
-        this.classProgression.playerClass === null &&
-        this.classProgression.level >= 1
-          ? ["knight", "wizard", "archer"]
-          : [],
-      pendingClassSkillChoices: pendingClassSkillChoicesFor(
-        this.classProgression,
-      ),
-      statPointsAvailable: statPointsAvailableFor(this.classProgression),
+      pendingClassChoices: derived.pendingClassChoices,
+      pendingClassSkillChoices: derived.pendingClassSkillChoices,
+      statPointsAvailable: derived.statPointsAvailable,
       canSave: savePoint !== null,
       savePointLabel: savePoint?.label ?? null,
       notice: this.notice,
