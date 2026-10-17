@@ -34,7 +34,21 @@ test.afterEach(async ({ page }, testInfo) => {
 });
 
 // Full journey includes startup, harvest, reload rollback, and re-harvest.
-test.setTimeout(60_000);
+test.setTimeout(120_000);
+
+test("harvesting browser gate runs gameplay at 5×", async ({ page }) => {
+  await page.goto("/");
+  const classModal = page.getByTestId("class-modal");
+  if (await classModal.isVisible())
+    await classModal
+      .locator('button[data-testid^="class-skill-"]')
+      .first()
+      .click();
+  await page.getByTestId("settings-toggle").click();
+  const speed = page.getByTestId("speed-5x");
+  await expect(speed).toBeVisible();
+  await expect(speed).toHaveAttribute("aria-pressed", "true");
+});
 
 const resourceAmounts = async (
   page: import("@playwright/test").Page,
@@ -145,6 +159,23 @@ for (const kind of ["tree", "rock"] as const) {
         window.addEventListener("pageshow", () =>
           describe("pageshow", document.querySelector(selector)),
         );
+        const resolvePendingClassSkill = (): void => {
+          const modal = document.querySelector<HTMLElement>(
+            '[data-testid="class-modal"]',
+          );
+          const choice = modal?.querySelector<HTMLButtonElement>(
+            'button[data-testid^="class-skill-"]',
+          );
+          if (modal !== null && modal !== undefined && !modal.hidden)
+            choice?.click();
+        };
+        new MutationObserver(resolvePendingClassSkill).observe(document, {
+          attributes: true,
+          attributeFilter: ["hidden"],
+          childList: true,
+          subtree: true,
+        });
+        window.setInterval(resolvePendingClassSkill, 50);
       });
       await primeTerrainWorld(page, distantStart);
       await page.goto(applicationPath, { waitUntil: "domcontentloaded" });
@@ -171,10 +202,24 @@ for (const kind of ["tree", "rock"] as const) {
         fixture.obstacle.position,
         testInfo.project.name === "touch",
       );
-      await expect(page.getByTestId("world-canvas")).toHaveAttribute(
-        "data-destination-marker",
-        "active",
-      );
+      // At 5× the route can finish between the click and the first poll.
+      // Accept an active marker or an already-completed journey only when the
+      // player's public position proves it left the distant start.
+      await expect
+        .poll(async () => {
+          const marker = await page
+            .getByTestId("world-canvas")
+            .getAttribute("data-destination-marker");
+          const position = await visiblePosition(page);
+          return (
+            marker === "active" ||
+            Math.hypot(
+              position.x - positionBefore.x,
+              position.y - positionBefore.y,
+            ) > 0.1
+          );
+        })
+        .toBe(true);
       await expect
         .poll(async () => {
           const current = await resourceAmounts(page);

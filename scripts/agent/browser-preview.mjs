@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 
@@ -10,6 +10,10 @@ const portArgument =
 const port = Number(process.env.PLAYWRIGHT_PORT ?? portArgument ?? "4173");
 if (!Number.isInteger(port) || port < 1 || port > 65_535)
   throw new Error(`Invalid browser preview port: ${port}`);
+const simulationSpeed = process.env.PLAYWRIGHT_SIMULATION_SPEED;
+if (simulationSpeed !== undefined && simulationSpeed !== "5")
+  throw new Error("Browser preview only supports the configured 5x test speed");
+
 const mimeByExtension = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -37,6 +41,15 @@ createServer((request, response) => {
     "content-type":
       mimeByExtension[extname(file)] ?? "application/octet-stream",
   });
+  if (file.endsWith("index.html") && simulationSpeed === "5") {
+    const html = readFileSync(file, "utf8").replace(
+      "</head>",
+      `    <meta name="playwright-simulation-speed" content="5" />
+  </head>`,
+    );
+    response.end(html);
+    return;
+  }
   createReadStream(file).pipe(response);
 })
   .listen(port, host, () => {

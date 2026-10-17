@@ -54,10 +54,10 @@ export interface UiIntents {
   setSimulationSpeed(multiplier: SimulationSpeedMultiplier): void;
 }
 
-type SimulationSpeedMultiplier = 1 | 2 | 5;
+type SimulationSpeedMultiplier = 1 | 2 | 5 | 10;
 
 const simulationSpeedMultipliers: readonly SimulationSpeedMultiplier[] = [
-  1, 2, 5,
+  1, 2, 5, 10,
 ];
 
 type PlacementMode =
@@ -216,7 +216,11 @@ const placementRequestFor = (
           endPosition,
         };
 
-export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
+export const createGameUi = (
+  root: HTMLElement,
+  intents: UiIntents,
+  initialSimulationSpeed: SimulationSpeedMultiplier = 1,
+): GameUi => {
   root.replaceChildren();
   const worldHost = document.createElement("div");
   worldHost.className = "world-host";
@@ -248,6 +252,7 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
         <button type="button" class="hud-speed-button" data-testid="speed-1x" aria-label="Set game speed to 1×" aria-pressed="true" title="1× game speed">1×</button>
         <button type="button" class="hud-speed-button" data-testid="speed-2x" aria-label="Set game speed to 2×" aria-pressed="false" title="2× game speed">2×</button>
         <button type="button" class="hud-speed-button" data-testid="speed-5x" aria-label="Set game speed to 5×" aria-pressed="false" title="5× game speed">5×</button>
+        <button type="button" class="hud-speed-button" data-testid="speed-10x" aria-label="Set game speed to 10×" aria-pressed="false" title="10× game speed" hidden>10×</button>
       </div>
     </div>
     <div class="hud-quick-stats" data-testid="quick-stats" aria-label="Current health and level">
@@ -415,6 +420,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     multiplier,
     button: byTestId<HTMLButtonElement>(`speed-${multiplier}x`),
   }));
+  byTestId<HTMLButtonElement>("speed-10x").hidden =
+    initialSimulationSpeed !== 10;
 
   const setPanelVisibility = (
     panel: HTMLElement,
@@ -430,7 +437,8 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
   let skillTreePanelVisible = false;
   let statsPanelVisible = false;
   let settingsVisible = false;
-  let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
+  let simulationSpeedMultiplier: SimulationSpeedMultiplier =
+    initialSimulationSpeed;
   let selectedBuildingId: string | null = null;
   let latestSnapshot: GameUiSnapshot | null = null;
   let placementMode: PlacementMode = null;
@@ -596,6 +604,14 @@ export const createGameUi = (root: HTMLElement, intents: UiIntents): GameUi => {
     }
     intents.setSimulationSpeed(multiplier);
   };
+  for (const speedButton of speedButtons) {
+    const selected = speedButton.multiplier === simulationSpeedMultiplier;
+    if (speedButton.button.getAttribute("aria-pressed") !== String(selected))
+      setAttribute(speedButton.button, "aria-pressed", String(selected));
+  }
+  if (initialSimulationSpeed !== 1)
+    intents.setSimulationSpeed(initialSimulationSpeed);
+
   const setPlacementMode = (mode: PlacementMode): void => {
     intents.resetPlacementInput();
     clearPlacementPreview();

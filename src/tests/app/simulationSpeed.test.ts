@@ -6,14 +6,17 @@ describe("runtime simulation speed", () => {
     const atOne: number[] = [];
     const atTwo: number[] = [];
     const atFive: number[] = [];
+    const atTen: number[] = [];
 
     advanceSimulationFrame(0.016, 1, (step) => atOne.push(step));
     advanceSimulationFrame(0.016, 2, (step) => atTwo.push(step));
     advanceSimulationFrame(0.016, 5, (step) => atFive.push(step));
+    advanceSimulationFrame(0.016, 10, (step) => atTen.push(step));
 
     expect(atOne).toEqual([0.016]);
     expect(atTwo).toEqual([0.032]);
     expect(atFive).toEqual([0.08]);
+    expect(atTen).toEqual([0.1, 0.06]);
   });
 
   it("bounds wall-time gaps before scaling and subdivides accelerated time", () => {

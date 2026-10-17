@@ -1,4 +1,4 @@
-export type SimulationSpeedMultiplier = 1 | 2 | 5;
+export type SimulationSpeedMultiplier = 1 | 2 | 5 | 10;
 
 const maximumWallFrameSeconds = 0.1;
 const maximumSimulationStepSeconds = 0.1;

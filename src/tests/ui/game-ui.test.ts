@@ -455,7 +455,7 @@ const resultFor = (request: PlacementRequest): PlacementResult =>
         building: building(request.buildingId),
       };
 
-const setupUi = () => {
+const setupUi = (initialSimulationSpeed: 1 | 2 | 5 | 10 = 1) => {
   installDom();
   const root = new ElementDouble();
   const intents = {
@@ -476,7 +476,7 @@ const setupUi = () => {
     allocateStat: vi.fn(),
     setSimulationSpeed: vi.fn(),
   } satisfies UiIntents;
-  const ui = createGameUi(asElement(root), intents);
+  const ui = createGameUi(asElement(root), intents, initialSimulationSpeed);
   const shell = root.children[1];
   const get = (id: string): ElementDouble => {
     const element = shell.testIds.get(id);
@@ -793,7 +793,7 @@ describe("current HUD placement port", () => {
     ui.dispose();
   });
 
-  it("opens Settings above runtime-only 1×, 2×, and 5× speed controls", () => {
+  it("opens Settings with production 1×, 2×, and 5× controls", () => {
     const { ui, intents, get } = setupUi();
     ui.render(snapshot());
     const settings = get("settings-toggle");
@@ -801,6 +801,7 @@ describe("current HUD placement port", () => {
     const atOne = get("speed-1x");
     const atTwo = get("speed-2x");
     const atFive = get("speed-5x");
+    const atTen = get("speed-10x");
 
     expect(settings.getAttribute("aria-label")).toBe("Settings");
     expect(settings.getAttribute("aria-controls")).toBe(
@@ -811,6 +812,8 @@ describe("current HUD placement port", () => {
     expect(atOne.getAttribute("aria-pressed")).toBe("true");
     expect(atTwo.getAttribute("aria-pressed")).toBe("false");
     expect(atFive.getAttribute("aria-pressed")).toBe("false");
+    expect(atTen.hidden).toBe(true);
+    expect(atTen.getAttribute("aria-pressed")).toBe("false");
 
     settings.click();
     expect(controls.hidden).toBe(false);
@@ -836,6 +839,17 @@ describe("current HUD placement port", () => {
     get("build-buttons").children[0].click();
     expect(ui.isWorldPlacementEnabled()).toBe(true);
     expect(controls.hidden).toBe(true);
+    ui.dispose();
+  });
+
+  it("enables and selects 10× only when browser tests request it", () => {
+    const { ui, intents, get } = setupUi(10);
+    const speed10 = get("speed-10x");
+    expect(speed10.hidden).toBe(false);
+    expect(speed10.getAttribute("aria-pressed")).toBe("true");
+    expect(intents.setSimulationSpeed).toHaveBeenLastCalledWith(10);
+    speed10.click();
+    expect(intents.setSimulationSpeed).toHaveBeenLastCalledWith(10);
     ui.dispose();
   });
 
