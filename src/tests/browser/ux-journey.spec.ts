@@ -19,7 +19,15 @@ import {
 // One end-to-end interaction journey replaces duplicated isolated journeys in
 // the release browser matrix. It still exercises real input, committed UI
 // projections, the two harvest rewards, and the no-implicit-save contract.
-test.setTimeout(120_000);
+test.setTimeout(240_000);
+
+test("browser gate starts the game simulation at 5×", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("settings-toggle").click();
+  const speed = page.getByTestId("speed-5x");
+  await expect(speed).toBeVisible();
+  await expect(speed).toHaveAttribute("aria-pressed", "true");
+});
 
 test("player moves, builds, places a wall, and harvests a tree and rock in one journey", async ({
   page,

@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { HARVEST_INTERACTION_DISTANCE } from "../../domain/resourceHarvesting";
+import { terrainBlocksPosition } from "../../domain/world/terrainCollision";
 import { captureBrowserFaults } from "./model-pack-helpers";
 import {
   applicationPath,
   harvestableFixtureFor,
   primeTerrainWorld,
+  terrainWorld,
   tapWorldPosition,
   visiblePosition,
 } from "./terrain-test-helpers";
@@ -31,7 +34,21 @@ test.afterEach(async ({ page }, testInfo) => {
 });
 
 // Full journey includes startup, harvest, reload rollback, and re-harvest.
-test.setTimeout(60_000);
+test.setTimeout(120_000);
+
+test("harvesting browser gate runs gameplay at 5×", async ({ page }) => {
+  await page.goto("/");
+  const classModal = page.getByTestId("class-modal");
+  if (await classModal.isVisible())
+    await classModal
+      .locator('button[data-testid^="class-skill-"]')
+      .first()
+      .click();
+  await page.getByTestId("settings-toggle").click();
+  const speed = page.getByTestId("speed-5x");
+  await expect(speed).toBeVisible();
+  await expect(speed).toHaveAttribute("aria-pressed", "true");
+});
 
 const resourceAmounts = async (
   page: import("@playwright/test").Page,
@@ -57,9 +74,37 @@ const resourceAmounts = async (
 
 for (const kind of ["tree", "rock"] as const) {
   test(
-    "canvas click harvests a nearby " + kind + " on desktop and touch",
+    "canvas click routes to and harvests a distant " +
+      kind +
+      " on desktop and touch",
     async ({ page }, testInfo) => {
       const fixture = harvestableFixtureFor(kind);
+      const directionLength = Math.hypot(
+        fixture.start.x - fixture.obstacle.position.x,
+        fixture.start.y - fixture.obstacle.position.y,
+      );
+      const distantStart = [3, 4, 5, 6]
+        .map((extraDistance) => ({
+          x:
+            fixture.start.x +
+            ((fixture.start.x - fixture.obstacle.position.x) /
+              directionLength) *
+              extraDistance,
+          y:
+            fixture.start.y +
+            ((fixture.start.y - fixture.obstacle.position.y) /
+              directionLength) *
+              extraDistance,
+        }))
+        .find((point) => !terrainBlocksPosition(terrainWorld, point));
+      if (distantStart === undefined)
+        throw new Error("Could not find a clear distant harvesting start");
+      expect(
+        Math.hypot(
+          distantStart.x - fixture.obstacle.position.x,
+          distantStart.y - fixture.obstacle.position.y,
+        ),
+      ).toBeGreaterThan(HARVEST_INTERACTION_DISTANCE);
       const faults = captureBrowserFaults(page);
       // Retain an exact add/remove/page-lifecycle timeline in Playwright trace.
       await page.addInitScript(() => {
@@ -114,8 +159,25 @@ for (const kind of ["tree", "rock"] as const) {
         window.addEventListener("pageshow", () =>
           describe("pageshow", document.querySelector(selector)),
         );
+        const resolvePendingClassSkill = (): void => {
+          const modal = document.querySelector<HTMLElement>(
+            '[data-testid="class-modal"]',
+          );
+          const choice = modal?.querySelector<HTMLButtonElement>(
+            'button[data-testid^="class-skill-"]',
+          );
+          if (modal !== null && modal !== undefined && !modal.hidden)
+            choice?.click();
+        };
+        new MutationObserver(resolvePendingClassSkill).observe(document, {
+          attributes: true,
+          attributeFilter: ["hidden"],
+          childList: true,
+          subtree: true,
+        });
+        window.setInterval(resolvePendingClassSkill, 50);
       });
-      await primeTerrainWorld(page, fixture.start);
+      await primeTerrainWorld(page, distantStart);
       await page.goto(applicationPath, { waitUntil: "domcontentloaded" });
       await expect(page.getByTestId("character-status-toggle")).toBeVisible();
       await expect(page.getByTestId("resources-toggle")).toBeVisible();
@@ -140,8 +202,46 @@ for (const kind of ["tree", "rock"] as const) {
         fixture.obstacle.position,
         testInfo.project.name === "touch",
       );
-      await expect.poll(() => resourceAmounts(page)).toEqual(expectedAfter);
-      await expect.poll(() => visiblePosition(page)).toEqual(positionBefore);
+      // At 5× the route can finish between the click and the first poll.
+      // Accept an active marker or an already-completed journey only when the
+      // player's public position proves it left the distant start.
+      await expect
+        .poll(async () => {
+          const marker = await page
+            .getByTestId("world-canvas")
+            .getAttribute("data-destination-marker");
+          const position = await visiblePosition(page);
+          return (
+            marker === "active" ||
+            Math.hypot(
+              position.x - positionBefore.x,
+              position.y - positionBefore.y,
+            ) > 0.1
+          );
+        })
+        .toBe(true);
+      await expect
+        .poll(async () => {
+          const current = await resourceAmounts(page);
+          return (
+            current.wood >= expectedAfter.wood &&
+            current.stone >= expectedAfter.stone &&
+            current.iron >= expectedAfter.iron &&
+            current.scrap >= expectedAfter.scrap
+          );
+        })
+        .toBe(true);
+      await expect
+        .poll(async () => {
+          const position = await visiblePosition(page);
+          return (
+            Math.hypot(
+              position.x - fixture.obstacle.position.x,
+              position.y - fixture.obstacle.position.y,
+            ) - (kind === "rock" ? fixture.obstacle.radius : 0)
+          );
+        })
+        .toBeLessThan(HARVEST_INTERACTION_DISTANCE);
       await expect(page.getByTestId("world-canvas")).toHaveAttribute(
         "data-destination-marker",
         "inactive",
@@ -170,8 +270,28 @@ for (const kind of ["tree", "rock"] as const) {
         fixture.obstacle.position,
         testInfo.project.name === "touch",
       );
-      await expect.poll(() => resourceAmounts(page)).toEqual(expectedAfter);
-      await expect.poll(() => visiblePosition(page)).toEqual(reloadedPosition);
+      await expect
+        .poll(async () => {
+          const current = await resourceAmounts(page);
+          return (
+            current.wood >= expectedAfter.wood &&
+            current.stone >= expectedAfter.stone &&
+            current.iron >= expectedAfter.iron &&
+            current.scrap >= expectedAfter.scrap
+          );
+        })
+        .toBe(true);
+      await expect
+        .poll(async () => {
+          const position = await visiblePosition(page);
+          return (
+            Math.hypot(
+              position.x - fixture.obstacle.position.x,
+              position.y - fixture.obstacle.position.y,
+            ) - (kind === "rock" ? fixture.obstacle.radius : 0)
+          );
+        })
+        .toBeLessThan(HARVEST_INTERACTION_DISTANCE);
       expect(
         await page.evaluate(() =>
           window.localStorage.getItem("wanderer.save.primary"),

@@ -285,23 +285,25 @@ describe("GameSession resource harvesting", () => {
     expect(visibleObstacleIds(loaded)).not.toContain(rockId);
   });
 
-  it("rejects distant and overflowing harvests without movement, rewards, or depletion", () => {
+  it("routes to distant resources and harvests on arrival while rejecting overflows", () => {
     const farSession = new GameSession({
       world,
       chunkRecipeSource: recipeSourceFor({ x: 4, y: 0 }),
     });
     const beforeFar = farSession.diagnostics();
     farSession.harvestNode(treeId);
-    expect(farSession.presentation().ui.notice).toMatchObject({
-      kind: "resource-node.rejected",
-      reason: "out-of-reach",
-    });
+    expect(farSession.presentation().renderer.destination).not.toBeNull();
     expect(farSession.diagnostics().player.position).toEqual(
       beforeFar.player.position,
     );
-    expect(farSession.diagnostics().destination).toBeNull();
+    expect(farSession.diagnostics().destination).not.toBeNull();
     expect(farSession.diagnostics().resources).toEqual(beforeFar.resources);
     expect(visibleObstacleIds(farSession)).toContain(treeId);
+    for (let step = 0; step < 40; step += 1) farSession.tick(0.1);
+    expect(farSession.diagnostics().resources.wood).toBeGreaterThanOrEqual(
+      beforeFar.resources.wood + 24,
+    );
+    expect(visibleObstacleIds(farSession)).not.toContain(treeId);
 
     const base = new GameSession().createValidCampfireSaveRequest(1);
     if (base === null)

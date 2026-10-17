@@ -18,8 +18,8 @@ import {
 import { terrainBlocksProjectileSegment } from "../world/projectileCollision";
 import {
   nearestWallSafePosition,
-  shortestWallRoute,
   wallBlocksSegment,
+  wallBlocksPosition,
 } from "./buildingGeometry";
 import {
   advanceAutoCombatPhase,
@@ -292,10 +292,13 @@ export const enemyCombatPhaseFor = ({
         desired,
         target: player.position,
         enemyId: enemy.id,
-        shortestWallRoute: () =>
-          wallBlocksSegment(from, desired, buildings, clearance)
-            ? shortestWallRoute(from, player.position, buildings, clearance)
-            : null,
+        isClear: (position) =>
+          !terrainBlocksPosition(
+            world,
+            position,
+            chunkRecipeSource,
+            clearance,
+          ) && !wallBlocksPosition(position, buildings, clearance),
         constrain: (routeFrom, routeDesired) =>
           constrainMovement({
             world,

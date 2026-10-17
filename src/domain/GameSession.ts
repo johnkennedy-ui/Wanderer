@@ -74,6 +74,12 @@ import {
 import { playerHitRecoveryPresentationFor } from "./session/hitRecoveryPolicy";
 import { EnemyNavigationCache } from "./session/enemyNavigation";
 import { isWallKind } from "./session/buildingGeometry";
+import { wallBlocksPosition } from "./session/buildingGeometry";
+import { terrainBlocksPosition } from "./world/terrainCollision";
+import { GridNavigationCache, findGridPath } from "./session/gridPathfinding";
+import { WANDERER_WEB_V4 } from "./world/generatorTypes";
+import { islandDescriptorFor } from "./world/generators/wandererWebV4";
+import { CHUNK_SIZE } from "./world/shared";
 import {
   advanceDestinationMovement,
   constrainMovement,
@@ -153,6 +159,7 @@ export class GameSession {
     { readonly source: ChunkRecipe; readonly result: ChunkRecipe }
   >();
   private harvestedNodeIds = new Set<string>();
+  private pendingHarvestNodeId: string | null = null;
   private world!: WorldIdentity;
   private player!: { position: Vector2; hp: number; maxHp: number };
   private resources!: ResourceBag;
@@ -185,6 +192,7 @@ export class GameSession {
   private notice!: GameNotice;
   private combatStatus!: string;
   private enemyNavigation = new EnemyNavigationCache();
+  private playerNavigation = new GridNavigationCache();
   constructor(options: SessionOptions = {}) {
     this.chunkRecipes = new ChunkRecipeCache(
       undefined,
@@ -239,6 +247,8 @@ export class GameSession {
     this.player = state.player;
     this.resources = state.resources;
     this.harvestedNodeIds = state.harvestedNodeIds;
+    this.playerNavigation.clear();
+    this.pendingHarvestNodeId = null;
     this.settlement = new SettlementRuntime(
       {
         buildings: state.buildings,
@@ -276,6 +286,7 @@ export class GameSession {
   }
   move(command: MoveCommand): void {
     const next = moveStateFor(command);
+    this.pendingHarvestNodeId = null;
     this.destination = next.destination;
     this.input = next.input;
   }
@@ -285,10 +296,12 @@ export class GameSession {
       this.notice = next.notice;
       return;
     }
+    this.pendingHarvestNodeId = null;
     this.destination = next.destination;
     this.input = next.input;
   }
   harvestNode(nodeId: string): void {
+    this.pendingHarvestNodeId = null;
     if (
       typeof nodeId !== "string" ||
       nodeId.length === 0 ||
@@ -317,17 +330,49 @@ export class GameSession {
       this.notice = { kind: "resource-node.rejected", reason: "unknown-node" };
       return;
     }
-    if (
-      distance(this.player.position, obstacle.position) >
-      HARVEST_INTERACTION_DISTANCE
-    ) {
-      this.destination = null;
+    const rockRadius = obstacle.kind === "rock" ? (obstacle.radius ?? 0.9) : 0;
+    const pickupRange = HARVEST_INTERACTION_DISTANCE + rockRadius;
+    if (distance(this.player.position, obstacle.position) > pickupRange) {
+      const approachPoints = Array.from({ length: 16 }, (_, index) => {
+        const angle = (Math.PI * 2 * index) / 16;
+        return [1.5, 1.65, 1.8, 1.95].map((gap) => ({
+          x: obstacle.position.x + Math.cos(angle) * (rockRadius + gap),
+          y: obstacle.position.y + Math.sin(angle) * (rockRadius + gap),
+        }));
+      })
+        .flat()
+        .filter(
+          (point) =>
+            !terrainBlocksPosition(
+              this.world,
+              point,
+              this.effectiveChunkRecipeSource,
+              0.28,
+            ) &&
+            !wallBlocksPosition(point, this.settlement.buildingState, 0.28),
+        )
+        .sort(
+          (left, right) =>
+            distance(this.player.position, left) -
+              distance(this.player.position, right) ||
+            left.x - right.x ||
+            left.y - right.y,
+        );
+      const approach = approachPoints[0];
+      if (approach === undefined) {
+        this.notice = {
+          kind: "resource-node.rejected",
+          reason: "out-of-reach",
+        };
+        return;
+      }
+      this.pendingHarvestNodeId = nodeId;
+      this.destination = approach;
       this.input = {
         intent: { x: 0, y: 0 },
         source: "system",
         at: this.elapsed,
       };
-      this.notice = { kind: "resource-node.rejected", reason: "out-of-reach" };
       return;
     }
     if (this.harvestedNodeIds.size >= MAX_HARVESTED_NODE_IDS) {
@@ -384,6 +429,85 @@ export class GameSession {
       delta,
       recoveryEndsAt: this.playerHitRecoveryEndsAt,
     });
+    let navigationStep:
+      ReturnType<GridNavigationCache["nextWaypoint"]> | undefined;
+    if (this.destination !== null) {
+      const start = this.player.position;
+      const target = this.destination;
+      const buildings = this.settlement.buildingState;
+      const constrain = (from: Vector2, to: Vector2): Vector2 => {
+        const total = distance(from, to);
+        const segments = Math.ceil(total / 3.5);
+        if (segments > 256) return from;
+        let current = from;
+        for (let index = 1; index <= segments; index += 1) {
+          const endpoint = {
+            x: from.x + ((to.x - from.x) * index) / segments,
+            y: from.y + ((to.y - from.y) * index) / segments,
+          };
+          const reached = constrainMovement({
+            world: this.world,
+            from: current,
+            desired: endpoint,
+            chunkRecipeSource: this.effectiveChunkRecipeSource,
+            buildings,
+          });
+          if (distance(reached, endpoint) > 0.001) return reached;
+          current = reached;
+        }
+        return current;
+      };
+      if (distance(constrain(start, target), target) > 0.001) {
+        const cellSize = 1;
+        const bounds =
+          this.world.generatorVersion === WANDERER_WEB_V4
+            ? (() => {
+                const coordinate = {
+                  x: Math.floor(start.x / (40 * CHUNK_SIZE) + 0.5),
+                  y: Math.floor(start.y / (40 * CHUNK_SIZE) + 0.5),
+                };
+                const island = islandDescriptorFor(this.world, coordinate);
+                return {
+                  minX: Math.floor(
+                    (island.center.x - island.radius) / cellSize,
+                  ),
+                  maxX: Math.ceil((island.center.x + island.radius) / cellSize),
+                  minY: Math.floor(
+                    (island.center.y - island.radius) / cellSize,
+                  ),
+                  maxY: Math.ceil((island.center.y + island.radius) / cellSize),
+                };
+              })()
+            : undefined;
+        navigationStep = this.playerNavigation.nextWaypoint({
+          id: "player-destination",
+          from: start,
+          target,
+          canTraverse: (from, to) => distance(constrain(from, to), to) <= 0.001,
+          plan: () =>
+            findGridPath({
+              from: start,
+              target,
+              cellSize,
+              maxExpandedNodes: 32_768,
+              ...(bounds === undefined ? {} : { bounds }),
+              isClear: (point) =>
+                !terrainBlocksPosition(
+                  this.world,
+                  point,
+                  this.effectiveChunkRecipeSource,
+                  0.28,
+                ) && !wallBlocksPosition(point, buildings, 0.28),
+              canTraverse: (from, to) =>
+                distance(constrain(from, to), to) <= 0.001,
+            }),
+        });
+      } else {
+        this.playerNavigation.clear("player-destination");
+      }
+    } else {
+      this.playerNavigation.clear("player-destination");
+    }
     const destination = advanceDestinationMovement({
       playerPosition: this.player.position,
       input: this.input,
@@ -393,10 +517,39 @@ export class GameSession {
       world: this.world,
       chunkRecipeSource: this.effectiveChunkRecipeSource,
       buildings: this.settlement.buildingState,
+      ...(navigationStep === undefined
+        ? {}
+        : {
+            navigationStatus: navigationStep.status,
+            navigationWaypoint: navigationStep.waypoint,
+          }),
     });
     this.player.position = destination.playerPosition;
     this.input = destination.input;
     this.destination = destination.destination;
+    if (
+      navigationStep?.status === "unreachable" &&
+      this.pendingHarvestNodeId !== null
+    ) {
+      this.pendingHarvestNodeId = null;
+      this.notice = { kind: "resource-node.rejected", reason: "out-of-reach" };
+    } else if (this.pendingHarvestNodeId !== null) {
+      const pendingNode = this.pendingHarvestNodeId;
+      const obstacle = visibleChunksFor(
+        this.world,
+        this.player.position,
+        this.chunkRecipes.get,
+      )
+        .flatMap((chunk) => chunk.obstacles)
+        .find((candidate) => candidate.id === pendingNode);
+      if (obstacle === undefined) this.harvestNode(pendingNode);
+      else if (
+        distance(this.player.position, obstacle.position) <=
+        HARVEST_INTERACTION_DISTANCE +
+          (obstacle.kind === "rock" ? (obstacle.radius ?? 0.9) : 0)
+      )
+        this.harvestNode(pendingNode);
+    }
     const destinationMoving = destination.moving && this.destination !== null;
     const moving = destinationMoving || isMeaningfulMovement(this.input.intent);
 

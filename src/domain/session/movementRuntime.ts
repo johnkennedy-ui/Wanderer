@@ -119,6 +119,8 @@ export const advanceDestinationMovement = ({
   world,
   chunkRecipeSource,
   buildings,
+  navigationWaypoint,
+  navigationStatus,
 }: {
   readonly playerPosition: Vector2;
   readonly input: MoveCommand;
@@ -128,6 +130,8 @@ export const advanceDestinationMovement = ({
   readonly world: WorldIdentity;
   readonly chunkRecipeSource: ChunkRecipeSource;
   readonly buildings: readonly BuildingState[];
+  readonly navigationWaypoint?: Vector2 | null;
+  readonly navigationStatus?: "found" | "unreachable" | "incomplete";
 }): DestinationMovementResult => {
   if (destination === null)
     return { playerPosition, input, destination, moving: false };
@@ -142,6 +146,15 @@ export const advanceDestinationMovement = ({
     source: "system",
     at: elapsed,
   };
+  if (navigationStatus === "unreachable")
+    return {
+      playerPosition,
+      input: stoppedInput,
+      destination: null,
+      moving: false,
+    };
+  if (navigationStatus === "incomplete")
+    return { playerPosition, input, destination, moving: true };
   if (
     remainingDistance <= gameplayTuning.tapToMoveArrivalDistance ||
     maximumTravel >= remainingDistance
@@ -161,7 +174,16 @@ export const advanceDestinationMovement = ({
       moving: false,
     };
 
-  const desired = add(playerPosition, scale(normalize(offset), maximumTravel));
+  const travelTarget = navigationWaypoint ?? destination;
+  const travelOffset = {
+    x: travelTarget.x - playerPosition.x,
+    y: travelTarget.y - playerPosition.y,
+  };
+  const travelDistance = magnitude(travelOffset);
+  const desired =
+    travelDistance <= maximumTravel
+      ? travelTarget
+      : add(playerPosition, scale(normalize(travelOffset), maximumTravel));
   const next = roundVector(
     constrainMovement({
       world,
@@ -180,6 +202,8 @@ export const advanceDestinationMovement = ({
       unconstrainedNext.x === playerPosition.x &&
       unconstrainedNext.y === playerPosition.y
     )
+      return { playerPosition, input, destination, moving: true };
+    if (navigationWaypoint !== undefined && navigationWaypoint !== null)
       return { playerPosition, input, destination, moving: true };
     return {
       playerPosition,

@@ -31,6 +31,7 @@ export interface GameApplication {
 /** The only composition root: it explicitly retains one GameSession and wires narrow adapters. */
 export const createGameApplication = async (
   root: HTMLElement,
+  initialSimulationSpeed: SimulationSpeedMultiplier = 1,
 ): Promise<GameApplication> => {
   const storage = createAsyncBrowserSaveStorage();
   const bootstrap = await createApplicationBootstrap(
@@ -39,7 +40,7 @@ export const createGameApplication = async (
   );
   const { session } = bootstrap;
   let platformMessage = bootstrap.platformMessage;
-  let simulationSpeedMultiplier: SimulationSpeedMultiplier = 1;
+  let simulationSpeedMultiplier = initialSimulationSpeed;
   const scheduler = createBrowserFrameScheduler();
   let disposed = false;
   let resetPlacementInput = (): void => {};
@@ -53,46 +54,50 @@ export const createGameApplication = async (
     () => Date.now(),
   );
 
-  const ui = createGameUi(root, {
-    async save(): Promise<void> {
-      await saveIntent.save();
+  const ui = createGameUi(
+    root,
+    {
+      async save(): Promise<void> {
+        await saveIntent.save();
+      },
+      reset(seed: string): void {
+        session.resetWorld(seed);
+        platformMessage =
+          "New deterministic runtime started. Existing browser saves are untouched until a fresh load; this action did not save.";
+      },
+      previewPlacement(request: PlacementRequest) {
+        return session.previewBuildingPlacement(request);
+      },
+      confirmPlacement(request: PlacementRequest) {
+        return session.commitBuildingPlacement(request);
+      },
+      resetPlacementInput(): void {
+        resetPlacementInput();
+      },
+      upgradeBuilding(id: string): void {
+        session.upgradeBuilding(id);
+      },
+      demolish(id: string): void {
+        session.demolishBuilding(id);
+      },
+      chooseUpgrade(id: UpgradeId): void {
+        session.chooseUpgrade(id);
+      },
+      chooseClass(playerClass: PlayerClass): void {
+        session.chooseClass(playerClass);
+      },
+      chooseClassSkill(skillId: ClassSkillId): void {
+        session.chooseClassSkill(skillId);
+      },
+      allocateStat(kind: AllocatablePlayerStatKind): void {
+        session.allocateStat(kind);
+      },
+      setSimulationSpeed(multiplier): void {
+        simulationSpeedMultiplier = multiplier;
+      },
     },
-    reset(seed: string): void {
-      session.resetWorld(seed);
-      platformMessage =
-        "New deterministic runtime started. Existing browser saves are untouched until a fresh load; this action did not save.";
-    },
-    previewPlacement(request: PlacementRequest) {
-      return session.previewBuildingPlacement(request);
-    },
-    confirmPlacement(request: PlacementRequest) {
-      return session.commitBuildingPlacement(request);
-    },
-    resetPlacementInput(): void {
-      resetPlacementInput();
-    },
-    upgradeBuilding(id: string): void {
-      session.upgradeBuilding(id);
-    },
-    demolish(id: string): void {
-      session.demolishBuilding(id);
-    },
-    chooseUpgrade(id: UpgradeId): void {
-      session.chooseUpgrade(id);
-    },
-    chooseClass(playerClass: PlayerClass): void {
-      session.chooseClass(playerClass);
-    },
-    chooseClassSkill(skillId: ClassSkillId): void {
-      session.chooseClassSkill(skillId);
-    },
-    allocateStat(kind: AllocatablePlayerStatKind): void {
-      session.allocateStat(kind);
-    },
-    setSimulationSpeed(multiplier): void {
-      simulationSpeedMultiplier = multiplier;
-    },
-  });
+    simulationSpeedMultiplier,
+  );
   const renderer = createThreeRenderer(ui.worldHost);
   const keyboard = createKeyboardInput((command) => session.move(command));
   const tapToMove = createTapToMoveInput(

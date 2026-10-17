@@ -58,5 +58,6 @@ export default defineConfig({
     url: previewUrl,
     reuseExistingServer: false,
     timeout: 30_000,
+    env: { PLAYWRIGHT_SIMULATION_SPEED: "5" },
   },
 });
