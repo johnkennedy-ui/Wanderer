@@ -59,6 +59,23 @@ This is deliberately not an event bus, service layer, or alternate session
 store. A new building should normally start in settlement modules, an XP or
 skill change in progression modules, and a status effect in combat modules.
 
+`presentationDerivation.ts` derives stats, recovery flashes, effects and
+progression choices from explicit read-only inputs. `GameSession` still queries
+world and settlement state and passes those values through the existing
+copy-out presentation boundary; the derivation retains no state.
+
+`harvestDecision.ts` performs pure ID validation, approach geometry and
+reject/approach/commit decisions. `GameSession` owns raw recipe lookup, terrain
+and wall queries, pending navigation and input state, and the atomic inventory
+plus depletion update. It explicitly clears affected caches after a successful
+harvest. Neither approach nor harvesting implicitly commits a save.
+
+`EffectiveChunkRecipeCache` is a disposable per-session projection cache, not
+gameplay authority. It preserves the existing 27-entry bound, key and source
+identity checks, LRU ordering, deep-frozen results and live-obstacle-getter
+bypass. The session supplies its current depletion set and explicitly clears
+this cache on successful harvest and state/world replacement.
+
 ## M5 ownership
 
 `GameSession` owns one instance-local `ChunkRecipeCache`, bounded to 27 frozen
